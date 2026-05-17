@@ -32,7 +32,7 @@ async function createSession(
 
 export class EclipseApi implements INodeType {
   description: INodeTypeDescription = {
-    displayName: 'Eclipse API',
+    displayName: 'Epicore Eclipse',
     name: 'eclipseApi',
     icon: 'file:eclipse-icon.svg',
     group: ['transform'],
