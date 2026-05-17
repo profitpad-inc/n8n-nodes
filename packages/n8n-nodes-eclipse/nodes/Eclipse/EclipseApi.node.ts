@@ -5,8 +5,12 @@ import {
   INodeTypeDescription,
   JsonObject,
   NodeApiError,
+  NodeConnectionTypes,
 } from 'n8n-workflow';
 
+// Eclipse requires a session token obtained from POST /Sessions before any
+// other API call. This pre-auth step cannot go through httpRequestWithAuthentication
+// because the token is not a static credential — it is created on demand here.
 async function createSession(
   context: IExecuteFunctions,
   baseUrl: string,
@@ -30,15 +34,17 @@ export class EclipseApi implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Eclipse API',
     name: 'eclipseApi',
-    icon: 'file:epicor-eclipse.png',
+    icon: 'file:epicor-eclipse.svg',
     group: ['transform'],
     version: 1,
+    subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
     description: 'Interact with the Epicor Eclipse API',
+    usableAsTool: true,
     defaults: {
       name: 'Eclipse API',
     },
-    inputs: ['main'],
-    outputs: ['main'],
+    inputs: [NodeConnectionTypes.Main],
+    outputs: [NodeConnectionTypes.Main],
     credentials: [
       {
         name: 'eclipseApi',
@@ -74,16 +80,16 @@ export class EclipseApi implements INodeType {
         },
         options: [
           {
-            name: 'Get Many',
-            value: 'getMany',
-            description: 'Retrieve a list of contacts.',
-            action: 'Get many contacts',
-          },
-          {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve a single contact by ID.',
+            description: 'Retrieve a single contact by ID',
             action: 'Get a contact',
+          },
+          {
+            name: 'Get Many',
+            value: 'getMany',
+            description: 'Retrieve a list of contacts',
+            action: 'Get many contacts',
           },
         ],
         default: 'getMany',
@@ -95,7 +101,7 @@ export class EclipseApi implements INodeType {
         name: 'returnAll',
         type: 'boolean',
         default: false,
-        description: 'Whether to return all results by paginating automatically.  Ignores the \'Start Index\'.',
+        description: 'Whether to return all results or only up to a given limit',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -109,7 +115,7 @@ export class EclipseApi implements INodeType {
         type: 'number',
         typeOptions: { minValue: 1 },
         default: 10,
-        description: 'Number of contacts to return per page.',
+        description: 'Number of contacts to return per page',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -128,14 +134,14 @@ export class EclipseApi implements INodeType {
             description: 'Return all fields from each result',
           },
           {
-            name: 'Selected Fields',
-            value: 'selected',
-            description: 'Return only the specified fields from each result',
-          },
-          {
             name: 'All Fields Except',
             value: 'except',
             description: 'Return all fields except the specified ones from each result',
+          },
+          {
+            name: 'Selected Fields',
+            value: 'selected',
+            description: 'Return only the specified fields from each result',
           },
         ],
         default: 'all',
@@ -202,7 +208,7 @@ export class EclipseApi implements INodeType {
             name: 'keyword',
             type: 'string',
             default: '',
-            description: 'Filter contacts by keyword search.',
+            description: 'Filter contacts by keyword search',
           },
           {
             displayName: 'Start Index',
@@ -210,7 +216,7 @@ export class EclipseApi implements INodeType {
             type: 'number',
             typeOptions: { minValue: 1 },
             default: 1,
-            description: 'The index of the first record to return (1-based).',
+            description: 'The index of the first record to return (1-based)',
           },
           {
             displayName: 'Updated After',
@@ -229,7 +235,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the contact to retrieve.',
+        description: 'The ID of the contact to retrieve',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -324,14 +330,17 @@ export class EclipseApi implements INodeType {
               let currentStart = 1;
 
               while (true) {
-                const response = await this.helpers.httpRequest({
+                const response = await this.helpers.httpRequestWithAuthentication('eclipseApi', {
                   method: 'GET',
                   url: buildUrl(currentStart),
                   headers,
                 });
 
                 const results: JsonObject[] = response.results ?? [];
-                returnData.push({ json: { ...response, results: applyFieldFilter(results) } });
+                returnData.push({
+                  json: { ...response, results: applyFieldFilter(results) },
+                  pairedItem: { item: i },
+                });
 
                 if (results.length < pageSize) break;
                 currentStart += pageSize;
@@ -339,14 +348,17 @@ export class EclipseApi implements INodeType {
             } else {
               const startIndex = additionalOptions.startIndex ?? 1;
 
-              const response = await this.helpers.httpRequest({
+              const response = await this.helpers.httpRequestWithAuthentication('eclipseApi', {
                 method: 'GET',
                 url: buildUrl(startIndex),
                 headers,
               });
 
               const results: JsonObject[] = response.results ?? [];
-              returnData.push({ json: { ...response, results: applyFieldFilter(results) } });
+              returnData.push({
+                json: { ...response, results: applyFieldFilter(results) },
+                pairedItem: { item: i },
+              });
             }
           }
 
@@ -354,14 +366,14 @@ export class EclipseApi implements INodeType {
           if (operation === 'get') {
             const contactId = this.getNodeParameter('contactId', i) as string;
 
-            const response = await this.helpers.httpRequest({
+            const response = await this.helpers.httpRequestWithAuthentication('eclipseApi', {
               method: 'GET',
               url: `${baseUrl}/Contacts`,
               headers,
               qs: { id: contactId, includeTotalItems: 'true' },
             });
 
-            returnData.push({ json: response });
+            returnData.push({ json: response, pairedItem: { item: i } });
           }
         }
       } catch (error) {
