@@ -8,8 +8,7 @@ import {
 export class EclipseApi implements ICredentialType {
   name = 'eclipseApi';
   displayName = 'Eclipse API';
-  icon = 'file:  eclipse-icon.svg' as const;
-  documentationUrl = 'https://epicoreclipse.com';
+  icon = 'file:eclipse-icon.svg' as const;
 
   properties: INodeProperties[] = [
     {
