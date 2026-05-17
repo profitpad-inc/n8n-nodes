@@ -44,6 +44,7 @@ jobs:
           npm version patch -m "chore: bump eclipse to %s [skip ci]"
           npm run build
           npm publish
+          git push --follow-tags
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -53,3 +54,7 @@ jobs:
         run: |
           npm version patch -m "chore: bump friendgrid to %s [skip ci]"
           npm run build
+          npm publish
+          git push --follow-tags
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
