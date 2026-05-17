@@ -330,7 +330,7 @@ export class EclipseApi implements INodeType {
               let currentStart = 1;
 
               while (true) {
-                const response = await this.helpers.httpRequestWithAuthentication('eclipseApi', {
+                const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
                   method: 'GET',
                   url: buildUrl(currentStart),
                   headers,
@@ -348,7 +348,7 @@ export class EclipseApi implements INodeType {
             } else {
               const startIndex = additionalOptions.startIndex ?? 1;
 
-              const response = await this.helpers.httpRequestWithAuthentication('eclipseApi', {
+              const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
                 method: 'GET',
                 url: buildUrl(startIndex),
                 headers,
@@ -366,7 +366,7 @@ export class EclipseApi implements INodeType {
           if (operation === 'get') {
             const contactId = this.getNodeParameter('contactId', i) as string;
 
-            const response = await this.helpers.httpRequestWithAuthentication('eclipseApi', {
+            const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
               method: 'GET',
               url: `${baseUrl}/Contacts`,
               headers,
