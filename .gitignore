@@ -1,4 +1,5 @@
 node_modules/
 dist/
 .vscode/
+.claude/
 .DS_Store

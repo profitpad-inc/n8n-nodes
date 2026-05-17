@@ -32,7 +32,7 @@ async function createSession(
 
 export class EclipseApi implements INodeType {
   description: INodeTypeDescription = {
-    displayName: 'Epicor Eclipses',
+    displayName: 'Epicor Eclipse',
     name: 'eclipseApi',
     icon: 'file:eclipse-icon.svg',
     group: ['transform'],
@@ -62,6 +62,22 @@ export class EclipseApi implements INodeType {
           {
             name: 'Contact',
             value: 'contact',
+          },
+          {
+            name: 'Customer',
+            value: 'customer',
+          },
+          {
+            name: 'Product',
+            value: 'product',
+          },
+          {
+            name: 'Product Inventory Pricing Inquiry',
+            value: 'productInventoryPricingInquiry',
+          },
+          {
+            name: 'Sales Order',
+            value: 'salesOrder',
           },
         ],
         default: 'contact',
@@ -243,6 +259,718 @@ export class EclipseApi implements INodeType {
           },
         },
       },
+
+      // ── Customer operations ───────────────────────────────────────────────
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: {
+          show: {
+            resource: ['customer'],
+          },
+        },
+        options: [
+          {
+            name: 'Get',
+            value: 'get',
+            description: 'Retrieve a single customer by ID',
+            action: 'Get a customer',
+          },
+          {
+            name: 'Get Many',
+            value: 'getMany',
+            description: 'Retrieve a list of customers',
+            action: 'Get many customers',
+          },
+        ],
+        default: 'getMany',
+      },
+      {
+        displayName: 'Return All',
+        name: 'returnAll',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to return all results or only up to a given limit',
+        displayOptions: {
+          show: {
+            resource: ['customer'],
+            operation: ['getMany'],
+          },
+        },
+      },
+      {
+        displayName: 'Page Size',
+        name: 'pageSize',
+        type: 'number',
+        typeOptions: { minValue: 1 },
+        default: 10,
+        description: 'Number of customers to return per page',
+        displayOptions: {
+          show: {
+            resource: ['customer'],
+            operation: ['getMany'],
+          },
+        },
+      },
+      {
+        displayName: 'Fields to Return',
+        name: 'fieldsFilterMode',
+        type: 'options',
+        options: [
+          {
+            name: 'All Fields',
+            value: 'all',
+            description: 'Return all fields from each result',
+          },
+          {
+            name: 'All Fields Except',
+            value: 'except',
+            description: 'Return all fields except the specified ones from each result',
+          },
+          {
+            name: 'Selected Fields',
+            value: 'selected',
+            description: 'Return only the specified fields from each result',
+          },
+        ],
+        default: 'all',
+        displayOptions: {
+          show: {
+            resource: ['customer'],
+            operation: ['getMany'],
+          },
+        },
+      },
+      {
+        displayName: 'Fields to Include',
+        name: 'fieldsToInclude',
+        type: 'string',
+        default: '',
+        placeholder: 'firstName,lastName,emails',
+        description: 'Comma-separated list of fields to include in each result',
+        displayOptions: {
+          show: {
+            resource: ['customer'],
+            operation: ['getMany'],
+            fieldsFilterMode: ['selected'],
+          },
+        },
+      },
+      {
+        displayName: 'Fields to Exclude',
+        name: 'fieldsToExclude',
+        type: 'string',
+        default: '',
+        placeholder: 'updateKey,sortBy',
+        description: 'Comma-separated list of fields to exclude from each result',
+        displayOptions: {
+          show: {
+            resource: ['customer'],
+            operation: ['getMany'],
+            fieldsFilterMode: ['except'],
+          },
+        },
+      },
+      {
+        displayName: 'Additional Options',
+        name: 'additionalOptions',
+        type: 'collection',
+        placeholder: 'Add Option',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['customer'],
+            operation: ['getMany'],
+          },
+        },
+        options: [
+          {
+            displayName: 'ID',
+            name: 'id',
+            type: 'string',
+            default: '',
+            placeholder: '123 or 123,456,789',
+            description: 'Filter by customer ID. Separate multiple IDs with commas.',
+          },
+          {
+            displayName: 'Keyword',
+            name: 'keyword',
+            type: 'string',
+            default: '',
+            description: 'Filter customers by keyword search',
+          },
+          {
+            displayName: 'Start Index',
+            name: 'startIndex',
+            type: 'number',
+            typeOptions: { minValue: 1 },
+            default: 1,
+            description: 'The index of the first record to return (1-based)',
+          },
+          {
+            displayName: 'Updated After',
+            name: 'updatedAfter',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return customers updated after this date and time. Timezone is always UTC.',
+          },
+        ],
+      },
+      {
+        displayName: 'Customer ID',
+        name: 'customerId',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'The ID of the customer to retrieve',
+        displayOptions: {
+          show: {
+            resource: ['customer'],
+            operation: ['get'],
+          },
+        },
+      },
+
+      // ── Product operations ────────────────────────────────────────────────
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: {
+          show: {
+            resource: ['product'],
+          },
+        },
+        options: [
+          {
+            name: 'Get',
+            value: 'get',
+            description: 'Retrieve a single product by ID',
+            action: 'Get a product',
+          },
+          {
+            name: 'Get Many',
+            value: 'getMany',
+            description: 'Retrieve a list of products',
+            action: 'Get many products',
+          },
+        ],
+        default: 'getMany',
+      },
+      {
+        displayName: 'Return All',
+        name: 'returnAll',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to return all results or only up to a given limit',
+        displayOptions: {
+          show: {
+            resource: ['product'],
+            operation: ['getMany'],
+          },
+        },
+      },
+      {
+        displayName: 'Page Size',
+        name: 'pageSize',
+        type: 'number',
+        typeOptions: { minValue: 1 },
+        default: 10,
+        description: 'Number of products to return per page',
+        displayOptions: {
+          show: {
+            resource: ['product'],
+            operation: ['getMany'],
+          },
+        },
+      },
+      {
+        displayName: 'Fields to Return',
+        name: 'fieldsFilterMode',
+        type: 'options',
+        options: [
+          {
+            name: 'All Fields',
+            value: 'all',
+            description: 'Return all fields from each result',
+          },
+          {
+            name: 'All Fields Except',
+            value: 'except',
+            description: 'Return all fields except the specified ones from each result',
+          },
+          {
+            name: 'Selected Fields',
+            value: 'selected',
+            description: 'Return only the specified fields from each result',
+          },
+        ],
+        default: 'all',
+        displayOptions: {
+          show: {
+            resource: ['product'],
+            operation: ['getMany'],
+          },
+        },
+      },
+      {
+        displayName: 'Fields to Include',
+        name: 'fieldsToInclude',
+        type: 'string',
+        default: '',
+        placeholder: 'firstName,lastName,emails',
+        description: 'Comma-separated list of fields to include in each result',
+        displayOptions: {
+          show: {
+            resource: ['product'],
+            operation: ['getMany'],
+            fieldsFilterMode: ['selected'],
+          },
+        },
+      },
+      {
+        displayName: 'Fields to Exclude',
+        name: 'fieldsToExclude',
+        type: 'string',
+        default: '',
+        placeholder: 'updateKey,sortBy',
+        description: 'Comma-separated list of fields to exclude from each result',
+        displayOptions: {
+          show: {
+            resource: ['product'],
+            operation: ['getMany'],
+            fieldsFilterMode: ['except'],
+          },
+        },
+      },
+      {
+        displayName: 'Additional Options',
+        name: 'additionalOptions',
+        type: 'collection',
+        placeholder: 'Add Option',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['product'],
+            operation: ['getMany'],
+          },
+        },
+        options: [
+          {
+            displayName: 'ID',
+            name: 'id',
+            type: 'string',
+            default: '',
+            placeholder: '123 or 123,456,789',
+            description: 'Filter by product ID. Separate multiple IDs with commas.',
+          },
+          {
+            displayName: 'Keyword',
+            name: 'keyword',
+            type: 'string',
+            default: '',
+            description: 'Filter products by keyword search',
+          },
+          {
+            displayName: 'Start Index',
+            name: 'startIndex',
+            type: 'number',
+            typeOptions: { minValue: 1 },
+            default: 1,
+            description: 'The index of the first record to return (1-based)',
+          },
+          {
+            displayName: 'Updated After',
+            name: 'updatedAfter',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return products updated after this date and time. Timezone is always UTC.',
+          },
+        ],
+      },
+      {
+        displayName: 'Product ID',
+        name: 'productId',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'The ID of the product to retrieve',
+        displayOptions: {
+          show: {
+            resource: ['product'],
+            operation: ['get'],
+          },
+        },
+      },
+
+      // ── Product Inventory Pricing Inquiry ─────────────────────────────────
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: {
+          show: {
+            resource: ['productInventoryPricingInquiry'],
+          },
+        },
+        options: [
+          {
+            name: 'Get',
+            value: 'get',
+            description: 'Retrieve inventory and pricing for a product and customer',
+            action: 'Get product inventory pricing inquiry',
+          },
+        ],
+        default: 'get',
+      },
+      {
+        displayName: 'Customer ID',
+        name: 'pricingCustomerId',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'The ID of the customer',
+        displayOptions: {
+          show: {
+            resource: ['productInventoryPricingInquiry'],
+          },
+        },
+      },
+      {
+        displayName: 'Product ID',
+        name: 'pricingProductId',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'The ID of the product',
+        displayOptions: {
+          show: {
+            resource: ['productInventoryPricingInquiry'],
+          },
+        },
+      },
+
+      // ── Sales Order operations ────────────────────────────────────────────
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+          },
+        },
+        options: [
+          {
+            name: 'Get',
+            value: 'get',
+            description: 'Retrieve a single sales order by ID',
+            action: 'Get a sales order',
+          },
+          {
+            name: 'Get Many',
+            value: 'getMany',
+            description: 'Retrieve a list of sales orders',
+            action: 'Get many sales orders',
+          },
+        ],
+        default: 'getMany',
+      },
+      {
+        displayName: 'Return All',
+        name: 'returnAll',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to return all results or only up to a given limit',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['getMany'],
+          },
+        },
+      },
+      {
+        displayName: 'Page Size',
+        name: 'pageSize',
+        type: 'number',
+        typeOptions: { minValue: 1 },
+        default: 10,
+        description: 'Number of sales orders to return per page',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['getMany'],
+          },
+        },
+      },
+      {
+        displayName: 'Fields to Return',
+        name: 'fieldsFilterMode',
+        type: 'options',
+        options: [
+          {
+            name: 'All Fields',
+            value: 'all',
+            description: 'Return all fields from each result',
+          },
+          {
+            name: 'All Fields Except',
+            value: 'except',
+            description: 'Return all fields except the specified ones from each result',
+          },
+          {
+            name: 'Selected Fields',
+            value: 'selected',
+            description: 'Return only the specified fields from each result',
+          },
+        ],
+        default: 'all',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['getMany'],
+          },
+        },
+      },
+      {
+        displayName: 'Fields to Include',
+        name: 'fieldsToInclude',
+        type: 'string',
+        default: '',
+        placeholder: 'firstName,lastName,emails',
+        description: 'Comma-separated list of fields to include in each result',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['getMany'],
+            fieldsFilterMode: ['selected'],
+          },
+        },
+      },
+      {
+        displayName: 'Fields to Exclude',
+        name: 'fieldsToExclude',
+        type: 'string',
+        default: '',
+        placeholder: 'updateKey,sortBy',
+        description: 'Comma-separated list of fields to exclude from each result',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['getMany'],
+            fieldsFilterMode: ['except'],
+          },
+        },
+      },
+      {
+        displayName: 'Additional Options',
+        name: 'additionalOptions',
+        type: 'collection',
+        placeholder: 'Add Option',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['getMany'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Bill To',
+            name: 'billTo',
+            type: 'string',
+            default: '',
+            placeholder: '123 or 123,456,789',
+            description: 'Filter by bill-to ID. Separate multiple values with commas.',
+          },
+          {
+            displayName: 'ID',
+            name: 'id',
+            type: 'string',
+            default: '',
+            placeholder: 'S2681000.0001 or S2681000.0001,S2681000.0002',
+            description: 'Filter by sales order ID. Separate multiple IDs with commas.',
+          },
+          {
+            displayName: 'Inside Salesperson',
+            name: 'insideSalesperson',
+            type: 'string',
+            default: '',
+            description: 'Filter by inside salesperson. Separate multiple values with commas.',
+          },
+          {
+            displayName: 'Last Modified Date Start',
+            name: 'lastModifiedDateAndTimeStampStart',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders last modified on or after this date and time. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Last Modified Date End',
+            name: 'lastModifiedDateAndTimeStampEnd',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders last modified on or before this date and time. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Only IDs',
+            name: 'onlyIds',
+            type: 'boolean',
+            default: false,
+            description: 'Whether to return only order IDs instead of full records',
+          },
+          {
+            displayName: 'Order Date Start',
+            name: 'orderDateStart',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders created on or after this date and time. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Order Date End',
+            name: 'orderDateEnd',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders created on or before this date and time. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Order Status',
+            name: 'orderStatus',
+            type: 'multiOptions',
+            options: [
+              { name: 'Bid', value: 'Bid' },
+              { name: 'Call When Available', value: 'CallWhenAvailable' },
+              { name: 'Call When Complete', value: 'CallWhenComplete' },
+              { name: 'Call When Specified', value: 'CallWhenSpecified' },
+              { name: 'Cancel', value: 'Cancel' },
+              { name: 'Direct', value: 'Direct' },
+              { name: 'Direct Through Stock', value: 'DirectThroughStock' },
+              { name: 'Invoice', value: 'Invoice' },
+              { name: 'Payment', value: 'Payment' },
+              { name: 'Pick Up Now', value: 'PickUpNow' },
+              { name: 'Reserve Inventory', value: 'ReserveInventory' },
+              { name: 'Ship Item Complete', value: 'ShipItemComplete' },
+              { name: 'Ship Ticket', value: 'ShipTicket' },
+              { name: 'Ship When Available', value: 'ShipWhenAvailable' },
+              { name: 'Ship When Complete', value: 'ShipWhenComplete' },
+              { name: 'Ship When Specified', value: 'ShipWhenSpecified' },
+            ],
+            default: [],
+            description: 'Filter by order status. Multiple statuses are allowed.',
+          },
+          {
+            displayName: 'Outside Salesperson',
+            name: 'outsideSalesperson',
+            type: 'string',
+            default: '',
+            description: 'Filter by outside salesperson. Separate multiple values with commas.',
+          },
+          {
+            displayName: 'Price Branch',
+            name: 'priceBranch',
+            type: 'string',
+            default: '',
+            placeholder: '123 or 123,456,789',
+            description: 'Filter by price branch. Separate multiple values with commas.',
+          },
+          {
+            displayName: 'Ship Branch',
+            name: 'shipBranch',
+            type: 'string',
+            default: '',
+            placeholder: '123 or 123,456,789',
+            description: 'Filter by ship branch. Separate multiple values with commas.',
+          },
+          {
+            displayName: 'Ship Date',
+            name: 'shipDate',
+            type: 'string',
+            default: '',
+            placeholder: '123 or 123,456,789',
+            description: 'Filter by ship date. Separate multiple values with commas.',
+          },
+          {
+            displayName: 'Ship Date Start',
+            name: 'shipDateStart',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders with a ship date on or after this date. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Ship Date End',
+            name: 'shipDateEnd',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders with a ship date on or before this date. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Ship To',
+            name: 'shipTo',
+            type: 'string',
+            default: '',
+            placeholder: '123 or 123,456,789',
+            description: 'Filter by ship-to ID. Separate multiple values with commas.',
+          },
+          {
+            displayName: 'Ship Via',
+            name: 'shipVia',
+            type: 'string',
+            default: '',
+            placeholder: '123 or 123,456,789',
+            description: 'Filter by ship via. Separate multiple values with commas.',
+          },
+          {
+            displayName: 'Sort',
+            name: 'sort',
+            type: 'options',
+            options: [
+              { name: 'Order Date (Ascending)', value: '+orderDate' },
+              { name: 'Order Date (Descending)', value: '-orderDate' },
+              { name: 'Last Modified Date (Ascending)', value: '+LastModifiedDateAndTimeStamp' },
+              { name: 'Last Modified Date (Descending)', value: '-LastModifiedDateAndTimeStamp' },
+              { name: 'Ship Date (Ascending)', value: '+shipDate' },
+              { name: 'Ship Date (Descending)', value: '-shipDate' },
+            ],
+            default: '+orderDate',
+            description: 'Sort order for results',
+          },
+          {
+            displayName: 'Start Index',
+            name: 'startIndex',
+            type: 'number',
+            typeOptions: { minValue: 1 },
+            default: 1,
+            description: 'The index of the first record to return (1-based)',
+          },
+          {
+            displayName: 'Writer',
+            name: 'writer',
+            type: 'string',
+            default: '',
+            description: 'Filter by writer. Separate multiple values with commas.',
+          },
+        ],
+      },
+      {
+        displayName: 'Sales Order ID',
+        name: 'salesOrderId',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: 'S2681000.0001',
+        description: 'The ID of the sales order to retrieve',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['get'],
+          },
+        },
+      },
     ],
   };
 
@@ -283,9 +1011,29 @@ export class EclipseApi implements INodeType {
                     .split(',').map((f) => f.trim()).filter(Boolean),
                 );
                 fields.add('id');
+                const copyPath = (src: unknown, dst: JsonObject, parts: string[]): void => {
+                  if (parts.length === 0 || src == null || Array.isArray(src) || typeof src !== 'object') return;
+                  const [head, ...tail] = parts;
+                  const srcVal = (src as JsonObject)[head];
+                  if (tail.length === 0) {
+                    if (srcVal !== undefined) dst[head] = srcVal as JsonObject[string];
+                    return;
+                  }
+                  if (Array.isArray(srcVal)) {
+                    if (!Array.isArray(dst[head])) {
+                      dst[head] = (srcVal as unknown[]).map(() => ({} as JsonObject)) as unknown as JsonObject[string];
+                    }
+                    (srcVal as unknown[]).forEach((item, idx) => {
+                      copyPath(item, (dst[head] as unknown as JsonObject[])[idx], tail);
+                    });
+                  } else if (srcVal != null && typeof srcVal === 'object') {
+                    if (typeof dst[head] !== 'object' || dst[head] === null) dst[head] = {};
+                    copyPath(srcVal, dst[head] as JsonObject, tail);
+                  }
+                };
                 return results.map((r) => {
                   const out: JsonObject = {};
-                  for (const f of fields) if (f in r) out[f] = r[f];
+                  for (const f of fields) copyPath(r, out, f.split('.'));
                   return out;
                 });
               }
@@ -375,6 +1123,311 @@ export class EclipseApi implements INodeType {
 
             returnData.push({ json: response, pairedItem: { item: i } });
           }
+        }
+
+        if (resource === 'customer' || resource === 'product') {
+          const endpoint = resource === 'customer' ? 'Customers' : 'Products';
+          const idParam = resource === 'customer' ? 'customerId' : 'productId';
+
+          // ── GET MANY ──────────────────────────────────────────────────
+          if (operation === 'getMany') {
+            const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+            const pageSize = this.getNodeParameter('pageSize', i) as number;
+            const fieldsFilterMode = this.getNodeParameter('fieldsFilterMode', i) as string;
+
+            const applyFieldFilter = (results: JsonObject[]): JsonObject[] => {
+              if (fieldsFilterMode === 'selected') {
+                const fields = new Set(
+                  (this.getNodeParameter('fieldsToInclude', i) as string)
+                    .split(',').map((f) => f.trim()).filter(Boolean),
+                );
+                fields.add('id');
+                const copyPath = (src: unknown, dst: JsonObject, parts: string[]): void => {
+                  if (parts.length === 0 || src == null || Array.isArray(src) || typeof src !== 'object') return;
+                  const [head, ...tail] = parts;
+                  const srcVal = (src as JsonObject)[head];
+                  if (tail.length === 0) {
+                    if (srcVal !== undefined) dst[head] = srcVal as JsonObject[string];
+                    return;
+                  }
+                  if (Array.isArray(srcVal)) {
+                    if (!Array.isArray(dst[head])) {
+                      dst[head] = (srcVal as unknown[]).map(() => ({} as JsonObject)) as unknown as JsonObject[string];
+                    }
+                    (srcVal as unknown[]).forEach((item, idx) => {
+                      copyPath(item, (dst[head] as unknown as JsonObject[])[idx], tail);
+                    });
+                  } else if (srcVal != null && typeof srcVal === 'object') {
+                    if (typeof dst[head] !== 'object' || dst[head] === null) dst[head] = {};
+                    copyPath(srcVal, dst[head] as JsonObject, tail);
+                  }
+                };
+                return results.map((r) => {
+                  const out: JsonObject = {};
+                  for (const f of fields) copyPath(r, out, f.split('.'));
+                  return out;
+                });
+              }
+              if (fieldsFilterMode === 'except') {
+                const excluded = new Set(
+                  (this.getNodeParameter('fieldsToExclude', i) as string)
+                    .split(',').map((f) => f.trim()).filter(Boolean),
+                );
+                excluded.delete('id');
+                return results.map((r) => {
+                  const out: JsonObject = {};
+                  for (const [k, v] of Object.entries(r)) if (!excluded.has(k)) out[k] = v;
+                  return out;
+                });
+              }
+              return results;
+            };
+
+            const additionalOptions = this.getNodeParameter('additionalOptions', i) as {
+              updatedAfter?: string;
+              keyword?: string;
+              startIndex?: number;
+              id?: string;
+            };
+
+            const ids = additionalOptions.id
+              ? additionalOptions.id.split(',').map((s) => s.trim()).filter(Boolean)
+              : [];
+
+            const buildUrl = (startIndex: number): string => {
+              const params = new URLSearchParams();
+              params.set('pageSize', String(pageSize));
+              params.set('startIndex', String(startIndex));
+              params.set('includeTotalItems', 'true');
+              for (const id of ids) params.append('id', id);
+              if (additionalOptions.updatedAfter) params.set('updatedAfter', additionalOptions.updatedAfter);
+              if (additionalOptions.keyword) params.set('keyword', additionalOptions.keyword);
+              return `${baseUrl}/${endpoint}?${params.toString()}`;
+            };
+
+            if (returnAll) {
+              let currentStart = 1;
+
+              while (true) {
+                const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                  method: 'GET',
+                  url: buildUrl(currentStart),
+                  headers,
+                });
+
+                const results: JsonObject[] = response.results ?? [];
+                returnData.push({
+                  json: { ...response, results: applyFieldFilter(results) },
+                  pairedItem: { item: i },
+                });
+
+                if (results.length < pageSize) break;
+                currentStart += pageSize;
+              }
+            } else {
+              const startIndex = additionalOptions.startIndex ?? 1;
+
+              const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                method: 'GET',
+                url: buildUrl(startIndex),
+                headers,
+              });
+
+              const results: JsonObject[] = response.results ?? [];
+              returnData.push({
+                json: { ...response, results: applyFieldFilter(results) },
+                pairedItem: { item: i },
+              });
+            }
+          }
+
+          // ── GET SINGLE ──────────────────────────────────────────────────
+          if (operation === 'get') {
+            const recordId = this.getNodeParameter(idParam, i) as string;
+
+            const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'GET',
+              url: `${baseUrl}/${endpoint}`,
+              headers,
+              qs: { id: recordId, includeTotalItems: 'true' },
+            });
+
+            returnData.push({ json: response, pairedItem: { item: i } });
+          }
+        }
+
+        if (resource === 'salesOrder') {
+
+          // ── GET MANY ────────────────────────────────────────────────────
+          if (operation === 'getMany') {
+            const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+            const pageSize = this.getNodeParameter('pageSize', i) as number;
+            const fieldsFilterMode = this.getNodeParameter('fieldsFilterMode', i) as string;
+
+            const applyFieldFilter = (results: JsonObject[]): JsonObject[] => {
+              if (fieldsFilterMode === 'selected') {
+                const fields = new Set(
+                  (this.getNodeParameter('fieldsToInclude', i) as string)
+                    .split(',').map((f) => f.trim()).filter(Boolean),
+                );
+                fields.add('id');
+                const copyPath = (src: unknown, dst: JsonObject, parts: string[]): void => {
+                  if (parts.length === 0 || src == null || Array.isArray(src) || typeof src !== 'object') return;
+                  const [head, ...tail] = parts;
+                  const srcVal = (src as JsonObject)[head];
+                  if (tail.length === 0) {
+                    if (srcVal !== undefined) dst[head] = srcVal as JsonObject[string];
+                    return;
+                  }
+                  if (Array.isArray(srcVal)) {
+                    if (!Array.isArray(dst[head])) {
+                      dst[head] = (srcVal as unknown[]).map(() => ({} as JsonObject)) as unknown as JsonObject[string];
+                    }
+                    (srcVal as unknown[]).forEach((item, idx) => {
+                      copyPath(item, (dst[head] as unknown as JsonObject[])[idx], tail);
+                    });
+                  } else if (srcVal != null && typeof srcVal === 'object') {
+                    if (typeof dst[head] !== 'object' || dst[head] === null) dst[head] = {};
+                    copyPath(srcVal, dst[head] as JsonObject, tail);
+                  }
+                };
+                return results.map((r) => {
+                  const out: JsonObject = {};
+                  for (const f of fields) copyPath(r, out, f.split('.'));
+                  return out;
+                });
+              }
+              if (fieldsFilterMode === 'except') {
+                const excluded = new Set(
+                  (this.getNodeParameter('fieldsToExclude', i) as string)
+                    .split(',').map((f) => f.trim()).filter(Boolean),
+                );
+                excluded.delete('id');
+                return results.map((r) => {
+                  const out: JsonObject = {};
+                  for (const [k, v] of Object.entries(r)) if (!excluded.has(k)) out[k] = v;
+                  return out;
+                });
+              }
+              return results;
+            };
+
+            const additionalOptions = this.getNodeParameter('additionalOptions', i) as {
+              id?: string;
+              billTo?: string;
+              shipTo?: string;
+              shipBranch?: string;
+              priceBranch?: string;
+              shipVia?: string;
+              shipDate?: string;
+              insideSalesperson?: string;
+              outsideSalesperson?: string;
+              writer?: string;
+              orderStatus?: string[];
+              shipDateStart?: string;
+              shipDateEnd?: string;
+              orderDateStart?: string;
+              orderDateEnd?: string;
+              lastModifiedDateAndTimeStampStart?: string;
+              lastModifiedDateAndTimeStampEnd?: string;
+              onlyIds?: boolean;
+              sort?: string;
+              startIndex?: number;
+            };
+
+            const splitParam = (val: string | undefined): string[] =>
+              val ? val.split(',').map((s) => s.trim()).filter(Boolean) : [];
+
+            const buildUrl = (startIndex: number): string => {
+              const params = new URLSearchParams();
+              params.set('pageSize', String(pageSize));
+              params.set('startIndex', String(startIndex));
+              params.set('includeTotalItems', 'true');
+              for (const v of splitParam(additionalOptions.id)) params.append('id', v);
+              for (const v of splitParam(additionalOptions.billTo)) params.append('BillTo', v);
+              for (const v of splitParam(additionalOptions.shipTo)) params.append('ShipTo', v);
+              for (const v of splitParam(additionalOptions.shipBranch)) params.append('ShipBranch', v);
+              for (const v of splitParam(additionalOptions.priceBranch)) params.append('PriceBranch', v);
+              for (const v of splitParam(additionalOptions.shipVia)) params.append('ShipVia', v);
+              for (const v of splitParam(additionalOptions.shipDate)) params.append('ShipDate', v);
+              for (const v of splitParam(additionalOptions.insideSalesperson)) params.append('InsideSalesperson', v);
+              for (const v of splitParam(additionalOptions.outsideSalesperson)) params.append('OutsideSalesperson', v);
+              for (const v of splitParam(additionalOptions.writer)) params.append('Writer', v);
+              for (const v of (additionalOptions.orderStatus ?? [])) params.append('OrderStatus', v);
+              if (additionalOptions.shipDateStart) params.set('ShipDateStart', additionalOptions.shipDateStart);
+              if (additionalOptions.shipDateEnd) params.set('ShipDateEnd', additionalOptions.shipDateEnd);
+              if (additionalOptions.orderDateStart) params.set('OrderDateStart', additionalOptions.orderDateStart);
+              if (additionalOptions.orderDateEnd) params.set('OrderDateEnd', additionalOptions.orderDateEnd);
+              if (additionalOptions.lastModifiedDateAndTimeStampStart) params.set('LastModifiedDateAndTimeStampStart', additionalOptions.lastModifiedDateAndTimeStampStart);
+              if (additionalOptions.lastModifiedDateAndTimeStampEnd) params.set('LastModifiedDateAndTimeStampEnd', additionalOptions.lastModifiedDateAndTimeStampEnd);
+              if (additionalOptions.onlyIds) params.set('onlyIds', 'true');
+              if (additionalOptions.sort) params.set('sort', additionalOptions.sort);
+              return `${baseUrl}/SalesOrders?${params.toString()}`;
+            };
+
+            if (returnAll) {
+              let currentStart = 1;
+
+              while (true) {
+                const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                  method: 'GET',
+                  url: buildUrl(currentStart),
+                  headers,
+                });
+
+                const results: JsonObject[] = response.results ?? [];
+                returnData.push({
+                  json: { ...response, results: applyFieldFilter(results) },
+                  pairedItem: { item: i },
+                });
+
+                if (results.length < pageSize) break;
+                currentStart += pageSize;
+              }
+            } else {
+              const startIndex = additionalOptions.startIndex ?? 1;
+
+              const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                method: 'GET',
+                url: buildUrl(startIndex),
+                headers,
+              });
+
+              const results: JsonObject[] = response.results ?? [];
+              returnData.push({
+                json: { ...response, results: applyFieldFilter(results) },
+                pairedItem: { item: i },
+              });
+            }
+          }
+
+          // ── GET SINGLE ──────────────────────────────────────────────────
+          if (operation === 'get') {
+            const salesOrderId = this.getNodeParameter('salesOrderId', i) as string;
+
+            const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'GET',
+              url: `${baseUrl}/SalesOrders`,
+              headers,
+              qs: { id: salesOrderId, includeTotalItems: 'true' },
+            });
+
+            returnData.push({ json: response, pairedItem: { item: i } });
+          }
+        }
+
+        if (resource === 'productInventoryPricingInquiry') {
+          const customerId = this.getNodeParameter('pricingCustomerId', i) as string;
+          const productId = this.getNodeParameter('pricingProductId', i) as string;
+
+          const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+            method: 'GET',
+            url: `${baseUrl}/ProductInventoryPricingInquiry`,
+            headers,
+            qs: { CustomerId: customerId, ProductId: productId },
+          });
+
+          returnData.push({ json: response, pairedItem: { item: i } });
         }
       } catch (error) {
         if (this.continueOnFail()) {

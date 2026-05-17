@@ -1,5 +1,4 @@
 import {
-  IAuthenticateGeneric,
   ICredentialTestRequest,
   ICredentialType,
   INodeProperties,
@@ -7,7 +6,7 @@ import {
 
 export class EclipseApi implements ICredentialType {
   name = 'eclipseApi';
-  displayName = 'Epicor Eclipses';
+  displayName = 'Epicor Eclipse';
   icon = 'file:eclipse-icon.svg' as const;
 
   properties: INodeProperties[] = [
@@ -38,15 +37,6 @@ export class EclipseApi implements ICredentialType {
       required: true,
     },
   ];
-
-  // Eclipse uses session-based auth: the node creates a session token via
-  // POST /Sessions and injects it as a header. This generic authenticate
-  // block satisfies n8n's auth infrastructure while the token exchange is
-  // handled programmatically inside the node's execute method.
-  authenticate: IAuthenticateGeneric = {
-    type: 'generic',
-    properties: {},
-  };
 
   test: ICredentialTestRequest = {
     request: {
