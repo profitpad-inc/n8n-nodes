@@ -16,7 +16,7 @@ export class EclipseApi implements ICredentialType {
       displayName: 'Base URL',
       name: 'baseUrl',
       type: 'string',
-      default: '',
+      default: 'https://your-instance.epicoreclipse.com',
       placeholder: 'https://your-instance.epicoreclipse.com',
       description: 'The base URL of your Eclipse API instance',
       required: true,
