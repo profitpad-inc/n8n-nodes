@@ -1,0 +1,9 @@
+{
+  "name": "@profitpad-inc/n8n-nodes",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  }
+}

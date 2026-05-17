@@ -1,0 +1,32 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - '*/[0-9]*.[0-9]*.[0-9]*'
+
+jobs:
+  publish:
+    name: Publish to GitHub Packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://npm.pkg.github.com'
+          cache: 'npm'
+      - name: Extract package name from tag
+        id: pkg
+        run: echo "package=n8n-nodes-${GITHUB_REF_NAME%%/*}" >> $GITHUB_OUTPUT
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build --workspace=packages/${{ steps.pkg.outputs.package }}
+      - name: Publish
+        run: npm publish --workspace=packages/${{ steps.pkg.outputs.package }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
