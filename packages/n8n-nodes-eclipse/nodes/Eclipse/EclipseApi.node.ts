@@ -34,7 +34,7 @@ export class EclipseApi implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Eclipse API',
     name: 'eclipseApi',
-    icon: 'file:epicor-eclipse.svg',
+    icon: 'file:  eclipse-icon.svg',
     group: ['transform'],
     version: 1,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
