@@ -68,16 +68,16 @@ export class EclipseApi implements INodeType {
             value: 'customer',
           },
           {
+            name: 'Sales Order',
+            value: 'salesOrder',
+          },
+          {
             name: 'Product',
             value: 'product',
           },
           {
             name: 'Product Inventory Pricing Inquiry',
             value: 'productInventoryPricingInquiry',
-          },
-          {
-            name: 'Sales Order',
-            value: 'salesOrder',
           },
         ],
         default: 'contact',
@@ -1420,14 +1420,22 @@ export class EclipseApi implements INodeType {
           const customerId = this.getNodeParameter('pricingCustomerId', i) as string;
           const productId = this.getNodeParameter('pricingProductId', i) as string;
 
-          const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
-            method: 'GET',
-            url: `${baseUrl}/ProductInventoryPricingInquiry`,
-            headers,
-            qs: { CustomerId: customerId, ProductId: productId },
-          });
+          const [inventoryResponse, pricingResponse] = await Promise.all([
+            this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'GET',
+              url: `${baseUrl}/ProductInventoryPricingInquiry`,
+              headers,
+              qs: { CustomerId: customerId, ProductId: productId },
+            }),
+            this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'GET',
+              url: `${baseUrl}/ProductPricingInquiry`,
+              headers,
+              qs: { CustomerId: customerId, ProductId: productId, ShowCost: 'true' },
+            }),
+          ]);
 
-          returnData.push({ json: response, pairedItem: { item: i } });
+          returnData.push({ json: { ...pricingResponse, ...inventoryResponse }, pairedItem: { item: i } });
         }
       } catch (error) {
         if (this.continueOnFail()) {
