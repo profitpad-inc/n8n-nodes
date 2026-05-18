@@ -94,13 +94,13 @@ export class EclipseApi implements INodeType {
           {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve a single contact by ID.',
+            description: 'Retrieve a single contact by ID',
             action: 'Get a contact',
           },
           {
             name: 'Get Many',
             value: 'getMany',
-            description: 'Retrieve a list of contacts.',
+            description: 'Retrieve a list of contacts',
             action: 'Get many contacts',
           },
         ],
@@ -113,7 +113,7 @@ export class EclipseApi implements INodeType {
         name: 'returnAll',
         type: 'boolean',
         default: false,
-        description: 'Whether to return all results or only up to a given limit.',
+        description: 'Whether to return all results or only up to a given limit',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -127,7 +127,7 @@ export class EclipseApi implements INodeType {
         type: 'number',
         typeOptions: { minValue: 1 },
         default: 10,
-        description: 'Number of contacts to return per page.',
+        description: 'Number of contacts to return per page',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -143,17 +143,17 @@ export class EclipseApi implements INodeType {
           {
             name: 'All Fields',
             value: 'all',
-            description: 'Return all fields from each result.',
+            description: 'Return all fields from each result',
           },
           {
             name: 'All Fields Except',
             value: 'except',
-            description: 'Return all fields except the specified ones from each result.',
+            description: 'Return all fields except the specified ones from each result',
           },
           {
             name: 'Selected Fields',
             value: 'selected',
-            description: 'Return only the specified fields from each result.  Supports dot notation.',
+            description: 'Return only the specified fields from each result. Supports dot notation.',
           },
         ],
         default: 'all',
@@ -170,7 +170,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'firstName,lastName,emails',
-        description: 'Comma-separated list of fields to include in each result.',
+        description: 'Comma-separated list of fields to include in each result',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -185,7 +185,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'updateKey,sortBy',
-        description: 'Comma-separated list of fields to exclude from each result.',
+        description: 'Comma-separated list of fields to exclude from each result',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -220,7 +220,7 @@ export class EclipseApi implements INodeType {
             name: 'keyword',
             type: 'string',
             default: '',
-            description: 'Filter contacts by keyword search.',
+            description: 'Filter contacts by keyword search',
           },
           {
             displayName: 'Start Index',
@@ -228,7 +228,7 @@ export class EclipseApi implements INodeType {
             type: 'number',
             typeOptions: { minValue: 1 },
             default: 1,
-            description: 'The index of the first record to return (1-based).',
+            description: 'The index of the first record to return (1-based)',
           },
           {
             displayName: 'Updated After',
@@ -247,7 +247,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the contact to retrieve.',
+        description: 'The ID of the contact to retrieve',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -271,13 +271,13 @@ export class EclipseApi implements INodeType {
           {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve a single customer by ID.',
+            description: 'Retrieve a single customer by ID',
             action: 'Get a customer',
           },
           {
             name: 'Get Many',
             value: 'getMany',
-            description: 'Retrieve a list of customers.',
+            description: 'Retrieve a list of customers',
             action: 'Get many customers',
           },
         ],
@@ -288,7 +288,7 @@ export class EclipseApi implements INodeType {
         name: 'returnAll',
         type: 'boolean',
         default: false,
-        description: 'Whether to return all results or only up to a given limit.',
+        description: 'Whether to return all results or only up to a given limit',
         displayOptions: {
           show: {
             resource: ['customer'],
@@ -302,7 +302,7 @@ export class EclipseApi implements INodeType {
         type: 'number',
         typeOptions: { minValue: 1 },
         default: 10,
-        description: 'Number of customers to return per page.',
+        description: 'Number of customers to return per page',
         displayOptions: {
           show: {
             resource: ['customer'],
@@ -318,17 +318,17 @@ export class EclipseApi implements INodeType {
           {
             name: 'All Fields',
             value: 'all',
-            description: 'Return all fields from each result.',
+            description: 'Return all fields from each result',
           },
           {
             name: 'All Fields Except',
             value: 'except',
-            description: 'Return all fields except the specified ones from each result.',
+            description: 'Return all fields except the specified ones from each result',
           },
           {
             name: 'Selected Fields',
             value: 'selected',
-            description: 'Return only the specified fields from each result.  Supports dot notation.',
+            description: 'Return only the specified fields from each result. Supports dot notation.',
           },
         ],
         default: 'all',
@@ -345,7 +345,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'firstName,lastName,emails',
-        description: 'Comma-separated list of fields to include in each result.',
+        description: 'Comma-separated list of fields to include in each result',
         displayOptions: {
           show: {
             resource: ['customer'],
@@ -360,7 +360,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'updateKey,sortBy',
-        description: 'Comma-separated list of fields to exclude from each result.',
+        description: 'Comma-separated list of fields to exclude from each result',
         displayOptions: {
           show: {
             resource: ['customer'],
@@ -395,7 +395,7 @@ export class EclipseApi implements INodeType {
             name: 'keyword',
             type: 'string',
             default: '',
-            description: 'Filter customers by keyword search.',
+            description: 'Filter customers by keyword search',
           },
           {
             displayName: 'Start Index',
@@ -403,7 +403,7 @@ export class EclipseApi implements INodeType {
             type: 'number',
             typeOptions: { minValue: 1 },
             default: 1,
-            description: 'The index of the first record to return (1-based).',
+            description: 'The index of the first record to return (1-based)',
           },
           {
             displayName: 'Updated After',
@@ -420,7 +420,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the customer to retrieve.',
+        description: 'The ID of the customer to retrieve',
         displayOptions: {
           show: {
             resource: ['customer'],
@@ -444,19 +444,19 @@ export class EclipseApi implements INodeType {
           {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve a single product by ID.',
+            description: 'Retrieve a single product by ID',
             action: 'Get a product',
           },
           {
             name: 'Get Many',
             value: 'getMany',
-            description: 'Retrieve a list of products.',
+            description: 'Retrieve a list of products',
             action: 'Get many products',
           },
           {
             name: 'Product Inventory Pricing Inquiry',
             value: 'getProductInventoryPricingInquiry',
-            description: 'Retrieve inventory and pricing for a product and customer.',
+            description: 'Retrieve inventory and pricing for a product and customer',
             action: 'Get product inventory pricing inquiry',
           },
         ],
@@ -467,7 +467,7 @@ export class EclipseApi implements INodeType {
         name: 'returnAll',
         type: 'boolean',
         default: false,
-        description: 'Whether to return all results or only up to a given limit.',
+        description: 'Whether to return all results or only up to a given limit',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -481,7 +481,7 @@ export class EclipseApi implements INodeType {
         type: 'number',
         typeOptions: { minValue: 1 },
         default: 10,
-        description: 'Number of products to return per page.',
+        description: 'Number of products to return per page',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -497,17 +497,17 @@ export class EclipseApi implements INodeType {
           {
             name: 'All Fields',
             value: 'all',
-            description: 'Return all fields from each result.',
+            description: 'Return all fields from each result',
           },
           {
             name: 'All Fields Except',
             value: 'except',
-            description: 'Return all fields except the specified ones from each result.',
+            description: 'Return all fields except the specified ones from each result',
           },
           {
             name: 'Selected Fields',
             value: 'selected',
-            description: 'Return only the specified fields from each result.  Supports dot notation.',
+            description: 'Return only the specified fields from each result. Supports dot notation.',
           },
         ],
         default: 'all',
@@ -524,7 +524,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'firstName,lastName,emails',
-        description: 'Comma-separated list of fields to include in each result.',
+        description: 'Comma-separated list of fields to include in each result',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -539,7 +539,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'updateKey,sortBy',
-        description: 'Comma-separated list of fields to exclude from each result.',
+        description: 'Comma-separated list of fields to exclude from each result',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -574,7 +574,7 @@ export class EclipseApi implements INodeType {
             name: 'keyword',
             type: 'string',
             default: '',
-            description: 'Filter products by keyword search.',
+            description: 'Filter products by keyword search',
           },
           {
             displayName: 'Start Index',
@@ -582,7 +582,7 @@ export class EclipseApi implements INodeType {
             type: 'number',
             typeOptions: { minValue: 1 },
             default: 1,
-            description: 'The index of the first record to return (1-based).',
+            description: 'The index of the first record to return (1-based)',
           },
           {
             displayName: 'Updated After',
@@ -599,7 +599,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the product to retrieve.',
+        description: 'The ID of the product to retrieve',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -623,7 +623,7 @@ export class EclipseApi implements INodeType {
           {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve inventory and pricing for a product and customer.',
+            description: 'Retrieve inventory and pricing for a product and customer',
             action: 'Get product inventory pricing inquiry',
           },
         ],
@@ -635,7 +635,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the customer.',
+        description: 'The ID of the customer',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -649,7 +649,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the product.',
+        description: 'The ID of the product',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -662,7 +662,7 @@ export class EclipseApi implements INodeType {
         name: 'considerUserAuthBranch',
         type: 'boolean',
         default: false,
-        description: 'Whether to consider the user\'s authorized branch when retrieving pricing.',
+        description: 'Whether to consider the user\'s authorized branch when retrieving pricing',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -676,7 +676,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the user whose authorized branch will be considered.',
+        description: 'The ID of the user whose authorized branch will be considered',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -701,13 +701,13 @@ export class EclipseApi implements INodeType {
           {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve a single sales order by ID.',
+            description: 'Retrieve a single sales order by ID',
             action: 'Get a sales order',
           },
           {
             name: 'Get Many',
             value: 'getMany',
-            description: 'Retrieve a list of sales orders.',
+            description: 'Retrieve a list of sales orders',
             action: 'Get many sales orders',
           },
         ],
@@ -718,7 +718,7 @@ export class EclipseApi implements INodeType {
         name: 'returnAll',
         type: 'boolean',
         default: false,
-        description: 'Whether to return all results or only up to a given limit.',
+        description: 'Whether to return all results or only up to a given limit',
         displayOptions: {
           show: {
             resource: ['salesOrder'],
@@ -732,7 +732,7 @@ export class EclipseApi implements INodeType {
         type: 'number',
         typeOptions: { minValue: 1 },
         default: 10,
-        description: 'Number of sales orders to return per page.',
+        description: 'Number of sales orders to return per page',
         displayOptions: {
           show: {
             resource: ['salesOrder'],
@@ -748,17 +748,17 @@ export class EclipseApi implements INodeType {
           {
             name: 'All Fields',
             value: 'all',
-            description: 'Return all fields from each result.',
+            description: 'Return all fields from each result',
           },
           {
             name: 'All Fields Except',
             value: 'except',
-            description: 'Return all fields except the specified ones from each result.',
+            description: 'Return all fields except the specified ones from each result',
           },
           {
             name: 'Selected Fields',
             value: 'selected',
-            description: 'Return only the specified fields from each result.  Supports dot notation.',
+            description: 'Return only the specified fields from each result. Supports dot notation.',
           },
         ],
         default: 'all',
@@ -775,7 +775,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'firstName,lastName,emails',
-        description: 'Comma-separated list of fields to include in each result.',
+        description: 'Comma-separated list of fields to include in each result',
         displayOptions: {
           show: {
             resource: ['salesOrder'],
@@ -790,7 +790,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'updateKey,sortBy',
-        description: 'Comma-separated list of fields to exclude from each result.',
+        description: 'Comma-separated list of fields to exclude from each result',
         displayOptions: {
           show: {
             resource: ['salesOrder'],
@@ -905,7 +905,7 @@ export class EclipseApi implements INodeType {
             name: 'onlyIds',
             type: 'boolean',
             default: false,
-            description: 'Whether to return only order IDs instead of full records.',
+            description: 'Whether to return only order IDs instead of full records',
           },
           {
             displayName: 'Order Status',
@@ -984,7 +984,7 @@ export class EclipseApi implements INodeType {
               { name: 'Ship Date (Descending)', value: '-shipDate' },
             ],
             default: '+orderDate',
-            description: 'Sort order for results.',
+            description: 'Sort order for results',
           },
           {
             displayName: 'Start Index',
@@ -992,7 +992,7 @@ export class EclipseApi implements INodeType {
             type: 'number',
             typeOptions: { minValue: 1 },
             default: 1,
-            description: 'The index of the first record to return (1-based).',
+            description: 'The index of the first record to return (1-based)',
           },
           {
             displayName: 'Writer',
@@ -1010,7 +1010,7 @@ export class EclipseApi implements INodeType {
         default: '',
         required: true,
         placeholder: 'S2681000.0001',
-        description: 'The ID of the sales order to retrieve.',
+        description: 'The ID of the sales order to retrieve',
         displayOptions: {
           show: {
             resource: ['salesOrder'],
