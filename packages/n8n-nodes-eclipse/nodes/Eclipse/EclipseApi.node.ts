@@ -68,16 +68,16 @@ export class EclipseApi implements INodeType {
             value: 'customer',
           },
           {
-            name: 'Sales Order',
-            value: 'salesOrder',
-          },
-          {
             name: 'Product',
             value: 'product',
           },
           {
             name: 'Product Inventory Pricing Inquiry',
             value: 'productInventoryPricingInquiry',
+          },
+          {
+            name: 'Sales Order',
+            value: 'salesOrder',
           },
         ],
         default: 'contact',
