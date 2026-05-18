@@ -1,6 +1,6 @@
 {
   "name": "@profitpad-inc/n8n-nodes-eclipse",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "description": "n8n community node for the Epicor Eclipse API",
   "license": "MIT",
   "homepage": "",
