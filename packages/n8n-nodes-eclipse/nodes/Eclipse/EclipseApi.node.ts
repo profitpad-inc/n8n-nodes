@@ -38,7 +38,7 @@ export class EclipseApi implements INodeType {
     group: ['transform'],
     version: 1,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
-    description: 'Interact with the Epicor Eclipse API',
+    description: 'Interact with the Epicor Eclipse API.',
     usableAsTool: true,
     defaults: {
       name: 'Eclipse API',
@@ -72,10 +72,6 @@ export class EclipseApi implements INodeType {
             value: 'product',
           },
           {
-            name: 'Product Inventory Pricing Inquiry',
-            value: 'productInventoryPricingInquiry',
-          },
-          {
             name: 'Sales Order',
             value: 'salesOrder',
           },
@@ -98,13 +94,13 @@ export class EclipseApi implements INodeType {
           {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve a single contact by ID',
+            description: 'Retrieve a single contact by ID.',
             action: 'Get a contact',
           },
           {
             name: 'Get Many',
             value: 'getMany',
-            description: 'Retrieve a list of contacts',
+            description: 'Retrieve a list of contacts.',
             action: 'Get many contacts',
           },
         ],
@@ -117,7 +113,7 @@ export class EclipseApi implements INodeType {
         name: 'returnAll',
         type: 'boolean',
         default: false,
-        description: 'Whether to return all results or only up to a given limit',
+        description: 'Whether to return all results or only up to a given limit.',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -131,7 +127,7 @@ export class EclipseApi implements INodeType {
         type: 'number',
         typeOptions: { minValue: 1 },
         default: 10,
-        description: 'Number of contacts to return per page',
+        description: 'Number of contacts to return per page.',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -147,17 +143,17 @@ export class EclipseApi implements INodeType {
           {
             name: 'All Fields',
             value: 'all',
-            description: 'Return all fields from each result',
+            description: 'Return all fields from each result.',
           },
           {
             name: 'All Fields Except',
             value: 'except',
-            description: 'Return all fields except the specified ones from each result',
+            description: 'Return all fields except the specified ones from each result.',
           },
           {
             name: 'Selected Fields',
             value: 'selected',
-            description: 'Return only the specified fields from each result',
+            description: 'Return only the specified fields from each result.  Supports dot notation.',
           },
         ],
         default: 'all',
@@ -174,7 +170,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'firstName,lastName,emails',
-        description: 'Comma-separated list of fields to include in each result',
+        description: 'Comma-separated list of fields to include in each result.',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -189,7 +185,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'updateKey,sortBy',
-        description: 'Comma-separated list of fields to exclude from each result',
+        description: 'Comma-separated list of fields to exclude from each result.',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -224,7 +220,7 @@ export class EclipseApi implements INodeType {
             name: 'keyword',
             type: 'string',
             default: '',
-            description: 'Filter contacts by keyword search',
+            description: 'Filter contacts by keyword search.',
           },
           {
             displayName: 'Start Index',
@@ -232,7 +228,7 @@ export class EclipseApi implements INodeType {
             type: 'number',
             typeOptions: { minValue: 1 },
             default: 1,
-            description: 'The index of the first record to return (1-based)',
+            description: 'The index of the first record to return (1-based).',
           },
           {
             displayName: 'Updated After',
@@ -251,7 +247,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the contact to retrieve',
+        description: 'The ID of the contact to retrieve.',
         displayOptions: {
           show: {
             resource: ['contact'],
@@ -275,13 +271,13 @@ export class EclipseApi implements INodeType {
           {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve a single customer by ID',
+            description: 'Retrieve a single customer by ID.',
             action: 'Get a customer',
           },
           {
             name: 'Get Many',
             value: 'getMany',
-            description: 'Retrieve a list of customers',
+            description: 'Retrieve a list of customers.',
             action: 'Get many customers',
           },
         ],
@@ -292,7 +288,7 @@ export class EclipseApi implements INodeType {
         name: 'returnAll',
         type: 'boolean',
         default: false,
-        description: 'Whether to return all results or only up to a given limit',
+        description: 'Whether to return all results or only up to a given limit.',
         displayOptions: {
           show: {
             resource: ['customer'],
@@ -306,7 +302,7 @@ export class EclipseApi implements INodeType {
         type: 'number',
         typeOptions: { minValue: 1 },
         default: 10,
-        description: 'Number of customers to return per page',
+        description: 'Number of customers to return per page.',
         displayOptions: {
           show: {
             resource: ['customer'],
@@ -322,17 +318,17 @@ export class EclipseApi implements INodeType {
           {
             name: 'All Fields',
             value: 'all',
-            description: 'Return all fields from each result',
+            description: 'Return all fields from each result.',
           },
           {
             name: 'All Fields Except',
             value: 'except',
-            description: 'Return all fields except the specified ones from each result',
+            description: 'Return all fields except the specified ones from each result.',
           },
           {
             name: 'Selected Fields',
             value: 'selected',
-            description: 'Return only the specified fields from each result',
+            description: 'Return only the specified fields from each result.  Supports dot notation.',
           },
         ],
         default: 'all',
@@ -349,7 +345,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'firstName,lastName,emails',
-        description: 'Comma-separated list of fields to include in each result',
+        description: 'Comma-separated list of fields to include in each result.',
         displayOptions: {
           show: {
             resource: ['customer'],
@@ -364,7 +360,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'updateKey,sortBy',
-        description: 'Comma-separated list of fields to exclude from each result',
+        description: 'Comma-separated list of fields to exclude from each result.',
         displayOptions: {
           show: {
             resource: ['customer'],
@@ -399,7 +395,7 @@ export class EclipseApi implements INodeType {
             name: 'keyword',
             type: 'string',
             default: '',
-            description: 'Filter customers by keyword search',
+            description: 'Filter customers by keyword search.',
           },
           {
             displayName: 'Start Index',
@@ -407,7 +403,7 @@ export class EclipseApi implements INodeType {
             type: 'number',
             typeOptions: { minValue: 1 },
             default: 1,
-            description: 'The index of the first record to return (1-based)',
+            description: 'The index of the first record to return (1-based).',
           },
           {
             displayName: 'Updated After',
@@ -424,7 +420,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the customer to retrieve',
+        description: 'The ID of the customer to retrieve.',
         displayOptions: {
           show: {
             resource: ['customer'],
@@ -448,14 +444,20 @@ export class EclipseApi implements INodeType {
           {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve a single product by ID',
+            description: 'Retrieve a single product by ID.',
             action: 'Get a product',
           },
           {
             name: 'Get Many',
             value: 'getMany',
-            description: 'Retrieve a list of products',
+            description: 'Retrieve a list of products.',
             action: 'Get many products',
+          },
+          {
+            name: 'Product Inventory Pricing Inquiry',
+            value: 'getProductInventoryPricingInquiry',
+            description: 'Retrieve inventory and pricing for a product and customer.',
+            action: 'Get product inventory pricing inquiry',
           },
         ],
         default: 'getMany',
@@ -465,7 +467,7 @@ export class EclipseApi implements INodeType {
         name: 'returnAll',
         type: 'boolean',
         default: false,
-        description: 'Whether to return all results or only up to a given limit',
+        description: 'Whether to return all results or only up to a given limit.',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -479,7 +481,7 @@ export class EclipseApi implements INodeType {
         type: 'number',
         typeOptions: { minValue: 1 },
         default: 10,
-        description: 'Number of products to return per page',
+        description: 'Number of products to return per page.',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -495,17 +497,17 @@ export class EclipseApi implements INodeType {
           {
             name: 'All Fields',
             value: 'all',
-            description: 'Return all fields from each result',
+            description: 'Return all fields from each result.',
           },
           {
             name: 'All Fields Except',
             value: 'except',
-            description: 'Return all fields except the specified ones from each result',
+            description: 'Return all fields except the specified ones from each result.',
           },
           {
             name: 'Selected Fields',
             value: 'selected',
-            description: 'Return only the specified fields from each result',
+            description: 'Return only the specified fields from each result.  Supports dot notation.',
           },
         ],
         default: 'all',
@@ -522,7 +524,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'firstName,lastName,emails',
-        description: 'Comma-separated list of fields to include in each result',
+        description: 'Comma-separated list of fields to include in each result.',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -537,7 +539,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'updateKey,sortBy',
-        description: 'Comma-separated list of fields to exclude from each result',
+        description: 'Comma-separated list of fields to exclude from each result.',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -572,7 +574,7 @@ export class EclipseApi implements INodeType {
             name: 'keyword',
             type: 'string',
             default: '',
-            description: 'Filter products by keyword search',
+            description: 'Filter products by keyword search.',
           },
           {
             displayName: 'Start Index',
@@ -580,7 +582,7 @@ export class EclipseApi implements INodeType {
             type: 'number',
             typeOptions: { minValue: 1 },
             default: 1,
-            description: 'The index of the first record to return (1-based)',
+            description: 'The index of the first record to return (1-based).',
           },
           {
             displayName: 'Updated After',
@@ -597,7 +599,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the product to retrieve',
+        description: 'The ID of the product to retrieve.',
         displayOptions: {
           show: {
             resource: ['product'],
@@ -621,7 +623,7 @@ export class EclipseApi implements INodeType {
           {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve inventory and pricing for a product and customer',
+            description: 'Retrieve inventory and pricing for a product and customer.',
             action: 'Get product inventory pricing inquiry',
           },
         ],
@@ -633,10 +635,11 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the customer',
+        description: 'The ID of the customer.',
         displayOptions: {
           show: {
-            resource: ['productInventoryPricingInquiry'],
+            resource: ['product'],
+            operation: ['getProductInventoryPricingInquiry'],
           },
         },
       },
@@ -646,10 +649,39 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the product',
+        description: 'The ID of the product.',
         displayOptions: {
           show: {
-            resource: ['productInventoryPricingInquiry'],
+            resource: ['product'],
+            operation: ['getProductInventoryPricingInquiry'],
+          },
+        },
+      },
+      {
+        displayName: 'Consider User Auth Branch',
+        name: 'considerUserAuthBranch',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to consider the user\'s authorized branch when retrieving pricing.',
+        displayOptions: {
+          show: {
+            resource: ['product'],
+            operation: ['getProductInventoryPricingInquiry'],
+          },
+        },
+      },
+      {
+        displayName: 'User ID',
+        name: 'pricingUserId',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'The ID of the user whose authorized branch will be considered.',
+        displayOptions: {
+          show: {
+            resource: ['product'],
+            operation: ['getProductInventoryPricingInquiry'],
+            considerUserAuthBranch: [true],
           },
         },
       },
@@ -669,13 +701,13 @@ export class EclipseApi implements INodeType {
           {
             name: 'Get',
             value: 'get',
-            description: 'Retrieve a single sales order by ID',
+            description: 'Retrieve a single sales order by ID.',
             action: 'Get a sales order',
           },
           {
             name: 'Get Many',
             value: 'getMany',
-            description: 'Retrieve a list of sales orders',
+            description: 'Retrieve a list of sales orders.',
             action: 'Get many sales orders',
           },
         ],
@@ -686,7 +718,7 @@ export class EclipseApi implements INodeType {
         name: 'returnAll',
         type: 'boolean',
         default: false,
-        description: 'Whether to return all results or only up to a given limit',
+        description: 'Whether to return all results or only up to a given limit.',
         displayOptions: {
           show: {
             resource: ['salesOrder'],
@@ -700,7 +732,7 @@ export class EclipseApi implements INodeType {
         type: 'number',
         typeOptions: { minValue: 1 },
         default: 10,
-        description: 'Number of sales orders to return per page',
+        description: 'Number of sales orders to return per page.',
         displayOptions: {
           show: {
             resource: ['salesOrder'],
@@ -716,17 +748,17 @@ export class EclipseApi implements INodeType {
           {
             name: 'All Fields',
             value: 'all',
-            description: 'Return all fields from each result',
+            description: 'Return all fields from each result.',
           },
           {
             name: 'All Fields Except',
             value: 'except',
-            description: 'Return all fields except the specified ones from each result',
+            description: 'Return all fields except the specified ones from each result.',
           },
           {
             name: 'Selected Fields',
             value: 'selected',
-            description: 'Return only the specified fields from each result',
+            description: 'Return only the specified fields from each result.  Supports dot notation.',
           },
         ],
         default: 'all',
@@ -743,7 +775,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'firstName,lastName,emails',
-        description: 'Comma-separated list of fields to include in each result',
+        description: 'Comma-separated list of fields to include in each result.',
         displayOptions: {
           show: {
             resource: ['salesOrder'],
@@ -758,7 +790,7 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         placeholder: 'updateKey,sortBy',
-        description: 'Comma-separated list of fields to exclude from each result',
+        description: 'Comma-separated list of fields to exclude from each result.',
         displayOptions: {
           show: {
             resource: ['salesOrder'],
@@ -766,6 +798,71 @@ export class EclipseApi implements INodeType {
             fieldsFilterMode: ['except'],
           },
         },
+      },
+      {
+        displayName: 'Date Filter Options',
+        name: 'dateFilterOptions',
+        type: 'collection',
+        placeholder: 'Add Date Filter',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['getMany'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Last Modified Date End',
+            name: 'lastModifiedDateAndTimeStampEnd',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders last modified on or before this date and time. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Last Modified Date Start',
+            name: 'lastModifiedDateAndTimeStampStart',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders last modified on or after this date and time. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Order Date End',
+            name: 'orderDateEnd',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders created on or before this date and time. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Order Date Start',
+            name: 'orderDateStart',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders created on or after this date and time. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Ship Date',
+            name: 'shipDate',
+            type: 'string',
+            default: '',
+            placeholder: '123 or 123,456,789',
+            description: 'Filter by ship date. Separate multiple values with commas.',
+          },
+          {
+            displayName: 'Ship Date End',
+            name: 'shipDateEnd',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders with a ship date on or before this date. Timezone is always UTC.',
+          },
+          {
+            displayName: 'Ship Date Start',
+            name: 'shipDateStart',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return orders with a ship date on or after this date. Timezone is always UTC.',
+          },
+        ],
       },
       {
         displayName: 'Additional Options',
@@ -804,39 +901,11 @@ export class EclipseApi implements INodeType {
             description: 'Filter by inside salesperson. Separate multiple values with commas.',
           },
           {
-            displayName: 'Last Modified Date End',
-            name: 'lastModifiedDateAndTimeStampEnd',
-            type: 'dateTime',
-            default: '',
-            description: 'Only return orders last modified on or before this date and time. Timezone is always UTC.',
-          },
-          {
-            displayName: 'Last Modified Date Start',
-            name: 'lastModifiedDateAndTimeStampStart',
-            type: 'dateTime',
-            default: '',
-            description: 'Only return orders last modified on or after this date and time. Timezone is always UTC.',
-          },
-          {
             displayName: 'Only IDs',
             name: 'onlyIds',
             type: 'boolean',
             default: false,
-            description: 'Whether to return only order IDs instead of full records',
-          },
-          {
-            displayName: 'Order Date End',
-            name: 'orderDateEnd',
-            type: 'dateTime',
-            default: '',
-            description: 'Only return orders created on or before this date and time. Timezone is always UTC.',
-          },
-          {
-            displayName: 'Order Date Start',
-            name: 'orderDateStart',
-            type: 'dateTime',
-            default: '',
-            description: 'Only return orders created on or after this date and time. Timezone is always UTC.',
+            description: 'Whether to return only order IDs instead of full records.',
           },
           {
             displayName: 'Order Status',
@@ -887,28 +956,6 @@ export class EclipseApi implements INodeType {
             description: 'Filter by ship branch. Separate multiple values with commas.',
           },
           {
-            displayName: 'Ship Date',
-            name: 'shipDate',
-            type: 'string',
-            default: '',
-            placeholder: '123 or 123,456,789',
-            description: 'Filter by ship date. Separate multiple values with commas.',
-          },
-          {
-            displayName: 'Ship Date End',
-            name: 'shipDateEnd',
-            type: 'dateTime',
-            default: '',
-            description: 'Only return orders with a ship date on or before this date. Timezone is always UTC.',
-          },
-          {
-            displayName: 'Ship Date Start',
-            name: 'shipDateStart',
-            type: 'dateTime',
-            default: '',
-            description: 'Only return orders with a ship date on or after this date. Timezone is always UTC.',
-          },
-          {
             displayName: 'Ship To',
             name: 'shipTo',
             type: 'string',
@@ -937,7 +984,7 @@ export class EclipseApi implements INodeType {
               { name: 'Ship Date (Descending)', value: '-shipDate' },
             ],
             default: '+orderDate',
-            description: 'Sort order for results',
+            description: 'Sort order for results.',
           },
           {
             displayName: 'Start Index',
@@ -945,7 +992,7 @@ export class EclipseApi implements INodeType {
             type: 'number',
             typeOptions: { minValue: 1 },
             default: 1,
-            description: 'The index of the first record to return (1-based)',
+            description: 'The index of the first record to return (1-based).',
           },
           {
             displayName: 'Writer',
@@ -963,7 +1010,7 @@ export class EclipseApi implements INodeType {
         default: '',
         required: true,
         placeholder: 'S2681000.0001',
-        description: 'The ID of the sales order to retrieve',
+        description: 'The ID of the sales order to retrieve.',
         displayOptions: {
           show: {
             resource: ['salesOrder'],
@@ -1312,6 +1359,16 @@ export class EclipseApi implements INodeType {
               return results;
             };
 
+            const dateFilterOptions = this.getNodeParameter('dateFilterOptions', i) as {
+              shipDate?: string;
+              shipDateStart?: string;
+              shipDateEnd?: string;
+              orderDateStart?: string;
+              orderDateEnd?: string;
+              lastModifiedDateAndTimeStampStart?: string;
+              lastModifiedDateAndTimeStampEnd?: string;
+            };
+
             const additionalOptions = this.getNodeParameter('additionalOptions', i) as {
               id?: string;
               billTo?: string;
@@ -1319,17 +1376,10 @@ export class EclipseApi implements INodeType {
               shipBranch?: string;
               priceBranch?: string;
               shipVia?: string;
-              shipDate?: string;
               insideSalesperson?: string;
               outsideSalesperson?: string;
               writer?: string;
               orderStatus?: string[];
-              shipDateStart?: string;
-              shipDateEnd?: string;
-              orderDateStart?: string;
-              orderDateEnd?: string;
-              lastModifiedDateAndTimeStampStart?: string;
-              lastModifiedDateAndTimeStampEnd?: string;
               onlyIds?: boolean;
               sort?: string;
               startIndex?: number;
@@ -1349,17 +1399,17 @@ export class EclipseApi implements INodeType {
               for (const v of splitParam(additionalOptions.shipBranch)) params.append('ShipBranch', v);
               for (const v of splitParam(additionalOptions.priceBranch)) params.append('PriceBranch', v);
               for (const v of splitParam(additionalOptions.shipVia)) params.append('ShipVia', v);
-              for (const v of splitParam(additionalOptions.shipDate)) params.append('ShipDate', v);
+              for (const v of splitParam(dateFilterOptions.shipDate)) params.append('ShipDate', v);
               for (const v of splitParam(additionalOptions.insideSalesperson)) params.append('InsideSalesperson', v);
               for (const v of splitParam(additionalOptions.outsideSalesperson)) params.append('OutsideSalesperson', v);
               for (const v of splitParam(additionalOptions.writer)) params.append('Writer', v);
               for (const v of (additionalOptions.orderStatus ?? [])) params.append('OrderStatus', v);
-              if (additionalOptions.shipDateStart) params.set('ShipDateStart', additionalOptions.shipDateStart);
-              if (additionalOptions.shipDateEnd) params.set('ShipDateEnd', additionalOptions.shipDateEnd);
-              if (additionalOptions.orderDateStart) params.set('OrderDateStart', additionalOptions.orderDateStart);
-              if (additionalOptions.orderDateEnd) params.set('OrderDateEnd', additionalOptions.orderDateEnd);
-              if (additionalOptions.lastModifiedDateAndTimeStampStart) params.set('LastModifiedDateAndTimeStampStart', additionalOptions.lastModifiedDateAndTimeStampStart);
-              if (additionalOptions.lastModifiedDateAndTimeStampEnd) params.set('LastModifiedDateAndTimeStampEnd', additionalOptions.lastModifiedDateAndTimeStampEnd);
+              if (dateFilterOptions.shipDateStart) params.set('ShipDateStart', dateFilterOptions.shipDateStart);
+              if (dateFilterOptions.shipDateEnd) params.set('ShipDateEnd', dateFilterOptions.shipDateEnd);
+              if (dateFilterOptions.orderDateStart) params.set('OrderDateStart', dateFilterOptions.orderDateStart);
+              if (dateFilterOptions.orderDateEnd) params.set('OrderDateEnd', dateFilterOptions.orderDateEnd);
+              if (dateFilterOptions.lastModifiedDateAndTimeStampStart) params.set('LastModifiedDateAndTimeStampStart', dateFilterOptions.lastModifiedDateAndTimeStampStart);
+              if (dateFilterOptions.lastModifiedDateAndTimeStampEnd) params.set('LastModifiedDateAndTimeStampEnd', dateFilterOptions.lastModifiedDateAndTimeStampEnd);
               if (additionalOptions.onlyIds) params.set('onlyIds', 'true');
               if (additionalOptions.sort) params.set('sort', additionalOptions.sort);
               return `${baseUrl}/SalesOrders?${params.toString()}`;
@@ -1416,22 +1466,27 @@ export class EclipseApi implements INodeType {
           }
         }
 
-        if (resource === 'productInventoryPricingInquiry') {
+        if (resource === 'product' && operation === 'getProductInventoryPricingInquiry') {
           const customerId = this.getNodeParameter('pricingCustomerId', i) as string;
           const productId = this.getNodeParameter('pricingProductId', i) as string;
+          const considerUserAuthBranch = this.getNodeParameter('considerUserAuthBranch', i) as boolean;
+          const userId = considerUserAuthBranch ? this.getNodeParameter('pricingUserId', i) as string : undefined;
+
+          const sharedQs: Record<string, string> = { CustomerId: customerId, ProductId: productId };
+          if (considerUserAuthBranch && userId) sharedQs.UserId = userId;
 
           const [inventoryResponse, pricingResponse] = await Promise.all([
             this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
               method: 'GET',
               url: `${baseUrl}/ProductInventoryPricingInquiry`,
               headers,
-              qs: { CustomerId: customerId, ProductId: productId },
+              qs: { ...sharedQs, ConsiderUserAuthBranch: String(considerUserAuthBranch) },
             }),
             this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
               method: 'GET',
               url: `${baseUrl}/ProductPricingInquiry`,
               headers,
-              qs: { CustomerId: customerId, ProductId: productId, ShowCost: 'true' },
+              qs: { ...sharedQs, ShowCost: 'true', ConsiderUserAuthBranch: String(considerUserAuthBranch) },
             }),
           ]);
 
