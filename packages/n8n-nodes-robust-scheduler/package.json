@@ -1,6 +1,6 @@
 {
-  "name": "n8n-nodes-robust-scheduler",
-  "version": "0.1.3",
+  "name": "@profitpad-inc/n8n-nodes-robust-scheduler",
+  "version": "0.1.4",
   "description": "Robust Scheduler.  Includes Jiggler for high-performance production n8n servers.",
   "license": "MIT",
   "homepage": "",
