@@ -9,7 +9,7 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 export class Example implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Robust Scheduler',
-    name: 'scheduler',
+    name: 'example',
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
     icon: 'file:calendar-clock.svg',
     group: ['input'],
