@@ -269,6 +269,12 @@ export class EclipseApi implements INodeType {
         },
         options: [
           {
+            name: 'Create',
+            value: 'create',
+            description: 'Create a new customer',
+            action: 'Create a customer',
+          },
+          {
             name: 'Get',
             value: 'get',
             description: 'Retrieve a single customer by ID',
@@ -279,6 +285,12 @@ export class EclipseApi implements INodeType {
             value: 'getMany',
             description: 'Retrieve a list of customers',
             action: 'Get many customers',
+          },
+          {
+            name: 'Update',
+            value: 'update',
+            description: 'Update an existing customer',
+            action: 'Update a customer',
           },
         ],
         default: 'getMany',
@@ -420,13 +432,309 @@ export class EclipseApi implements INodeType {
         type: 'string',
         default: '',
         required: true,
-        description: 'The ID of the customer to retrieve',
+        description: 'The ID of the customer',
         displayOptions: {
           show: {
             resource: ['customer'],
-            operation: ['get'],
+            operation: ['get', 'update'],
           },
         },
+      },
+
+      // ── Create customer fields ────────────────────────────────────────────
+      {
+        displayName: 'Input Mode',
+        name: 'inputMode',
+        type: 'options',
+        options: [
+          { name: 'Fields', value: 'fields', description: 'Fill in individual fields' },
+          { name: 'Custom JSON', value: 'json', description: 'Provide a raw JSON body' },
+        ],
+        default: 'fields',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'] } },
+      },
+      {
+        displayName: 'Name',
+        name: 'name',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'The name of the customer',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Is Bill To',
+        name: 'isBillTo',
+        type: 'boolean',
+        default: true,
+        required: true,
+        description: 'Whether this customer is a bill-to customer',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Is Ship To',
+        name: 'isShipTo',
+        type: 'boolean',
+        default: true,
+        required: true,
+        description: 'Whether this customer is a ship-to customer',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Sort By',
+        name: 'sortBy',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'Sort key for the customer. Maximum 12 characters.',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Name Index',
+        name: 'nameIndex',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'Name index for the customer. Maximum 12 characters.',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Bill To ID',
+        name: 'billToId',
+        type: 'number',
+        default: 0,
+        required: true,
+        description: 'The ID of the existing bill-to customer. Required when "Is Bill To" is false.',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'], isBillTo: [false] } },
+      },
+      {
+        displayName: 'Types',
+        name: 'types',
+        type: 'fixedCollection',
+        typeOptions: { multipleValues: true },
+        placeholder: 'Add Type',
+        default: {},
+        description: 'Customer types (e.g. PROPANE, LVL-2)',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
+        options: [
+          {
+            name: 'typeValues',
+            displayName: 'Type',
+            values: [{ displayName: 'Type', name: 'type', type: 'string', default: '', description: 'The customer type value (e.g. PROPANE)' }],
+          },
+        ],
+      },
+      {
+        displayName: 'Ship To List',
+        name: 'shipToLists',
+        type: 'fixedCollection',
+        typeOptions: { multipleValues: true },
+        placeholder: 'Add Ship To',
+        default: {},
+        description: 'Associated ship-to customers',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
+        options: [
+          {
+            name: 'shipToValues',
+            displayName: 'Ship To',
+            values: [{ displayName: 'Ship To ID', name: 'shipToId', type: 'number', default: 0 }],
+          },
+        ],
+      },
+      {
+        displayName: 'Contacts',
+        name: 'contacts',
+        type: 'fixedCollection',
+        typeOptions: { multipleValues: true },
+        placeholder: 'Add Contact',
+        default: {},
+        description: 'Contacts to associate with the customer',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
+        options: [
+          {
+            name: 'contactValues',
+            displayName: 'Contact',
+            values: [{ displayName: 'Contact ID', name: 'id', type: 'number', default: 0 }],
+          },
+        ],
+      },
+      {
+        displayName: 'Additional Fields',
+        name: 'additionalFields',
+        type: 'collection',
+        placeholder: 'Add Field',
+        default: {},
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
+        options: [
+          { displayName: 'Address Line 1', name: 'addressLine1', type: 'string', default: '' },
+          { displayName: 'Address Line 2', name: 'addressLine2', type: 'string', default: '' },
+          { displayName: 'City', name: 'city', type: 'string', default: '' },
+          { displayName: 'Default PO Number', name: 'defaultPoNumber', type: 'string', default: '' },
+          { displayName: 'Default Price Class', name: 'defaultPriceClass', type: 'string', default: '' },
+          { displayName: 'Default Ship Via', name: 'defaultShipVia', type: 'string', default: '' },
+          { displayName: 'Default Terms', name: 'defaultTerms', type: 'string', default: '' },
+          { displayName: 'Freight In Exempt', name: 'freightInExempt', type: 'boolean', default: false },
+          { displayName: 'Freight Out Exempt', name: 'freightOutExempt', type: 'boolean', default: false },
+          { displayName: 'Home Branch', name: 'homeBranch', type: 'string', default: '' },
+          { displayName: 'Home Territory', name: 'homeTerritory', type: 'string', default: '' },
+          { displayName: 'Inside Salesperson', name: 'insideSalesperson', type: 'string', default: '' },
+          { displayName: 'Outside Salesperson', name: 'outsideSalesperson', type: 'string', default: '' },
+          { displayName: 'Postal Code', name: 'postalCode', type: 'string', default: '', description: 'ZIP / postal code' },
+          {
+            displayName: 'State Code',
+            name: 'state',
+            type: 'string',
+            default: '',
+            placeholder: 'CO',
+            description: '2-letter state code (e.g. CO, TX, CA)',
+          },
+        ],
+      },
+      {
+        displayName: 'JSON Body',
+        name: 'customJson',
+        type: 'json',
+        default: '{\n  "name": "string",\n  "addressLine1": "string",\n  "addressLine2": "string",\n  "city": "string",\n  "state": "string",\n  "postalCode": "string",\n  "isBillTo": false,\n  "isShipTo": true,\n  "sortBy": "string",\n  "nameIndex": "string",\n  "billToId": 123,\n  "defaultPriceClass": "string",\n  "outsideSalesperson": "string",\n  "insideSalesperson": "string",\n  "defaultPoNumber": "string",\n  "defaultShipVia": "string",\n  "freightInExempt": false,\n  "freightOutExempt": false,\n  "defaultTerms": "string",\n  "homeBranch": "string",\n  "homeTerritory": "string",\n  "types": [{"type": "string"}],\n  "shipToLists": [{"shipToId": 0}],\n  "contacts": [{"id": 0}]\n}',
+        description: 'Raw JSON body to send to the API',
+        displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['json'] } },
+      },
+
+      // ── Update customer fields ────────────────────────────────────────────
+      {
+        displayName: 'Input Mode',
+        name: 'inputMode',
+        type: 'options',
+        options: [
+          { name: 'Fields', value: 'fields', description: 'Fill in individual fields' },
+          { name: 'Custom JSON', value: 'json', description: 'Provide a raw JSON patch (merged on top of existing data)' },
+        ],
+        default: 'fields',
+        displayOptions: { show: { resource: ['customer'], operation: ['update'] } },
+      },
+      {
+        displayName: 'Clear Fields',
+        name: 'clearFields',
+        type: 'multiOptions',
+        default: [],
+        description: 'Fields to explicitly clear. Arrays are set to [], all other fields to "".',
+        displayOptions: { show: { resource: ['customer'], operation: ['update'], inputMode: ['fields'] } },
+        options: [
+          { name: 'Address Line 1', value: 'addressLine1' },
+          { name: 'Address Line 2', value: 'addressLine2' },
+          { name: 'Bill To ID', value: 'billToId' },
+          { name: 'City', value: 'city' },
+          { name: 'Contacts', value: 'contacts' },
+          { name: 'Default PO Number', value: 'defaultPoNumber' },
+          { name: 'Default Price Class', value: 'defaultPriceClass' },
+          { name: 'Default Ship Via', value: 'defaultShipVia' },
+          { name: 'Default Terms', value: 'defaultTerms' },
+          { name: 'Home Branch', value: 'homeBranch' },
+          { name: 'Home Territory', value: 'homeTerritory' },
+          { name: 'Inside Salesperson', value: 'insideSalesperson' },
+          { name: 'Outside Salesperson', value: 'outsideSalesperson' },
+          { name: 'Postal Code', value: 'postalCode' },
+          { name: 'Ship To List', value: 'shipToLists' },
+          { name: 'State', value: 'state' },
+          { name: 'Types', value: 'types' },
+        ],
+      },
+      {
+        displayName: 'Update Fields',
+        name: 'updateFields',
+        type: 'collection',
+        placeholder: 'Add Field',
+        default: {},
+        description: 'Fields to update on the customer. Only provided fields will be overwritten.',
+        displayOptions: { show: { resource: ['customer'], operation: ['update'], inputMode: ['fields'] } },
+        options: [
+          { displayName: 'Address Line 1', name: 'addressLine1', type: 'string', default: '' },
+          { displayName: 'Address Line 2', name: 'addressLine2', type: 'string', default: '' },
+          { displayName: 'Bill To ID', name: 'billToId', type: 'number', default: 0, description: 'Required when setting "Is Bill To" to false' },
+          { displayName: 'City', name: 'city', type: 'string', default: '' },
+          { displayName: 'Default PO Number', name: 'defaultPoNumber', type: 'string', default: '' },
+          { displayName: 'Default Price Class', name: 'defaultPriceClass', type: 'string', default: '' },
+          { displayName: 'Default Ship Via', name: 'defaultShipVia', type: 'string', default: '' },
+          { displayName: 'Default Terms', name: 'defaultTerms', type: 'string', default: '' },
+          { displayName: 'Freight In Exempt', name: 'freightInExempt', type: 'boolean', default: false },
+          { displayName: 'Freight Out Exempt', name: 'freightOutExempt', type: 'boolean', default: false },
+          { displayName: 'Home Branch', name: 'homeBranch', type: 'string', default: '' },
+          { displayName: 'Home Territory', name: 'homeTerritory', type: 'string', default: '' },
+          { displayName: 'Inside Salesperson', name: 'insideSalesperson', type: 'string', default: '' },
+          { displayName: 'Is Bill To', name: 'isBillTo', type: 'boolean', default: true },
+          { displayName: 'Is Ship To', name: 'isShipTo', type: 'boolean', default: true },
+          { displayName: 'Name', name: 'name', type: 'string', default: '' },
+          { displayName: 'Name Index', name: 'nameIndex', type: 'string', default: '', description: 'Maximum 12 characters' },
+          { displayName: 'Outside Salesperson', name: 'outsideSalesperson', type: 'string', default: '' },
+          { displayName: 'Postal Code', name: 'postalCode', type: 'string', default: '' },
+          { displayName: 'Sort By', name: 'sortBy', type: 'string', default: '', description: 'Maximum 12 characters' },
+          {
+            displayName: 'State Code',
+            name: 'state',
+            type: 'string',
+            default: '',
+            placeholder: 'CO',
+            description: '2-letter state code (e.g. CO, TX, CA)',
+          },
+        ],
+      },
+      {
+        displayName: 'Types',
+        name: 'updateTypes',
+        type: 'fixedCollection',
+        typeOptions: { multipleValues: true },
+        placeholder: 'Add Type',
+        default: {},
+        description: 'Replaces the existing customer types if any entries are provided',
+        displayOptions: { show: { resource: ['customer'], operation: ['update'], inputMode: ['fields'] } },
+        options: [
+          {
+            name: 'typeValues',
+            displayName: 'Type',
+            values: [{ displayName: 'Type', name: 'type', type: 'string', default: '', description: 'The customer type value (e.g. PROPANE)' }],
+          },
+        ],
+      },
+      {
+        displayName: 'Ship To List',
+        name: 'updateShipToLists',
+        type: 'fixedCollection',
+        typeOptions: { multipleValues: true },
+        placeholder: 'Add Ship To',
+        default: {},
+        description: 'Replaces the existing ship-to list if any entries are provided',
+        displayOptions: { show: { resource: ['customer'], operation: ['update'], inputMode: ['fields'] } },
+        options: [
+          {
+            name: 'shipToValues',
+            displayName: 'Ship To',
+            values: [{ displayName: 'Ship To ID', name: 'shipToId', type: 'number', default: 0 }],
+          },
+        ],
+      },
+      {
+        displayName: 'Contacts',
+        name: 'updateContacts',
+        type: 'fixedCollection',
+        typeOptions: { multipleValues: true },
+        placeholder: 'Add Contact',
+        default: {},
+        description: 'Replaces the existing contacts if any entries are provided',
+        displayOptions: { show: { resource: ['customer'], operation: ['update'], inputMode: ['fields'] } },
+        options: [
+          {
+            name: 'contactValues',
+            displayName: 'Contact',
+            values: [{ displayName: 'Contact ID', name: 'id', type: 'number', default: 0 }],
+          },
+        ],
+      },
+      {
+        displayName: 'JSON Patch',
+        name: 'updateCustomJson',
+        type: 'json',
+        default: '{\n  "updateKey": "string",\n  "id": "string",\n  "name": "string",\n  "addressLine1": "string",\n  "addressLine2": "string",\n  "city": "string",\n  "state": "string",\n  "postalCode": "string",\n  "isBillTo": false,\n  "isShipTo": true,\n  "sortBy": "string",\n  "nameIndex": "string",\n  "billToId": 123,\n  "defaultPriceClass": "string",\n  "outsideSalesperson": "string",\n  "insideSalesperson": "string",\n  "defaultPoNumber": "string",\n  "defaultShipVia": "string",\n  "freightInExempt": false,\n  "freightOutExempt": false,\n  "defaultTerms": "string",\n  "homeBranch": "string",\n  "homeTerritory": "string",\n  "types": [{"type": "string"}],\n  "shipToLists": [{"shipToId": 0}],\n  "contacts": [{"id": 0}]\n}',
+        description: 'Fields in this JSON are merged on top of the existing customer record',
+        displayOptions: { show: { resource: ['customer'], operation: ['update'], inputMode: ['json'] } },
       },
 
       // ── Product operations ────────────────────────────────────────────────
@@ -1301,6 +1609,197 @@ export class EclipseApi implements INodeType {
 
             returnData.push({ json: response, pairedItem: { item: i } });
           }
+        }
+
+        // ── CREATE CUSTOMER ────────────────────────────────────────────────
+        if (resource === 'customer' && operation === 'create') {
+          const inputMode = this.getNodeParameter('inputMode', i) as string;
+          let body: JsonObject;
+
+          if (inputMode === 'json') {
+            const rawJson = this.getNodeParameter('customJson', i) as string;
+            body = JSON.parse(rawJson) as JsonObject;
+          } else {
+            const name = this.getNodeParameter('name', i) as string;
+            const isBillTo = this.getNodeParameter('isBillTo', i) as boolean;
+            const isShipTo = this.getNodeParameter('isShipTo', i) as boolean;
+            const sortBy = this.getNodeParameter('sortBy', i) as string;
+            const nameIndex = this.getNodeParameter('nameIndex', i) as string;
+            const additionalFields = this.getNodeParameter('additionalFields', i) as {
+              addressLine1?: string;
+              addressLine2?: string;
+              city?: string;
+              state?: string;
+              postalCode?: string;
+              defaultPriceClass?: string;
+              outsideSalesperson?: string;
+              insideSalesperson?: string;
+              defaultPoNumber?: string;
+              defaultShipVia?: string;
+              freightInExempt?: boolean;
+              freightOutExempt?: boolean;
+              defaultTerms?: string;
+              homeBranch?: string;
+              homeTerritory?: string;
+            };
+            const typesParam = this.getNodeParameter('types', i) as { typeValues?: Array<{ type: string }> };
+            const shipToListsParam = this.getNodeParameter('shipToLists', i) as { shipToValues?: Array<{ shipToId: number }> };
+            const contactsParam = this.getNodeParameter('contacts', i) as { contactValues?: Array<{ id: number }> };
+
+            body = { name, isBillTo, isShipTo, sortBy, nameIndex };
+
+            if (!isBillTo) body.billToId = this.getNodeParameter('billToId', i) as number;
+
+            if (additionalFields.addressLine1) body.addressLine1 = additionalFields.addressLine1;
+            if (additionalFields.addressLine2) body.addressLine2 = additionalFields.addressLine2;
+            if (additionalFields.city) body.city = additionalFields.city;
+            if (additionalFields.state) body.state = additionalFields.state;
+            if (additionalFields.postalCode) body.postalCode = additionalFields.postalCode;
+            if (additionalFields.defaultPriceClass) body.defaultPriceClass = additionalFields.defaultPriceClass;
+            if (additionalFields.outsideSalesperson) body.outsideSalesperson = additionalFields.outsideSalesperson;
+            if (additionalFields.insideSalesperson) body.insideSalesperson = additionalFields.insideSalesperson;
+            if (additionalFields.defaultPoNumber) body.defaultPoNumber = additionalFields.defaultPoNumber;
+            if (additionalFields.defaultShipVia) body.defaultShipVia = additionalFields.defaultShipVia;
+            if (additionalFields.freightInExempt !== undefined) body.freightInExempt = additionalFields.freightInExempt;
+            if (additionalFields.freightOutExempt !== undefined) body.freightOutExempt = additionalFields.freightOutExempt;
+            if (additionalFields.defaultTerms) body.defaultTerms = additionalFields.defaultTerms;
+            if (additionalFields.homeBranch) body.homeBranch = additionalFields.homeBranch;
+            if (additionalFields.homeTerritory) body.homeTerritory = additionalFields.homeTerritory;
+
+            const types = typesParam.typeValues ?? [];
+            if (types.length > 0) body.types = types;
+
+            const shipToLists = (shipToListsParam.shipToValues ?? []).map(({ shipToId }) => ({ shipToId }));
+            if (shipToLists.length > 0) body.shipToLists = shipToLists;
+
+            const contactsList = (contactsParam.contactValues ?? []).map(({ id }) => ({ id }));
+            if (contactsList.length > 0) body.contacts = contactsList;
+          }
+
+          const createResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+            method: 'POST',
+            url: `${baseUrl}/Customers`,
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body,
+            json: true,
+            returnFullResponse: true,
+            ignoreHttpStatusErrors: true,
+          });
+
+          if (createResponse.statusCode < 200 || createResponse.statusCode >= 300) {
+            throw new NodeApiError(this.getNode(), {
+              message: `Create customer failed with status ${createResponse.statusCode}`,
+              description: typeof createResponse.body === 'object'
+                ? JSON.stringify(createResponse.body)
+                : String(createResponse.body),
+            } as JsonObject, { itemIndex: i });
+          }
+
+          returnData.push({ json: createResponse.body as JsonObject, pairedItem: { item: i } });
+        }
+
+        // ── UPDATE CUSTOMER ────────────────────────────────────────────────
+        if (resource === 'customer' && operation === 'update') {
+          const customerId = this.getNodeParameter('customerId', i) as string;
+          const inputMode = this.getNodeParameter('inputMode', i) as string;
+
+          const existing = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+            method: 'GET',
+            url: `${baseUrl}/Customers/${customerId}`,
+            headers,
+          });
+
+          let body: JsonObject = { ...(existing as JsonObject) };
+
+          if (inputMode === 'json') {
+            const rawJson = this.getNodeParameter('updateCustomJson', i) as string;
+            body = { ...body, ...(JSON.parse(rawJson) as JsonObject) };
+          } else {
+            const updateFields = this.getNodeParameter('updateFields', i) as {
+              name?: string;
+              addressLine1?: string;
+              addressLine2?: string;
+              city?: string;
+              state?: string;
+              postalCode?: string;
+              isBillTo?: boolean;
+              isShipTo?: boolean;
+              sortBy?: string;
+              nameIndex?: string;
+              defaultPriceClass?: string;
+              billToId?: number;
+              outsideSalesperson?: string;
+              insideSalesperson?: string;
+              defaultPoNumber?: string;
+              defaultShipVia?: string;
+              freightInExempt?: boolean;
+              freightOutExempt?: boolean;
+              defaultTerms?: string;
+              homeBranch?: string;
+              homeTerritory?: string;
+            };
+            const typesParam = this.getNodeParameter('updateTypes', i) as { typeValues?: Array<{ type: string }> };
+            const shipToListsParam = this.getNodeParameter('updateShipToLists', i) as { shipToValues?: Array<{ shipToId: number }> };
+            const contactsParam = this.getNodeParameter('updateContacts', i) as { contactValues?: Array<{ id: number }> };
+
+            if (updateFields.name !== undefined && updateFields.name !== '') body.name = updateFields.name;
+            if (updateFields.addressLine1 !== undefined && updateFields.addressLine1 !== '') body.addressLine1 = updateFields.addressLine1;
+            if (updateFields.addressLine2 !== undefined && updateFields.addressLine2 !== '') body.addressLine2 = updateFields.addressLine2;
+            if (updateFields.city !== undefined && updateFields.city !== '') body.city = updateFields.city;
+            if (updateFields.state !== undefined && updateFields.state !== '') body.state = updateFields.state;
+            if (updateFields.postalCode !== undefined && updateFields.postalCode !== '') body.postalCode = updateFields.postalCode;
+            if (updateFields.isBillTo !== undefined) body.isBillTo = updateFields.isBillTo;
+            if (updateFields.isShipTo !== undefined) body.isShipTo = updateFields.isShipTo;
+            if (updateFields.sortBy !== undefined && updateFields.sortBy !== '') body.sortBy = updateFields.sortBy;
+            if (updateFields.nameIndex !== undefined && updateFields.nameIndex !== '') body.nameIndex = updateFields.nameIndex;
+            if (updateFields.defaultPriceClass !== undefined && updateFields.defaultPriceClass !== '') body.defaultPriceClass = updateFields.defaultPriceClass;
+            if (updateFields.billToId !== undefined && updateFields.billToId !== 0) body.billToId = updateFields.billToId;
+            if (updateFields.outsideSalesperson !== undefined && updateFields.outsideSalesperson !== '') body.outsideSalesperson = updateFields.outsideSalesperson;
+            if (updateFields.insideSalesperson !== undefined && updateFields.insideSalesperson !== '') body.insideSalesperson = updateFields.insideSalesperson;
+            if (updateFields.defaultPoNumber !== undefined && updateFields.defaultPoNumber !== '') body.defaultPoNumber = updateFields.defaultPoNumber;
+            if (updateFields.defaultShipVia !== undefined && updateFields.defaultShipVia !== '') body.defaultShipVia = updateFields.defaultShipVia;
+            if (updateFields.freightInExempt !== undefined) body.freightInExempt = updateFields.freightInExempt;
+            if (updateFields.freightOutExempt !== undefined) body.freightOutExempt = updateFields.freightOutExempt;
+            if (updateFields.defaultTerms !== undefined && updateFields.defaultTerms !== '') body.defaultTerms = updateFields.defaultTerms;
+            if (updateFields.homeBranch !== undefined && updateFields.homeBranch !== '') body.homeBranch = updateFields.homeBranch;
+            if (updateFields.homeTerritory !== undefined && updateFields.homeTerritory !== '') body.homeTerritory = updateFields.homeTerritory;
+
+            const types = typesParam.typeValues ?? [];
+            if (types.length > 0) body.types = types;
+
+            const shipToLists = (shipToListsParam.shipToValues ?? []).map(({ shipToId }) => ({ shipToId }));
+            if (shipToLists.length > 0) body.shipToLists = shipToLists;
+
+            const contactsList = (contactsParam.contactValues ?? []).map(({ id }) => ({ id }));
+            if (contactsList.length > 0) body.contacts = contactsList;
+
+            const arrayFields = new Set(['types', 'shipToLists', 'contacts']);
+            const clearFields = this.getNodeParameter('clearFields', i) as string[];
+            for (const field of clearFields) {
+              body[field] = arrayFields.has(field) ? [] : '';
+            }
+          }
+
+          const updateResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+            method: 'PUT',
+            url: `${baseUrl}/Customers/${customerId}`,
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body,
+            json: true,
+            returnFullResponse: true,
+            ignoreHttpStatusErrors: true,
+          });
+
+          if (updateResponse.statusCode < 200 || updateResponse.statusCode >= 300) {
+            throw new NodeApiError(this.getNode(), {
+              message: `Update customer failed with status ${updateResponse.statusCode}`,
+              description: typeof updateResponse.body === 'object'
+                ? JSON.stringify(updateResponse.body)
+                : String(updateResponse.body),
+            } as JsonObject, { itemIndex: i });
+          }
+
+          returnData.push({ json: updateResponse.body as JsonObject, pairedItem: { item: i } });
         }
 
         if (resource === 'salesOrder') {
