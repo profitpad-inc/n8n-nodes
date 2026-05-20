@@ -36,12 +36,24 @@ jobs:
         run: |
           echo "eclipse=$(git diff --name-only HEAD~1 HEAD | grep -q '^packages/n8n-nodes-eclipse/' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "friendgrid=$(git diff --name-only HEAD~1 HEAD | grep -q '^packages/n8n-nodes-friendgrid/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "robust-scheduler=$(git diff --name-only HEAD~1 HEAD | grep -q '^packages/n8n-nodes-robust-scheduler/' && echo true || echo false)" >> $GITHUB_OUTPUT
 
       - name: Publish eclipse
         if: steps.changes.outputs.eclipse == 'true'
         working-directory: packages/n8n-nodes-eclipse
         run: |
           npm version patch -m "chore: bump eclipse to %s [skip ci]"
+          npm run build
+          npm publish
+          git push --follow-tags
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish robust-scheduler
+        if: steps.changes.outputs.robust-scheduler == 'true'
+        working-directory: packages/n8n-nodes-robust-scheduler
+        run: |
+          npm version patch -m "chore: bump robust-scheduler to %s [skip ci]"
           npm run build
           npm publish
           git push --follow-tags

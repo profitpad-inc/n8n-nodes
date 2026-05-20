@@ -1,6 +1,6 @@
 # n8n-nodes-robust-scheduler
 
-This is an n8n community node. It lets you use _app/service name_ in your n8n workflows.
+This is an n8n community node. It lets you use robust scheduler in your n8n workflows.
 
 _App/service name_ is _one or two sentences describing the service this node integrates with_.
 
