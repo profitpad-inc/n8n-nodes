@@ -34,6 +34,95 @@ function buildCronExpression(item: IDataObject): CronExpression {
   }
 }
 
+// Computes the next time the given rule would fire, based on the same cron
+// semantics used by buildCronExpression. Returns undefined for custom mode.
+function computeNextTriggerTime(item: IDataObject, now: Date): Date | undefined {
+  const mode = item.mode as string;
+
+  if (mode === 'everyNMinutes') {
+    const n = (item.minutesBetweenTriggers as number) ?? 5;
+    const d = new Date(now);
+    const currentMinute = d.getMinutes();
+    const pastSecond0 = d.getSeconds() > 0 || d.getMilliseconds() > 0;
+
+    // cron fires at second 0 of every minute where minute % n === 0
+    let nextMinute: number;
+    if (!pastSecond0 && currentMinute % n === 0) {
+      nextMinute = currentMinute + n;
+    } else {
+      nextMinute = Math.ceil((currentMinute + 1) / n) * n;
+    }
+
+    const result = new Date(d);
+    result.setMilliseconds(0);
+    result.setSeconds(0);
+    if (nextMinute >= 60) {
+      result.setHours(result.getHours() + 1);
+      result.setMinutes(0);
+    } else {
+      result.setMinutes(nextMinute);
+    }
+    return result;
+  }
+
+  if (mode === 'everyNHours') {
+    const n = (item.hoursBetweenTriggers as number) ?? 1;
+    const atMin = (item.atMinute as number) ?? 0;
+
+    const d = new Date(now);
+    const currentHour = d.getHours();
+    // cron fires at hours 0, n, 2n, ... (hours where hour % n === 0)
+    const alignedHour = currentHour - (currentHour % n);
+
+    const candidate = new Date(d);
+    candidate.setHours(alignedHour, atMin, 0, 0);
+
+    if (candidate > now) return candidate;
+
+    const nextHour = alignedHour + n;
+    if (nextHour >= 24) {
+      const tomorrow = new Date(d);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, atMin, 0, 0);
+      return tomorrow;
+    }
+    const next = new Date(d);
+    next.setHours(nextHour, atMin, 0, 0);
+    return next;
+  }
+
+  if (mode === 'everyNDays') {
+    const n = (item.daysBetweenTriggers as number) ?? 1;
+    const atHour = (item.atHour as number) ?? 0;
+    const atMin = (item.atMinute as number) ?? 0;
+
+    const d = new Date(now);
+    const currentDay = d.getDate();
+
+    // cron fires on days where (dayOfMonth - 1) % n === 0 (i.e., 1, 1+n, 1+2n, ...)
+    for (let day = currentDay; day <= 31; day++) {
+      if ((day - 1) % n !== 0) continue;
+
+      const candidate = new Date(d);
+      candidate.setDate(day);
+      candidate.setHours(atHour, atMin, 0, 0);
+
+      if (candidate.getDate() !== day) break; // overflowed (e.g. Feb 30)
+      if (candidate > now) return candidate;
+    }
+
+    // No valid day left in this month; day 1 of next month is always valid
+    const nextMonth = new Date(d);
+    nextMonth.setDate(1);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    nextMonth.setHours(atHour, atMin, 0, 0);
+    return nextMonth;
+  }
+
+  // Custom cron expressions: return now as a best-effort fallback
+  return new Date(now);
+}
+
 export class RobustScheduler implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Robust Scheduler',
@@ -155,26 +244,44 @@ export class RobustScheduler implements INodeType {
     const jitterOffsetMs =
       maxJitterSeconds > 0 ? Math.floor(Math.random() * maxJitterSeconds * 1000) : 0;
 
-    const makeOutput = (): INodeExecutionData[][] => [
+    const ruleCollection = this.getNodeParameter('rule', { interval: [] }) as {
+      interval?: IDataObject[];
+    };
+    const ruleItems = ruleCollection.interval ?? [];
+
+    const makeOutput = (nextTriggerTime?: string): INodeExecutionData[][] => [
       [
         {
           json: {
             triggerTime: new Date().toISOString(),
             jitterOffsetMs,
             jitterOffsetSeconds: jitterOffsetMs / 1000,
+            ...(nextTriggerTime !== undefined ? { nextTriggerTime } : {}),
           },
         },
       ],
     ];
 
-    if (this.getMode() === 'manual') {
-      return { manualTriggerResponse: Promise.resolve(makeOutput()) };
+    const now = new Date();
+    let earliest: Date | undefined;
+
+    for (const item of ruleItems) {
+      const next = computeNextTriggerTime(item, now);
+      if (next !== undefined && (earliest === undefined || next < earliest)) {
+        earliest = next;
+      }
     }
 
-    const ruleCollection = this.getNodeParameter('rule', { interval: [] }) as {
-      interval?: IDataObject[];
-    };
-    const ruleItems = ruleCollection.interval ?? [];
+    const immediateOutput = makeOutput(earliest?.toISOString());
+
+    if (this.getMode() === 'manual') {
+      return {
+        manualTriggerFunction: async () => {
+          this.emit(immediateOutput);
+        },
+        manualTriggerResponse: Promise.resolve(immediateOutput),
+      };
+    }
 
     if (ruleItems.length === 0) {
       throw new NodeOperationError(this.getNode(), 'At least one trigger rule must be configured.');
@@ -186,7 +293,15 @@ export class RobustScheduler implements INodeType {
       this.helpers.registerCron(cron, () => {
         void sleep(jitterOffsetMs)
           .then(() => {
-            this.emit(makeOutput());
+            const fireTime = new Date();
+            let nextEarliest: Date | undefined;
+            for (const ruleItem of ruleItems) {
+              const next = computeNextTriggerTime(ruleItem, fireTime);
+              if (next !== undefined && (nextEarliest === undefined || next < nextEarliest)) {
+                nextEarliest = next;
+              }
+            }
+            this.emit(makeOutput(nextEarliest?.toISOString()));
           })
           .catch((error: Error) => {
             this.emitError(error);
@@ -194,6 +309,10 @@ export class RobustScheduler implements INodeType {
       });
     }
 
-    return {};
+    return {
+      manualTriggerFunction: async () => {
+        this.emit(immediateOutput);
+      },
+    };
   }
 }
