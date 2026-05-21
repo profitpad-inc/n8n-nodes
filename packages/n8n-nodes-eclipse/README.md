@@ -14,6 +14,7 @@ Epicor Eclipse is a distribution ERP platform. This node connects to the Eclipse
 [Resources](#resources)
 [Version history](#version-history)
 
+
 ## Installation
 
 This package is published to the **GitHub Package Registry** (not the public npm registry), so it cannot be installed through the n8n UI's community node installer. Instead, build a custom Docker image that pre-installs the node.
