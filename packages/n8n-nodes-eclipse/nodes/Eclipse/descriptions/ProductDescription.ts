@@ -95,8 +95,8 @@ export const productDescription: INodeProperties[] = [
     name: 'fieldsToInclude',
     type: 'string',
     default: '',
-    placeholder: 'firstName,lastName,emails',
-    description: 'Comma-separated list of fields to include in each result',
+    placeholder: 'ID,productId,prices.unitPrice',
+    description: 'Comma-separated list of fields to include in each result. Supports dot notation for nested fields (e.g. prices.unitPrice).',
     displayOptions: {
       show: {
         resource: ['product'],

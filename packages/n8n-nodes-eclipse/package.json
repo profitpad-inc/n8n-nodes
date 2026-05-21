@@ -36,7 +36,8 @@
       "dist/nodes/Eclipse/EclipseApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/Eclipse/EclipseApi.node.js"
+      "dist/nodes/Eclipse/EclipseApi.node.js",
+      "dist/nodes/Eclipse/EclipseApiTrigger.node.js"
     ]
   },
   "devDependencies": {

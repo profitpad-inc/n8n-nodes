@@ -91,8 +91,8 @@ export const contactDescription: INodeProperties[] = [
     name: 'fieldsToInclude',
     type: 'string',
     default: '',
-    placeholder: 'firstName,lastName,emails',
-    description: 'Comma-separated list of fields to include in each result',
+    placeholder: 'ID,firstName,phones.number',
+    description: 'Comma-separated list of fields to include in each result. Supports dot notation for nested fields (e.g. phones.number).',
     displayOptions: {
       show: {
         resource: ['contact'],
