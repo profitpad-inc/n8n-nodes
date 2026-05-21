@@ -98,6 +98,8 @@ export class EclipseApi implements INodeType {
             const returnAll = this.getNodeParameter('returnAll', i) as boolean;
             const pageSize = this.getNodeParameter('pageSize', i) as number;
             const fieldsFilterMode = (this.getNodeParameter('fieldsFilterMode', i) as string).trim();
+            const fieldsToInclude = fieldsFilterMode === 'selected' ? (this.getNodeParameter('fieldsToInclude', i) as string) : '';
+            const fieldsToExclude = fieldsFilterMode === 'except' ? (this.getNodeParameter('fieldsToExclude', i) as string) : '';
 
             const additionalOptions = this.getNodeParameter('additionalOptions', i) as {
               updatedAfter?: string;
@@ -133,7 +135,7 @@ export class EclipseApi implements INodeType {
 
                 const results: JsonObject[] = response.results ?? [];
                 returnData.push({
-                  json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, this.getNodeParameter('fieldsToInclude', i) as string, this.getNodeParameter('fieldsToExclude', i) as string) },
+                  json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
                   pairedItem: { item: i },
                 });
 
@@ -151,7 +153,7 @@ export class EclipseApi implements INodeType {
 
               const results: JsonObject[] = response.results ?? [];
               returnData.push({
-                json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, this.getNodeParameter('fieldsToInclude', i) as string, this.getNodeParameter('fieldsToExclude', i) as string) },
+                json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
                 pairedItem: { item: i },
               });
             }
@@ -181,6 +183,8 @@ export class EclipseApi implements INodeType {
             const returnAll = this.getNodeParameter('returnAll', i) as boolean;
             const pageSize = this.getNodeParameter('pageSize', i) as number;
             const fieldsFilterMode = (this.getNodeParameter('fieldsFilterMode', i) as string).trim();
+            const fieldsToInclude = fieldsFilterMode === 'selected' ? (this.getNodeParameter('fieldsToInclude', i) as string) : '';
+            const fieldsToExclude = fieldsFilterMode === 'except' ? (this.getNodeParameter('fieldsToExclude', i) as string) : '';
 
             const additionalOptions = this.getNodeParameter('additionalOptions', i) as {
               updatedAfter?: string;
@@ -216,7 +220,7 @@ export class EclipseApi implements INodeType {
 
                 const results: JsonObject[] = response.results ?? [];
                 returnData.push({
-                  json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, this.getNodeParameter('fieldsToInclude', i) as string, this.getNodeParameter('fieldsToExclude', i) as string) },
+                  json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
                   pairedItem: { item: i },
                 });
 
@@ -234,7 +238,7 @@ export class EclipseApi implements INodeType {
 
               const results: JsonObject[] = response.results ?? [];
               returnData.push({
-                json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, this.getNodeParameter('fieldsToInclude', i) as string, this.getNodeParameter('fieldsToExclude', i) as string) },
+                json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
                 pairedItem: { item: i },
               });
             }
@@ -453,9 +457,10 @@ export class EclipseApi implements INodeType {
             const returnAll = this.getNodeParameter('returnAll', i) as boolean;
             const pageSize = this.getNodeParameter('pageSize', i) as number;
             const fieldsFilterMode = (this.getNodeParameter('fieldsFilterMode', i) as string).trim();
+            const fieldsToInclude = fieldsFilterMode === 'selected' ? (this.getNodeParameter('fieldsToInclude', i) as string) : '';
+            const fieldsToExclude = fieldsFilterMode === 'except' ? (this.getNodeParameter('fieldsToExclude', i) as string) : '';
 
             const dateFilterOptions = this.getNodeParameter('dateFilterOptions', i) as {
-              shipDate?: string;
               shipDateStart?: string;
               shipDateEnd?: string;
               orderDateStart?: string;
@@ -494,7 +499,6 @@ export class EclipseApi implements INodeType {
               for (const v of splitParam(additionalOptions.shipBranch)) params.append('ShipBranch', v);
               for (const v of splitParam(additionalOptions.priceBranch)) params.append('PriceBranch', v);
               for (const v of splitParam(additionalOptions.shipVia)) params.append('ShipVia', v);
-              for (const v of splitParam(dateFilterOptions.shipDate)) params.append('ShipDate', v);
               for (const v of splitParam(additionalOptions.insideSalesperson)) params.append('InsideSalesperson', v);
               for (const v of splitParam(additionalOptions.outsideSalesperson)) params.append('OutsideSalesperson', v);
               for (const v of splitParam(additionalOptions.writer)) params.append('Writer', v);
@@ -522,7 +526,7 @@ export class EclipseApi implements INodeType {
 
                 const results: JsonObject[] = response.results ?? [];
                 returnData.push({
-                  json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, this.getNodeParameter('fieldsToInclude', i) as string, this.getNodeParameter('fieldsToExclude', i) as string) },
+                  json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
                   pairedItem: { item: i },
                 });
 
@@ -540,7 +544,7 @@ export class EclipseApi implements INodeType {
 
               const results: JsonObject[] = response.results ?? [];
               returnData.push({
-                json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, this.getNodeParameter('fieldsToInclude', i) as string, this.getNodeParameter('fieldsToExclude', i) as string) },
+                json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
                 pairedItem: { item: i },
               });
             }

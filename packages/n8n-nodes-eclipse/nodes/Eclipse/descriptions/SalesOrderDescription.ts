@@ -210,14 +210,6 @@ export const salesOrderDescription: INodeProperties[] = [
         description: 'Only return orders created on or after this date and time. Timezone is always UTC.',
       },
       {
-        displayName: 'Ship Date',
-        name: 'shipDate',
-        type: 'string',
-        default: '',
-        placeholder: '123 or 123,456,789',
-        description: 'Filter by ship date. Separate multiple values with commas.',
-      },
-      {
         displayName: 'Ship Date End',
         name: 'shipDateEnd',
         type: 'dateTime',
