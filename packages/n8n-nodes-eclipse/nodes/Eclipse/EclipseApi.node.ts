@@ -463,7 +463,7 @@ export class EclipseApi implements INodeType {
         displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
       },
       {
-        displayName: 'Is Bill To',
+        displayName: 'Is BillTo',
         name: 'isBillTo',
         type: 'boolean',
         default: true,
@@ -472,7 +472,7 @@ export class EclipseApi implements INodeType {
         displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
       },
       {
-        displayName: 'Is Ship To',
+        displayName: 'Is ShipTo',
         name: 'isShipTo',
         type: 'boolean',
         default: true,
@@ -499,12 +499,12 @@ export class EclipseApi implements INodeType {
         displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
       },
       {
-        displayName: 'Bill To ID',
+        displayName: 'BillTo ID',
         name: 'billToId',
         type: 'number',
         default: 0,
         required: true,
-        description: 'The ID of the existing bill-to customer. Required when "Is Bill To" is false.',
+        description: 'The ID of the existing bill-to customer. Required when "Is BillTo" is false.',
         displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'], isBillTo: [false] } },
       },
       {
@@ -525,19 +525,19 @@ export class EclipseApi implements INodeType {
         ],
       },
       {
-        displayName: 'Ship To List',
+        displayName: 'ShipTo List',
         name: 'shipToLists',
         type: 'fixedCollection',
         typeOptions: { multipleValues: true },
-        placeholder: 'Add Ship To',
+        placeholder: 'Add ShipTo',
         default: {},
         description: 'Associated ship-to customers',
         displayOptions: { show: { resource: ['customer'], operation: ['create'], inputMode: ['fields'] } },
         options: [
           {
             name: 'shipToValues',
-            displayName: 'Ship To',
-            values: [{ displayName: 'Ship To ID', name: 'shipToId', type: 'number', default: 0 }],
+            displayName: 'ShipTo',
+            values: [{ displayName: 'ShipTo ID', name: 'shipToId', type: 'number', default: 0 }],
           },
         ],
       },
@@ -621,7 +621,7 @@ export class EclipseApi implements INodeType {
         options: [
           { name: 'Address Line 1', value: 'addressLine1' },
           { name: 'Address Line 2', value: 'addressLine2' },
-          { name: 'Bill To ID', value: 'billToId' },
+          { name: 'BillTo ID', value: 'billToId' },
           { name: 'City', value: 'city' },
           { name: 'Contacts', value: 'contacts' },
           { name: 'Default PO Number', value: 'defaultPoNumber' },
@@ -633,7 +633,7 @@ export class EclipseApi implements INodeType {
           { name: 'Inside Salesperson', value: 'insideSalesperson' },
           { name: 'Outside Salesperson', value: 'outsideSalesperson' },
           { name: 'Postal Code', value: 'postalCode' },
-          { name: 'Ship To List', value: 'shipToLists' },
+          { name: 'ShipTo List', value: 'shipToLists' },
           { name: 'State', value: 'state' },
           { name: 'Types', value: 'types' },
         ],
@@ -649,7 +649,7 @@ export class EclipseApi implements INodeType {
         options: [
           { displayName: 'Address Line 1', name: 'addressLine1', type: 'string', default: '' },
           { displayName: 'Address Line 2', name: 'addressLine2', type: 'string', default: '' },
-          { displayName: 'Bill To ID', name: 'billToId', type: 'number', default: 0, description: 'Required when setting "Is Bill To" to false' },
+          { displayName: 'BillTo ID', name: 'billToId', type: 'number', default: 0, description: 'Required when setting "Is BillTo" to false' },
           { displayName: 'City', name: 'city', type: 'string', default: '' },
           { displayName: 'Default PO Number', name: 'defaultPoNumber', type: 'string', default: '' },
           { displayName: 'Default Price Class', name: 'defaultPriceClass', type: 'string', default: '' },
@@ -660,8 +660,8 @@ export class EclipseApi implements INodeType {
           { displayName: 'Home Branch', name: 'homeBranch', type: 'string', default: '' },
           { displayName: 'Home Territory', name: 'homeTerritory', type: 'string', default: '' },
           { displayName: 'Inside Salesperson', name: 'insideSalesperson', type: 'string', default: '' },
-          { displayName: 'Is Bill To', name: 'isBillTo', type: 'boolean', default: true },
-          { displayName: 'Is Ship To', name: 'isShipTo', type: 'boolean', default: true },
+          { displayName: 'Is BillTo', name: 'isBillTo', type: 'boolean', default: true },
+          { displayName: 'Is ShipTo', name: 'isShipTo', type: 'boolean', default: true },
           { displayName: 'Name', name: 'name', type: 'string', default: '' },
           { displayName: 'Name Index', name: 'nameIndex', type: 'string', default: '', description: 'Maximum 12 characters' },
           { displayName: 'Outside Salesperson', name: 'outsideSalesperson', type: 'string', default: '' },
@@ -695,19 +695,19 @@ export class EclipseApi implements INodeType {
         ],
       },
       {
-        displayName: 'Ship To List',
+        displayName: 'ShipTo List',
         name: 'updateShipToLists',
         type: 'fixedCollection',
         typeOptions: { multipleValues: true },
-        placeholder: 'Add Ship To',
+        placeholder: 'Add ShipTo',
         default: {},
         description: 'Replaces the existing ship-to list if any entries are provided',
         displayOptions: { show: { resource: ['customer'], operation: ['update'], inputMode: ['fields'] } },
         options: [
           {
             name: 'shipToValues',
-            displayName: 'Ship To',
-            values: [{ displayName: 'Ship To ID', name: 'shipToId', type: 'number', default: 0 }],
+            displayName: 'ShipTo',
+            values: [{ displayName: 'ShipTo ID', name: 'shipToId', type: 'number', default: 0 }],
           },
         ],
       },
@@ -1007,6 +1007,18 @@ export class EclipseApi implements INodeType {
         },
         options: [
           {
+            name: 'Create',
+            value: 'create',
+            description: 'Create a new sales order',
+            action: 'Create a sales order',
+          },
+          {
+            name: 'Create Shipment',
+            value: 'createShipment',
+            description: 'Create a shipment for a sales order',
+            action: 'Create a sales order shipment',
+          },
+          {
             name: 'Get',
             value: 'get',
             description: 'Retrieve a single sales order by ID',
@@ -1017,6 +1029,48 @@ export class EclipseApi implements INodeType {
             value: 'getMany',
             description: 'Retrieve a list of sales orders',
             action: 'Get many sales orders',
+          },
+          {
+            name: 'Get Order Change Log',
+            value: 'getOrderChangeLog',
+            description: 'Retrieve the change log for a sales order',
+            action: 'Get sales order change log',
+          },
+          {
+            name: 'Update Internal Notes',
+            value: 'updateInternalNotes',
+            description: 'Update internal notes on a sales order',
+            action: 'Update sales order internal notes',
+          },
+          {
+            name: 'Update PO Number',
+            value: 'updatePONumber',
+            description: 'Update the PO number on a sales order',
+            action: 'Update sales order PO number',
+          },
+          {
+            name: 'Update Ship Date',
+            value: 'updateShipDate',
+            description: 'Update the ship date on a sales order',
+            action: 'Update sales order ship date',
+          },
+          {
+            name: 'Update Ship Via',
+            value: 'updateShipVia',
+            description: 'Update the ship via on a sales order',
+            action: 'Update sales order ship via',
+          },
+          {
+            name: 'Update Shipping Instructions',
+            value: 'updateShippingInstructions',
+            description: 'Update shipping instructions on a sales order',
+            action: 'Update sales order shipping instructions',
+          },
+          {
+            name: 'Update Status',
+            value: 'updateStatus',
+            description: 'Update the status of a sales order',
+            action: 'Update sales order status',
           },
         ],
         default: 'getMany',
@@ -1186,7 +1240,7 @@ export class EclipseApi implements INodeType {
         },
         options: [
           {
-            displayName: 'Bill To',
+            displayName: 'BillTo',
             name: 'billTo',
             type: 'string',
             default: '',
@@ -1264,20 +1318,20 @@ export class EclipseApi implements INodeType {
             description: 'Filter by ship branch. Separate multiple values with commas.',
           },
           {
-            displayName: 'Ship To',
-            name: 'shipTo',
-            type: 'string',
-            default: '',
-            placeholder: '123 or 123,456,789',
-            description: 'Filter by ship-to ID. Separate multiple values with commas.',
-          },
-          {
             displayName: 'Ship Via',
             name: 'shipVia',
             type: 'string',
             default: '',
             placeholder: '123 or 123,456,789',
             description: 'Filter by ship via. Separate multiple values with commas.',
+          },
+          {
+            displayName: 'ShipTo',
+            name: 'shipTo',
+            type: 'string',
+            default: '',
+            placeholder: '123 or 123,456,789',
+            description: 'Filter by ship-to ID. Separate multiple values with commas.',
           },
           {
             displayName: 'Sort',
@@ -1326,6 +1380,535 @@ export class EclipseApi implements INodeType {
           },
         },
       },
+
+      // ── Create Sales Order fields ─────────────────────────────────────────
+      {
+        displayName: 'Input Mode',
+        name: 'salesOrderInputMode',
+        type: 'options',
+        options: [
+          { name: 'Custom JSON', value: 'json', description: 'Provide a raw JSON body' },
+          { name: 'Fields', value: 'fields', description: 'Fill in individual fields' },
+        ],
+        default: 'fields',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'] } },
+      },
+      {
+        displayName: 'BillTo Customer ID',
+        name: 'billToCustomerId',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'The ID of the bill-to customer',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+      },
+      {
+        displayName: 'ShipTo Customer ID',
+        name: 'shipToCustomerId',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'The ID of the ship-to customer',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Price Branch',
+        name: 'salesOrderPriceBranch',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: '1',
+        description: 'Home Branch of the Bill To Customer',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Ship Branch',
+        name: 'salesOrderShipBranch',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: '1',
+        description: 'Home Branch of the Bill To Customer',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Order Status',
+        name: 'salesOrderStatus',
+        type: 'options',
+        required: true,
+        options: [
+          { name: 'Bid', value: 'Bid' },
+          { name: 'Call When Available', value: 'CallWhenAvailable' },
+          { name: 'Call When Complete', value: 'CallWhenComplete' },
+          { name: 'Call When Specified', value: 'CallWhenSpecified' },
+          { name: 'Direct', value: 'Direct' },
+          { name: 'Pick Up Now', value: 'PickUpNow' },
+          { name: 'Ship Item Complete', value: 'ShipItemComplete' },
+          { name: 'Ship Ticket', value: 'ShipTicket' },
+          { name: 'Ship When Available', value: 'ShipWhenAvailable' },
+          { name: 'Ship When Complete', value: 'ShipWhenComplete' },
+          { name: 'Ship When Specified', value: 'ShipWhenSpecified' },
+        ],
+        default: 'Bid',
+        description: 'The status of the sales order',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Ship Date',
+        name: 'salesOrderShipDate',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: '2026-07-20',
+        description: 'The ship date in ISO format (YYYY-MM-DD)',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Required Date',
+        name: 'salesOrderRequiredDate',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: '2026-07-25',
+        description: 'The required date in ISO format (YYYY-MM-DD)',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Writer',
+        name: 'salesOrderWriter',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'The writer code for the sales order',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Fetch ShipTo\'s Address',
+        name: 'salesOrderFetchShipAddress',
+        type: 'boolean',
+        default: true,
+        description: 'Whether to automatically fetch address fields (street, city, state, etc.) from the ShipTo Customer record',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+      },
+      {
+        displayName: 'Street 1',
+        name: 'salesOrderStreet1',
+        type: 'string',
+        default: '',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'], salesOrderFetchShipAddress: [false] } },
+      },
+      {
+        displayName: 'Street 2',
+        name: 'salesOrderStreet2',
+        type: 'string',
+        default: '',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'], salesOrderFetchShipAddress: [false] } },
+      },
+      {
+        displayName: 'City',
+        name: 'salesOrderCity',
+        type: 'string',
+        default: '',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'], salesOrderFetchShipAddress: [false] } },
+      },
+      {
+        displayName: 'State',
+        name: 'salesOrderState',
+        type: 'string',
+        default: '',
+        placeholder: 'CO',
+        description: '2-letter state code',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'], salesOrderFetchShipAddress: [false] } },
+      },
+      {
+        displayName: 'Postal Code',
+        name: 'salesOrderPostalCode',
+        type: 'string',
+        default: '',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'], salesOrderFetchShipAddress: [false] } },
+      },
+      {
+        displayName: 'Country',
+        name: 'salesOrderCountry',
+        type: 'string',
+        default: '',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'], salesOrderFetchShipAddress: [false] } },
+      },
+      {
+        displayName: 'Additional Options',
+        name: 'salesOrderCreateOptions',
+        type: 'collection',
+        placeholder: 'Add Option',
+        default: {},
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+        options: [
+          {
+            displayName: 'Customer PO Number',
+            name: 'customerPONumber',
+            type: 'string',
+            default: '',
+            description: 'Default PO Number of the BillTo Customer',
+          },
+          {
+            displayName: 'Customer Release Number',
+            name: 'customerReleaseNumber',
+            type: 'string',
+            default: '',
+            description: 'Default Release Number of the BillTo Customer',
+          },
+          {
+            displayName: 'Email',
+            name: 'email',
+            type: 'string',
+            placeholder: 'name@email.com',
+            default: '',
+          },
+          {
+            displayName: 'Inside Salesperson',
+            name: 'insideSalesPerson',
+            type: 'string',
+            default: '',
+          },
+          {
+            displayName: 'Internal Notes',
+            name: 'internalNotes',
+            type: 'string',
+            typeOptions: { rows: 3 },
+            default: '',
+          },
+          {
+            displayName: 'Outside Salesperson',
+            name: 'outsideSalesPerson',
+            type: 'string',
+            default: '',
+          },
+          {
+            displayName: 'Sales Source',
+            name: 'salesSource',
+            type: 'string',
+            default: '',
+            description: 'Sales Source Override of the BillTo Customer. Defaults to "Default Sales" if not provided.',
+          },
+          {
+            displayName: 'Ship Via',
+            name: 'shipVia',
+            type: 'string',
+            default: '',
+            description: 'Default Ship Via of the BillTo Customer',
+          },
+          {
+            displayName: 'Shipping Instructions',
+            name: 'shippingInstructions',
+            type: 'string',
+            typeOptions: { rows: 3 },
+            default: '',
+          },
+          {
+            displayName: 'Terms Code',
+            name: 'termsCode',
+            type: 'string',
+            default: '',
+            description: 'Default Terms of the BillTo Customer',
+          },
+        ],
+      },
+      {
+        displayName: 'Lines (JSON)',
+        name: 'salesOrderLines',
+        type: 'json',
+        default: '[\n  {\n    "lineItemProduct": {\n      "productId": 246,\n      "quantity": 3,\n      "um": "ea",\n      "umQuantity": 1,\n      "unitPrice": 9.99,\n      "comments": ""\n    }\n  },\n  {\n    "lineItemProduct": {\n      "productId": 247,\n      "quantity": 3,\n      "um": "ea",\n      "umQuantity": 1\n    }\n  }\n]',
+        description: 'Array of line items to add to the sales order',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
+      },
+      {
+        displayName: 'JSON Body',
+        name: 'salesOrderCustomJson',
+        type: 'json',
+        default: '{\n  "priceBranch": 1,\n  "shipBranch": 1,\n  "billToCustomer": "12345",\n  "shipToCustomer": "12346",\n  "orderStatus": "Bid",\n  "salesSource": "Default Sales",\n  "shipDate": "2026-07-20",\n  "requiredDate": "2026-07-25",\n  "customerPONumber": "",\n  "customerReleaseNumber": "",\n  "shipVia": "",\n  "insideSalesPerson": "",\n  "outsideSalesPerson": "",\n  "writer": "",\n  "email": "",\n  "street1": "",\n  "street2": "",\n  "city": "",\n  "state": "",\n  "postalCode": "",\n  "country": "",\n  "internalNotes": "",\n  "shippingInstructions": "",\n  "termsCode": "",\n  "shipIds": ["12346"],\n  "lines": [\n    {\n      "lineItemProduct": {\n        "productId": 246,\n        "quantity": 3,\n        "um": "ea",\n        "umQuantity": 1,\n        "unitPrice": 9.99,\n        "comments": ""\n      }\n    },\n    {\n      "lineItemProduct": {\n        "productId": 247,\n        "quantity": 3,\n        "um": "ea",\n        "umQuantity": 1\n      }\n    }\n  ]\n}',
+        description: 'Raw JSON body to send to the API',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['json'] } },
+      },
+
+      // ── Create Shipment fields ─────────────────────────────────────────────
+      {
+        displayName: 'Sales Order ID',
+        name: 'shipmentSalesOrderId',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: 'S2688598',
+        description: 'The ID of the sales order, without the generation',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['createShipment'],
+          },
+        },
+      },
+      {
+        displayName: 'Source Generation ID',
+        name: 'generationId',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: '1',
+        description: 'The generation ID that the new generation will be based on',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['createShipment'],
+          },
+        },
+      },
+      {
+        displayName: 'Required Date',
+        name: 'requiredDate',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: '2026-07-25',
+        description: 'The required date in ISO format (YYYY-MM-DD)',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['createShipment'],
+          },
+        },
+      },
+      {
+        displayName: 'Ship Date',
+        name: 'shipmentShipDate',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: '2026-07-20',
+        description: 'The ship date in ISO format (YYYY-MM-DD)',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['createShipment'],
+          },
+        },
+      },
+      {
+        displayName: 'Ship Branch',
+        name: 'shipBranch',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: '1',
+        description: 'The branch number from which the order ships',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['createShipment'],
+          },
+        },
+      },
+      {
+        displayName: 'Ship Status',
+        name: 'shipStatus',
+        type: 'options',
+        required: true,
+        options: [
+          { name: 'Bid', value: 'Bid' },
+          { name: 'Call When Available', value: 'CallWhenAvailable' },
+          { name: 'Call When Complete', value: 'CallWhenComplete' },
+          { name: 'Call When Specified', value: 'CallWhenSpecified' },
+          { name: 'Direct', value: 'Direct' },
+          { name: 'Pick Up Now', value: 'PickUpNow' },
+          { name: 'Ship Item Complete', value: 'ShipItemComplete' },
+          { name: 'Ship Ticket', value: 'ShipTicket' },
+          { name: 'Ship When Available', value: 'ShipWhenAvailable' },
+          { name: 'Ship When Complete', value: 'ShipWhenComplete' },
+          { name: 'Ship When Specified', value: 'ShipWhenSpecified' },
+        ],
+        default: 'Bid',
+        description: 'The ship status for the shipment',
+        displayOptions: {
+          show: {
+            resource: ['salesOrder'],
+            operation: ['createShipment'],
+          },
+        },
+      },
+
+      // ── Get Order Change Log fields ───────────────────────────────────────
+      {
+        displayName: 'Sales Order ID',
+        name: 'changeLogOrderId',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: 'S2690635',
+        description: 'The ID of the sales order, without the generation suffix',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['getOrderChangeLog'] } },
+      },
+      {
+        displayName: 'Generation ID',
+        name: 'changeLogGenerationId',
+        type: 'string',
+        default: '',
+        placeholder: '1',
+        description: 'Filter the change log to a specific generation. Leave blank to return all generations.',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['getOrderChangeLog'] } },
+      },
+
+      // ── Update Status fields ──────────────────────────────────────────────
+      {
+        displayName: 'Sales Order ID',
+        name: 'statusOrderId',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: 'S2680001.0001',
+        description: 'The full sales order ID including generation suffix',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateStatus'] } },
+      },
+      {
+        displayName: 'Order Status',
+        name: 'statusOrderStatus',
+        type: 'options',
+        required: true,
+        options: [
+          { name: 'Bid', value: 'Bid' },
+          { name: 'Call When Available', value: 'CallWhenAvailable' },
+          { name: 'Call When Complete', value: 'CallWhenComplete' },
+          { name: 'Call When Specified', value: 'CallWhenSpecified' },
+          { name: 'Direct', value: 'Direct' },
+          { name: 'Pick Up Now', value: 'PickUpNow' },
+          { name: 'Ship Item Complete', value: 'ShipItemComplete' },
+          { name: 'Ship Ticket', value: 'ShipTicket' },
+          { name: 'Ship When Available', value: 'ShipWhenAvailable' },
+          { name: 'Ship When Complete', value: 'ShipWhenComplete' },
+          { name: 'Ship When Specified', value: 'ShipWhenSpecified' },
+        ],
+        default: 'Bid',
+        description: 'The new status for the sales order',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateStatus'] } },
+      },
+      {
+        displayName: 'Ship Date',
+        name: 'statusShipDate',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: '2026-07-20',
+        description: 'The ship date in ISO format (YYYY-MM-DD). Required when Order Status is "Ship When Specified".',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateStatus'], statusOrderStatus: ['ShipWhenSpecified'] } },
+      },
+
+      // ── Update Shipping Instructions fields ───────────────────────────────
+      {
+        displayName: 'Sales Order ID',
+        name: 'shippingInstructionsOrderId',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: 'S2690635.0001',
+        description: 'The full ID of the sales order including generation suffix',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateShippingInstructions'] } },
+      },
+      {
+        displayName: 'Shipping Instructions',
+        name: 'shippingInstructionsValue',
+        type: 'string',
+        typeOptions: { rows: 3 },
+        default: '',
+        required: true,
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateShippingInstructions'] } },
+      },
+
+      // ── Update PO Number fields ───────────────────────────────────────────
+      {
+        displayName: 'Sales Order ID',
+        name: 'poNumberOrderId',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: 'S2690635.0001',
+        description: 'The full ID of the sales order including generation suffix',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updatePONumber'] } },
+      },
+      {
+        displayName: 'PO Number',
+        name: 'poNumberValue',
+        type: 'string',
+        default: '',
+        required: true,
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updatePONumber'] } },
+      },
+
+      // ── Update Ship Via fields ────────────────────────────────────────────
+      {
+        displayName: 'Sales Order ID',
+        name: 'shipViaUpdateOrderId',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: 'S2690635.0001',
+        description: 'The full ID of the sales order including generation suffix',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateShipVia'] } },
+      },
+      {
+        displayName: 'Ship Via',
+        name: 'shipViaUpdateValue',
+        type: 'string',
+        default: '',
+        required: true,
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateShipVia'] } },
+      },
+
+      // ── Update Ship Date fields ───────────────────────────────────────────
+      {
+        displayName: 'Sales Order ID',
+        name: 'shipDateUpdateOrderId',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: 'S2690635.0001',
+        description: 'The full ID of the sales order including generation suffix',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateShipDate'] } },
+      },
+      {
+        displayName: 'Ship Date',
+        name: 'shipDateUpdateValue',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: '2026-07-20',
+        description: 'The new ship date in ISO format (YYYY-MM-DD)',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateShipDate'] } },
+      },
+
+      // ── Update Internal Notes fields ──────────────────────────────────────
+      {
+        displayName: 'Sales Order ID',
+        name: 'internalNotesOrderId',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: 'S2680001.0001',
+        description: 'The full sales order ID including generation suffix',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateInternalNotes'] } },
+      },
+      {
+        displayName: 'Internal Notes',
+        name: 'internalNotesValue',
+        type: 'string',
+        typeOptions: { rows: 4 },
+        default: '',
+        required: true,
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateInternalNotes'] } },
+      },
+      {
+        displayName: 'Copy To All Generations',
+        name: 'copyToAll',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to apply the update to all generations of the order',
+        displayOptions: { show: { resource: ['salesOrder'], operation: ['updateInternalNotes'] } },
+      },
     ],
   };
 
@@ -1341,8 +1924,8 @@ export class EclipseApi implements INodeType {
 
     const sessionToken = await createSession(this, baseUrl, username, password);
 
-    const resource = this.getNodeParameter('resource', 0) as string;
-    const operation = this.getNodeParameter('operation', 0) as string;
+    const resource = (this.getNodeParameter('resource', 0) as string).trim();
+    const operation = (this.getNodeParameter('operation', 0) as string).trim();
 
     const headers = {
       Accept: 'application/json',
@@ -1357,7 +1940,7 @@ export class EclipseApi implements INodeType {
           if (operation === 'getMany') {
             const returnAll = this.getNodeParameter('returnAll', i) as boolean;
             const pageSize = this.getNodeParameter('pageSize', i) as number;
-            const fieldsFilterMode = this.getNodeParameter('fieldsFilterMode', i) as string;
+            const fieldsFilterMode = (this.getNodeParameter('fieldsFilterMode', i) as string).trim();
 
             const applyFieldFilter = (results: JsonObject[]): JsonObject[] => {
               if (fieldsFilterMode === 'selected') {
@@ -1467,7 +2050,7 @@ export class EclipseApi implements INodeType {
 
           // ── GET SINGLE ──────────────────────────────────────────────────
           if (operation === 'get') {
-            const contactId = this.getNodeParameter('contactId', i) as string;
+            const contactId = (this.getNodeParameter('contactId', i) as string).trim();
 
             const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
               method: 'GET',
@@ -1488,7 +2071,7 @@ export class EclipseApi implements INodeType {
           if (operation === 'getMany') {
             const returnAll = this.getNodeParameter('returnAll', i) as boolean;
             const pageSize = this.getNodeParameter('pageSize', i) as number;
-            const fieldsFilterMode = this.getNodeParameter('fieldsFilterMode', i) as string;
+            const fieldsFilterMode = (this.getNodeParameter('fieldsFilterMode', i) as string).trim();
 
             const applyFieldFilter = (results: JsonObject[]): JsonObject[] => {
               if (fieldsFilterMode === 'selected') {
@@ -1598,7 +2181,7 @@ export class EclipseApi implements INodeType {
 
           // ── GET SINGLE ──────────────────────────────────────────────────
           if (operation === 'get') {
-            const recordId = this.getNodeParameter(idParam, i) as string;
+            const recordId = (this.getNodeParameter(idParam, i) as string).trim();
 
             const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
               method: 'GET',
@@ -1613,18 +2196,18 @@ export class EclipseApi implements INodeType {
 
         // ── CREATE CUSTOMER ────────────────────────────────────────────────
         if (resource === 'customer' && operation === 'create') {
-          const inputMode = this.getNodeParameter('inputMode', i) as string;
+          const inputMode = (this.getNodeParameter('inputMode', i) as string).trim();
           let body: JsonObject;
 
           if (inputMode === 'json') {
-            const rawJson = this.getNodeParameter('customJson', i) as string;
+            const rawJson = (this.getNodeParameter('customJson', i) as string).trim();
             body = JSON.parse(rawJson) as JsonObject;
           } else {
-            const name = this.getNodeParameter('name', i) as string;
+            const name = (this.getNodeParameter('name', i) as string).trim();
             const isBillTo = this.getNodeParameter('isBillTo', i) as boolean;
             const isShipTo = this.getNodeParameter('isShipTo', i) as boolean;
-            const sortBy = this.getNodeParameter('sortBy', i) as string;
-            const nameIndex = this.getNodeParameter('nameIndex', i) as string;
+            const sortBy = (this.getNodeParameter('sortBy', i) as string).trim();
+            const nameIndex = (this.getNodeParameter('nameIndex', i) as string).trim();
             const additionalFields = this.getNodeParameter('additionalFields', i) as {
               addressLine1?: string;
               addressLine2?: string;
@@ -1700,8 +2283,8 @@ export class EclipseApi implements INodeType {
 
         // ── UPDATE CUSTOMER ────────────────────────────────────────────────
         if (resource === 'customer' && operation === 'update') {
-          const customerId = this.getNodeParameter('customerId', i) as string;
-          const inputMode = this.getNodeParameter('inputMode', i) as string;
+          const customerId = (this.getNodeParameter('customerId', i) as string).trim();
+          const inputMode = (this.getNodeParameter('inputMode', i) as string).trim();
 
           const existing = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
             method: 'GET',
@@ -1712,7 +2295,7 @@ export class EclipseApi implements INodeType {
           let body: JsonObject = { ...(existing as JsonObject) };
 
           if (inputMode === 'json') {
-            const rawJson = this.getNodeParameter('updateCustomJson', i) as string;
+            const rawJson = (this.getNodeParameter('updateCustomJson', i) as string).trim();
             body = { ...body, ...(JSON.parse(rawJson) as JsonObject) };
           } else {
             const updateFields = this.getNodeParameter('updateFields', i) as {
@@ -1808,7 +2391,7 @@ export class EclipseApi implements INodeType {
           if (operation === 'getMany') {
             const returnAll = this.getNodeParameter('returnAll', i) as boolean;
             const pageSize = this.getNodeParameter('pageSize', i) as number;
-            const fieldsFilterMode = this.getNodeParameter('fieldsFilterMode', i) as string;
+            const fieldsFilterMode = (this.getNodeParameter('fieldsFilterMode', i) as string).trim();
 
             const applyFieldFilter = (results: JsonObject[]): JsonObject[] => {
               if (fieldsFilterMode === 'selected') {
@@ -1952,7 +2535,7 @@ export class EclipseApi implements INodeType {
 
           // ── GET SINGLE ──────────────────────────────────────────────────
           if (operation === 'get') {
-            const salesOrderId = this.getNodeParameter('salesOrderId', i) as string;
+            const salesOrderId = (this.getNodeParameter('salesOrderId', i) as string).trim();
 
             const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
               method: 'GET',
@@ -1963,13 +2546,378 @@ export class EclipseApi implements INodeType {
 
             returnData.push({ json: response, pairedItem: { item: i } });
           }
+
+          // ── CREATE SALES ORDER ──────────────────────────────────────────
+          if (operation === 'create') {
+            const inputMode = (this.getNodeParameter('salesOrderInputMode', i) as string).trim();
+            let body: JsonObject;
+
+            if (inputMode === 'json') {
+              const rawJson = (this.getNodeParameter('salesOrderCustomJson', i) as string).trim();
+              body = JSON.parse(rawJson) as JsonObject;
+            } else {
+              const billToCustomerId = (this.getNodeParameter('billToCustomerId', i) as string).trim();
+              const shipToCustomerId = (this.getNodeParameter('shipToCustomerId', i) as string).trim();
+              const priceBranch = (this.getNodeParameter('salesOrderPriceBranch', i) as string).trim();
+              const shipBranch = (this.getNodeParameter('salesOrderShipBranch', i) as string).trim();
+              const orderStatus = (this.getNodeParameter('salesOrderStatus', i) as string).trim();
+              const shipDate = (this.getNodeParameter('salesOrderShipDate', i) as string).trim();
+              const requiredDate = (this.getNodeParameter('salesOrderRequiredDate', i) as string).trim();
+              const writer = (this.getNodeParameter('salesOrderWriter', i) as string).trim();
+              const fetchShipAddress = this.getNodeParameter('salesOrderFetchShipAddress', i) as boolean;
+              const options = this.getNodeParameter('salesOrderCreateOptions', i) as {
+                salesSource?: string;
+                customerPONumber?: string;
+                customerReleaseNumber?: string;
+                shipVia?: string;
+                insideSalesPerson?: string;
+                outsideSalesPerson?: string;
+                email?: string;
+                internalNotes?: string;
+                shippingInstructions?: string;
+                termsCode?: string;
+              };
+              const linesJson = (this.getNodeParameter('salesOrderLines', i) as string).trim();
+
+              let street1 = '', street2 = '', city = '', state = '', postalCode = '', country = '';
+
+              if (fetchShipAddress) {
+                const shipCustomer = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                  method: 'GET',
+                  url: `${baseUrl}/Customers/${shipToCustomerId}`,
+                  headers,
+                }) as JsonObject;
+                street1 = (shipCustomer.addressLine1 as string | undefined) ?? '';
+                street2 = (shipCustomer.addressLine2 as string | undefined) ?? '';
+                city = (shipCustomer.city as string | undefined) ?? '';
+                state = (shipCustomer.state as string | undefined) ?? '';
+                postalCode = (shipCustomer.postalCode as string | undefined) ?? '';
+                country = (shipCustomer.countryCode as string | undefined) ?? '';
+              } else {
+                street1 = (this.getNodeParameter('salesOrderStreet1', i) as string).trim();
+                street2 = (this.getNodeParameter('salesOrderStreet2', i) as string).trim();
+                city = (this.getNodeParameter('salesOrderCity', i) as string).trim();
+                state = (this.getNodeParameter('salesOrderState', i) as string).trim();
+                postalCode = (this.getNodeParameter('salesOrderPostalCode', i) as string).trim();
+                country = (this.getNodeParameter('salesOrderCountry', i) as string).trim();
+              }
+
+              body = {
+                priceBranch,
+                shipBranch,
+                billToCustomer: billToCustomerId,
+                shipToCustomer: shipToCustomerId,
+                orderStatus,
+                shipDate,
+                requiredDate,
+                writer,
+                street1,
+                street2,
+                city,
+                state,
+                postalCode,
+                country,
+                shipIds: [shipToCustomerId],
+              };
+
+              if (options.salesSource?.trim()) body.salesSource = options.salesSource.trim();
+              if (options.customerPONumber?.trim()) body.customerPONumber = options.customerPONumber.trim();
+              if (options.customerReleaseNumber?.trim()) body.customerReleaseNumber = options.customerReleaseNumber.trim();
+              if (options.shipVia?.trim()) body.shipVia = options.shipVia.trim();
+              if (options.insideSalesPerson?.trim()) body.insideSalesPerson = options.insideSalesPerson.trim();
+              if (options.outsideSalesPerson?.trim()) body.outsideSalesPerson = options.outsideSalesPerson.trim();
+              if (options.email?.trim()) body.email = options.email.trim();
+              if (options.internalNotes?.trim()) body.internalNotes = options.internalNotes.trim();
+              if (options.shippingInstructions?.trim()) body.shippingInstructions = options.shippingInstructions.trim();
+              if (options.termsCode?.trim()) body.termsCode = options.termsCode.trim();
+
+              if (linesJson) body.lines = JSON.parse(linesJson) as JsonObject[];
+            }
+
+            const createResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'POST',
+              url: `${baseUrl}/SalesOrders`,
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body,
+              json: true,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (createResponse.statusCode < 200 || createResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Create sales order failed with status ${createResponse.statusCode}`,
+                description: typeof createResponse.body === 'object'
+                  ? JSON.stringify(createResponse.body)
+                  : String(createResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: createResponse.body as JsonObject, pairedItem: { item: i } });
+          }
+
+          // ── CREATE SHIPMENT ──────────────────────────────────────────────
+          if (operation === 'createShipment') {
+            const salesOrderId = (this.getNodeParameter('shipmentSalesOrderId', i) as string).trim();
+            const generationId = (this.getNodeParameter('generationId', i) as string).trim();
+            const requiredDate = (this.getNodeParameter('requiredDate', i) as string).trim();
+            const shipDate = (this.getNodeParameter('shipmentShipDate', i) as string).trim();
+            const shipBranch = (this.getNodeParameter('shipBranch', i) as string).trim();
+            const shipStatus = (this.getNodeParameter('shipStatus', i) as string).trim();
+
+            const shipmentResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'POST',
+              url: `${baseUrl}/SalesOrders/${salesOrderId}/Shipment`,
+              headers,
+              qs: { generationId, requiredDate, shipDate, shipBranch, shipStatus },
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (shipmentResponse.statusCode < 200 || shipmentResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Create shipment failed with status ${shipmentResponse.statusCode}`,
+                description: typeof shipmentResponse.body === 'object'
+                  ? JSON.stringify(shipmentResponse.body)
+                  : String(shipmentResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: shipmentResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
+
+          // ── GET ORDER CHANGE LOG ─────────────────────────────────────────
+          if (operation === 'getOrderChangeLog') {
+            const orderId = (this.getNodeParameter('changeLogOrderId', i) as string).trim();
+            const generationId = (this.getNodeParameter('changeLogGenerationId', i) as string).trim();
+
+            const qs: Record<string, string> = {};
+            if (generationId) qs.generationId = generationId;
+
+            const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'GET',
+              url: `${baseUrl}/SalesOrders/${orderId}/OrderChangeLog`,
+              headers,
+              qs,
+            });
+
+            returnData.push({ json: response as JsonObject, pairedItem: { item: i } });
+          }
+
+          // ── UPDATE STATUS ────────────────────────────────────────────────
+          if (operation === 'updateStatus') {
+            const rawStatusId = (this.getNodeParameter('statusOrderId', i) as string).trim();
+            const orderStatus = (this.getNodeParameter('statusOrderStatus', i) as string).trim();
+            const shipDate = orderStatus === 'ShipWhenSpecified'
+              ? (this.getNodeParameter('statusShipDate', i) as string).trim()
+              : undefined;
+
+            const statusDotIndex = rawStatusId.indexOf('.');
+            const orderId = statusDotIndex !== -1 ? rawStatusId.slice(0, statusDotIndex) : rawStatusId;
+            const generationId = statusDotIndex !== -1 ? rawStatusId.slice(statusDotIndex + 1).padStart(4, '0') : '';
+
+            const statusBody: JsonObject = { generationId, orderStatus };
+            if (shipDate) statusBody.shipDate = shipDate;
+
+            const statusResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'PUT',
+              url: `${baseUrl}/SalesOrders/${orderId}/Status`,
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: statusBody,
+              json: true,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (statusResponse.statusCode < 200 || statusResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Update status failed with status ${statusResponse.statusCode}`,
+                description: typeof statusResponse.body === 'object'
+                  ? JSON.stringify(statusResponse.body)
+                  : String(statusResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: statusResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
+
+          // ── UPDATE SHIPPING INSTRUCTIONS ─────────────────────────────────
+          if (operation === 'updateShippingInstructions') {
+            const orderId = (this.getNodeParameter('shippingInstructionsOrderId', i) as string).trim();
+            const value = (this.getNodeParameter('shippingInstructionsValue', i) as string).trim();
+
+            const siResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'PUT',
+              url: `${baseUrl}/SalesOrders/${orderId}/Header/ShippingInstructions`,
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify(value),
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (siResponse.statusCode < 200 || siResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Update shipping instructions failed with status ${siResponse.statusCode}`,
+                description: typeof siResponse.body === 'object'
+                  ? JSON.stringify(siResponse.body)
+                  : String(siResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: siResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
+
+          // ── UPDATE PO NUMBER ─────────────────────────────────────────────
+          if (operation === 'updatePONumber') {
+            const orderId = (this.getNodeParameter('poNumberOrderId', i) as string).trim();
+            const poNumber = (this.getNodeParameter('poNumberValue', i) as string).trim();
+
+            const poResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'PUT',
+              url: `${baseUrl}/SalesOrders/${orderId}/Header/PONumber`,
+              headers,
+              qs: { PONumber: poNumber },
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (poResponse.statusCode < 200 || poResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Update PO number failed with status ${poResponse.statusCode}`,
+                description: typeof poResponse.body === 'object'
+                  ? JSON.stringify(poResponse.body)
+                  : String(poResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: poResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
+
+          // ── UPDATE SHIP VIA ──────────────────────────────────────────────
+          if (operation === 'updateShipVia') {
+            const orderId = (this.getNodeParameter('shipViaUpdateOrderId', i) as string).trim();
+            const shipVia = (this.getNodeParameter('shipViaUpdateValue', i) as string).trim();
+
+            const svResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'PUT',
+              url: `${baseUrl}/SalesOrders/${orderId}/ShipVia`,
+              headers,
+              qs: { shipVia },
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (svResponse.statusCode < 200 || svResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Update ship via failed with status ${svResponse.statusCode}`,
+                description: typeof svResponse.body === 'object'
+                  ? JSON.stringify(svResponse.body)
+                  : String(svResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: svResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
+
+          // ── UPDATE SHIP DATE ─────────────────────────────────────────────
+          if (operation === 'updateShipDate') {
+            const orderId = (this.getNodeParameter('shipDateUpdateOrderId', i) as string).trim();
+            const shipDate = (this.getNodeParameter('shipDateUpdateValue', i) as string).trim();
+
+            const sdResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'PUT',
+              url: `${baseUrl}/SalesOrders/${orderId}/ShipDate`,
+              headers,
+              qs: { shipDate },
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (sdResponse.statusCode < 200 || sdResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Update ship date failed with status ${sdResponse.statusCode}`,
+                description: typeof sdResponse.body === 'object'
+                  ? JSON.stringify(sdResponse.body)
+                  : String(sdResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: sdResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
+
+          // ── UPDATE INTERNAL NOTES ────────────────────────────────────────
+          if (operation === 'updateInternalNotes') {
+            const rawId = (this.getNodeParameter('internalNotesOrderId', i) as string).trim();
+            const copyToAll = this.getNodeParameter('copyToAll', i) as boolean;
+            const internalNotes = (this.getNodeParameter('internalNotesValue', i) as string).trim();
+
+            const dotIndex = rawId.indexOf('.');
+            const orderId = dotIndex !== -1 ? rawId.slice(0, dotIndex) : rawId;
+            const genId = dotIndex !== -1 ? rawId.slice(dotIndex + 1).padStart(4, '0') : '';
+            const fullId = `${orderId}.${genId}`;
+            const putQs = copyToAll ? { copyToAll: true } : {};
+
+            const getResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'GET',
+              url: `${baseUrl}/SalesOrders/${fullId}/InternalNotes`,
+              headers,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (getResponse.statusCode < 200 || getResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `GET internal notes failed with status ${getResponse.statusCode}`,
+                description: typeof getResponse.body === 'object'
+                  ? JSON.stringify(getResponse.body)
+                  : String(getResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            const existing = getResponse.body as JsonObject;
+            const updateKey = (existing.updateKey ?? '') as string;
+            if (!updateKey) {
+              throw new NodeApiError(this.getNode(), {
+                message: 'Could not find updateKey in GET response',
+                description: JSON.stringify(existing),
+              } as JsonObject, { itemIndex: i });
+            }
+            const body: JsonObject = {
+              id: orderId,
+              generationId: genId,
+              internalNotes,
+              updateKey,
+            };
+
+            const inResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'PUT',
+              url: `${baseUrl}/SalesOrders/${fullId}/InternalNotes`,
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body,
+              json: true,
+              qs: putQs,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (inResponse.statusCode < 200 || inResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Update internal notes failed with status ${inResponse.statusCode}`,
+                description: typeof inResponse.body === 'object'
+                  ? JSON.stringify(inResponse.body)
+                  : String(inResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: inResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
         }
 
         if (resource === 'product' && operation === 'getProductInventoryPricingInquiry') {
-          const customerId = this.getNodeParameter('pricingCustomerId', i) as string;
-          const productId = this.getNodeParameter('pricingProductId', i) as string;
+          const customerId = (this.getNodeParameter('pricingCustomerId', i) as string).trim();
+          const productId = (this.getNodeParameter('pricingProductId', i) as string).trim();
           const considerUserAuthBranch = this.getNodeParameter('considerUserAuthBranch', i) as boolean;
-          const userId = considerUserAuthBranch ? this.getNodeParameter('pricingUserId', i) as string : undefined;
+          const userId = considerUserAuthBranch ? (this.getNodeParameter('pricingUserId', i) as string).trim() : undefined;
 
           const sharedQs: Record<string, string> = { CustomerId: customerId, ProductId: productId };
           if (considerUserAuthBranch && userId) sharedQs.UserId = userId;
