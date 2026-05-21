@@ -447,8 +447,8 @@ export class EclipseApi implements INodeType {
         name: 'inputMode',
         type: 'options',
         options: [
-          { name: 'Fields', value: 'fields', description: 'Fill in individual fields' },
           { name: 'Custom JSON', value: 'json', description: 'Provide a raw JSON body' },
+          { name: 'Fields', value: 'fields', description: 'Fill in individual fields' },
         ],
         default: 'fields',
         displayOptions: { show: { resource: ['customer'], operation: ['create'] } },
@@ -605,8 +605,8 @@ export class EclipseApi implements INodeType {
         name: 'inputMode',
         type: 'options',
         options: [
-          { name: 'Fields', value: 'fields', description: 'Fill in individual fields' },
           { name: 'Custom JSON', value: 'json', description: 'Provide a raw JSON patch (merged on top of existing data)' },
+          { name: 'Fields', value: 'fields', description: 'Fill in individual fields' },
         ],
         default: 'fields',
         displayOptions: { show: { resource: ['customer'], operation: ['update'] } },
