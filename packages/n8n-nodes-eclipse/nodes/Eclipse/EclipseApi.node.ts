@@ -939,7 +939,7 @@ export class EclipseApi implements INodeType {
           const sharedQs: Record<string, string> = { CustomerId: customerId, ProductId: productId };
           if (considerUserAuthBranch && userId) sharedQs.UserId = userId;
 
-          const [inventoryResponse, pricingResponse] = await Promise.all([
+          const [inventoryResponse, singlePricingResponse, maxPricingResponse] = await Promise.all([
             this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
               method: 'GET',
               url: `${baseUrl}/ProductInventoryPricingInquiry`,
@@ -950,11 +950,24 @@ export class EclipseApi implements INodeType {
               method: 'GET',
               url: `${baseUrl}/ProductPricingInquiry`,
               headers,
-              qs: { ...sharedQs, ShowCost: 'true', ConsiderUserAuthBranch: String(considerUserAuthBranch) },
+              qs: { ...sharedQs, ShowCost: 'true', ConsiderUserAuthBranch: String(considerUserAuthBranch), Quantity: 1 },
+            }),
+            this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'GET',
+              url: `${baseUrl}/ProductPricingInquiry`,
+              headers,
+              qs: { ...sharedQs, ShowCost: 'true', ConsiderUserAuthBranch: String(considerUserAuthBranch), Quantity: 1000000 },
             }),
           ]);
 
-          returnData.push({ json: { ...pricingResponse, ...inventoryResponse }, pairedItem: { item: i } });
+          // the single pricing resposne doesn't return quantityBreaks
+          // and the maxPricing response has the wrong value for the first quantity break
+          if (maxPricingResponse.quantityBreaks.length > 0) {
+            singlePricingResponse.quantityBreaks = maxPricingResponse.quantityBreaks
+            singlePricingResponse.quantityBreaks[0].unitPrice.value = singlePricingResponse.productUnitPrice.value
+          }
+
+          returnData.push({ json: { ...singlePricingResponse, ...inventoryResponse }, pairedItem: { item: i } });
         }
       } catch (error) {
         if (this.continueOnFail()) {
