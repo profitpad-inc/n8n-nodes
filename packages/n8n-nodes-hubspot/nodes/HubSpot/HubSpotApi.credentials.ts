@@ -1,57 +1,47 @@
 import {
-  ICredentialTestRequest,
-  ICredentialType,
-  INodeProperties,
+	IAuthenticateGeneric,
+	ICredentialTestRequest,
+	ICredentialType,
+	INodeProperties,
 } from 'n8n-workflow';
 
 export class HubspotApi implements ICredentialType {
-  name = 'hubspotApi';
-  displayName = 'Hubspot';
-  icon = 'file:hubspot-icon.svg' as const;
+	name = 'hubspotApi';
+	displayName = 'HubSpot API';
+	documentationUrl = 'https://developers.hubspot.com/docs/api/overview';
+	icon = 'file:app-icon.svg' as const;
 
-  properties: INodeProperties[] = [
-    {
-      displayName: 'Base URL',
-      name: 'baseUrl',
-      type: 'string',
-      default: 'https://your-instance.epicorhubspot.com',
-      placeholder: 'https://your-instance.epicorhubspot.com',
-      description: 'The base URL of your Hubspot API instance',
-      required: true,
-    },
-    {
-      displayName: 'Username',
-      name: 'username',
-      type: 'string',
-      default: '',
-      required: true,
-    },
-    {
-      displayName: 'Password',
-      name: 'password',
-      type: 'string',
-      typeOptions: {
-        password: true,
-      },
-      default: '',
-      required: true,
-    },
-  ];
+	properties: INodeProperties[] = [
+		{
+			displayName: 'Access Token',
+			name: 'accessToken',
+			type: 'string',
+			typeOptions: {
+				password: true,
+			},
+			default: '',
+			required: true,
+			description: 'Private App access token from HubSpot',
+		},
+	];
 
-  test: ICredentialTestRequest = {
-    request: {
-      baseURL: '={{$credentials.baseUrl}}',
-      url: '/Sessions',
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: {
-        username: '={{$credentials.username}}',
-        password: '={{$credentials.password}}',
-      },
-      json: true,
-    },
-  };
+	authenticate: IAuthenticateGeneric = {
+		type: 'generic',
+		properties: {
+			headers: {
+				Authorization: '={{"Bearer " + $credentials.accessToken}}',
+			},
+		},
+	};
+
+	test: ICredentialTestRequest = {
+		request: {
+			baseURL: 'https://api.hubapi.com',
+			url: '/crm/v3/objects/contacts',
+			method: 'GET',
+			qs: {
+				limit: 1,
+			},
+		},
+	};
 }
