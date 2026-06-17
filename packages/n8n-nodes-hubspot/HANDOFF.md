@@ -3,10 +3,10 @@
 ## What this is
 
 A custom n8n community node (`@profitpad-inc/n8n-nodes-hubspot`) for the HubSpot CRM API.
-It was built by converting an existing Eclipse ERP node template into a HubSpot integration.
 
 **Package path:** `packages/n8n-nodes-hubspot`
-**Node name in n8n:** `HubSpot-P` (display name), `hubspotApi` (internal name)
+**Node name in n8n:** `HubSpot` (display name), `hubspotApi` (internal name)
+**API docs:** https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis
 
 ---
 
@@ -21,61 +21,102 @@ It was built by converting an existing Eclipse ERP node template into a HubSpot 
 - Credential test: `GET https://api.hubapi.com/crm/v3/objects/contacts?limit=1`
 - Icon: `file:app-icon.svg`
 
-### Node — `nodes/HubSpot/HubspotApi.node.ts`
+### Node — `nodes/HubSpot/HubSpotApi.node.ts`
 - Base URL: `https://api.hubapi.com`
-- Contact path: `/crm/v3/objects/contacts` (NOT `/crm/v3/contacts` — that returns 404 for this account)
+- All object paths: `/crm/v3/objects/{objectType}` where `objectType` is the HubSpot type ID
 - Auth: `httpRequestWithAuthentication('hubspotApi', ...)` — credentials inject the Bearer header
 - Content-Type and Accept headers set on every request via `BASE_HEADERS`
 
-#### Contact resource — 4 operations (all working)
+### Description — `nodes/HubSpot/descriptions/ObjectDescription.ts`
+Single file covering the entire "Objects" resource. All old per-resource description files
+(ContactDescription, CustomerDescription, etc.) have been deleted.
+
+---
+
+## Resource: Objects
+
+One resource (`objects`) covers all HubSpot CRM object types via a single **Object Type** dropdown.
+The dropdown supports expressions (no validation enforced — arbitrary values pass through).
+
+### Object types
+
+| Display name | API value (objectType in URL) |
+|---|---|
+| Calls | `0-48` |
+| Communications | `0-18` |
+| Companies | `0-2` |
+| Contacts | `0-1` |
+| Contracts | `0-721` |
+| Deals | `0-3` |
+| Emails | `emails` |
+| Invoices | `0-53` |
+| Leads | `0-136` |
+| Line Items | `0-8` |
+| Meetings | `0-47` |
+| Orders | `0-123` |
+| Payments | `0-101` |
+| Products | `0-7` |
+| Projects | `0-970` |
+| Quotes | `0-14` |
+| Tasks | `tasks` |
+| Tickets | `0-5` |
+| Users | `users` |
+
+### Operations
 
 | Operation | Method | URL |
-|-----------|--------|-----|
-| Get | GET | `/crm/v3/objects/contacts/{contactId}` |
-| Get Many | GET | `/crm/v3/objects/contacts?limit=N` |
-| Create | POST | `/crm/v3/objects/contacts` |
-| Update | PATCH | `/crm/v3/objects/contacts/{contactId}` |
+|---|---|---|
+| Get | GET | `/crm/v3/objects/{objectType}/{objectId}` |
+| List | GET | `/crm/v3/objects/{objectType}` |
+| Create | POST | `/crm/v3/objects/{objectType}` |
+| Update | PATCH | `/crm/v3/objects/{objectType}/{objectId}` |
 
-**Get Many** supports:
-- `returnAll` toggle (cursor-paginates via `paging.next.after`)
-- `limit` (1–100, default 50)
-- Optional: `properties` (comma-separated), `after` cursor, `archived` flag
+#### Get
+Additional options: `properties`, `propertiesWithHistory`, `associations`, `idProperty`, `archived`, `errorWhenNotFound`
 
-**Get** supports optional: `properties`, `associations`, `archived`
+- `idProperty` — look up by a property value (e.g. `email`) instead of the record ID
+- `propertiesWithHistory` — returns property values alongside their historical values
+- `errorWhenNotFound` (default `true`) — when `false`, a 404 returns `{ objectFound: false }` instead of throwing. On success, `objectFound: true` is merged into the response.
+- 404 detection checks both `error.httpCode === '404'` (NodeApiError) and `error.response?.status === 404` (raw axios) for safety
 
-**Create / Update**: use a `fixedCollection` of `name`/`value` property pairs.
-HubSpot property names: `email`, `firstname`, `lastname`, `phone`, `company`, `website`, `jobtitle`, etc.
+#### List
+- Returns the **full raw HubSpot response** as a single output item (not individual records)
+- `returnAll: false` — single request, respects `limit` (1–100, default 50)
+- `returnAll: true` — paginates via `paging.next.after`; each page is one output item (full raw response including `paging` block)
+  - **Max Pages** field appears when Return All is on; `minValue: 1`, `numberPrecision: 0` (integer only). Value is also sanitized in code via `Math.max(1, Math.floor(...))`.
+- Additional options: `properties`, `propertiesWithHistory`, `associations`, `after` cursor, `archived`
+
+#### Create / Update
+- Properties passed as a `fixedCollection` of `name`/`value` pairs
+- Update supports `idProperty` option (same semantics as Get — match record by property value instead of ID)
 
 ### Helpers — `nodes/HubSpot/helpers.ts`
 `buildHubSpotUrl(base, path, params)` — builds URLs with proper repeated params for arrays
 (e.g. `?properties=email&properties=firstname` instead of `?properties[0]=email`)
 
-### Other description files (empty stubs, ready for future use)
-- `CustomerDescription.ts` → exports `companyDescription = []`
-- `ProductDescription.ts` → exports `productDescription = []`
-- `SalesOrderDescription.ts` → exports `dealDescription = []`
-
 ### Trigger node — `nodes/HubSpot/HubspotApiTrigger.node.ts`
-Stub only — `poll()` returns `null`. Needs to be implemented for HubSpot webhook/polling use cases.
+Stub only — `poll()` returns `null`. Not yet implemented.
 
 ---
 
 ## Key technical notes
 
-- **URL pattern**: HubSpot's named path `/crm/v3/contacts` returned 404 for this account. The generic objects path `/crm/v3/objects/contacts` (equivalent to object type `0-1`) works correctly.
-- **Auth expression**: `={{"Bearer " + $credentials.accessToken}}` is the correct n8n expression syntax for `IAuthenticateGeneric`. The `{{...}}` template format (without `=`) is NOT evaluated and sends a literal string.
-- **Array query params**: HubSpot expects repeated params (`?properties=a&properties=b`), not indexed (`?properties[0]=a`). The `buildHubSpotUrl` helper handles this via `URLSearchParams.append`.
-- **Linter rule**: `@n8n/community-nodes/no-http-request-with-manual-auth` — if you call `this.getCredentials()`, you must use `httpRequestWithAuthentication`, not `httpRequest`.
+- **URL pattern**: `/crm/v3/objects/{objectType}` works for both numeric IDs (`0-1`) and string names (`contacts`, `emails`, `tasks`). The named path `/crm/v3/contacts` returned 404 for this account.
+- **Auth expression**: `={{"Bearer " + $credentials.accessToken}}` is the correct n8n expression syntax for `IAuthenticateGeneric`. The `{{...}}` format (without `=`) sends a literal string.
+- **Array query params**: HubSpot expects repeated params (`?properties=a&properties=b`), not indexed. `buildHubSpotUrl` handles this via `URLSearchParams.append`.
+- **Linter rule**: `@n8n/community-nodes/no-http-request-with-manual-auth` — always use `httpRequestWithAuthentication`, never `httpRequest` when credentials are involved.
+- **NodeApiError wrapping**: `httpRequestWithAuthentication` throws `NodeApiError` (not raw axios errors). The 404 check uses `error.httpCode === '404'` (string). Re-thrown errors must be wrapped in `new NodeApiError(this.getNode(), error, { itemIndex: i })` or the linter complains.
+- **noValidation on Object Type**: `typeOptions: { noValidation: true }` suppresses n8n's "value not in options" warning when expressions are used on the Object Type dropdown.
 
 ---
 
 ## What's next (suggested)
 
-1. **Company resource** — `CustomerDescription.ts` is stubbed as `companyDescription`. Implement CRUD for `/crm/v3/objects/companies`.
-2. **Deal resource** — `SalesOrderDescription.ts` is stubbed as `dealDescription`. Implement CRUD for `/crm/v3/objects/deals`.
-3. **Product resource** — `ProductDescription.ts` is stubbed as `productDescription`. HubSpot products live at `/crm/v3/objects/products`.
-4. **Trigger node** — Implement polling on `/crm/v3/objects/contacts` filtered by `lastmodifieddate` property.
-5. **Associations** — HubSpot associations API at `/crm/v3/associations/{fromObjectType}/{toObjectType}/batch/read`.
+1. **Associations resource** — `/crm/v3/associations/{fromObjectType}/{toObjectType}/batch/read` (and create/delete). User mentioned this is planned as a second resource.
+2. **Lists resource** — HubSpot lists API.
+3. **Events resource** — HubSpot events API.
+4. **Trigger node** — Implement polling on any object type filtered by `lastmodifieddate`.
+5. **Search operation** — `POST /crm/v3/objects/{objectType}/search` with filters, sorts, and pagination.
 
 ---
 

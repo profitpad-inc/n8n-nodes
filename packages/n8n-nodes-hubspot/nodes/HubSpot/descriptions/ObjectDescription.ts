@@ -6,32 +6,32 @@ export const objectDescription: INodeProperties[] = [
 		displayName: 'Object Type',
 		name: 'objectType',
 		type: 'options',
-		noDataExpression: true,
+		typeOptions: { noValidation: true },
 		displayOptions: {
 			show: {
 				resource: ['objects'],
 			},
 		},
 		options: [
-			{ name: 'Calls', value: '0-48' },
-			{ name: 'Communications', value: '0-18' },
-			{ name: 'Companies', value: '0-2' },
-			{ name: 'Contacts', value: '0-1' },
-			{ name: 'Contracts', value: '0-721' },
-			{ name: 'Deals', value: '0-3' },
-			{ name: 'Emails', value: 'emails' },
-			{ name: 'Invoices', value: '0-53' },
-			{ name: 'Leads', value: '0-136' },
-			{ name: 'Line Items', value: '0-8' },
-			{ name: 'Meetings', value: '0-47' },
-			{ name: 'Orders', value: '0-123' },
-			{ name: 'Payments', value: '0-101' },
-			{ name: 'Products', value: '0-7' },
-			{ name: 'Projects', value: '0-970' },
-			{ name: 'Quotes', value: '0-14' },
-			{ name: 'Tasks', value: 'tasks' },
-			{ name: 'Tickets', value: '0-5' },
-			{ name: 'Users', value: 'users' },
+			{ name: 'Calls (0-48)', value: '0-48' },
+			{ name: 'Communications (0-18)', value: '0-18' },
+			{ name: 'Companies (0-2)', value: '0-2' },
+			{ name: 'Contacts (0-1)', value: '0-1' },
+			{ name: 'Contracts (0-721)', value: '0-721' },
+			{ name: 'Deals (0-3)', value: '0-3' },
+			{ name: 'Emails (Emails)', value: 'emails' },
+			{ name: 'Invoices (0-53)', value: '0-53' },
+			{ name: 'Leads (0-136)', value: '0-136' },
+			{ name: 'Line Items (0-8)', value: '0-8' },
+			{ name: 'Meetings (0-47)', value: '0-47' },
+			{ name: 'Orders (0-123)', value: '0-123' },
+			{ name: 'Payments (0-101)', value: '0-101' },
+			{ name: 'Products (0-7)', value: '0-7' },
+			{ name: 'Projects (0-970)', value: '0-970' },
+			{ name: 'Quotes (0-14)', value: '0-14' },
+			{ name: 'Tasks (Tasks)', value: 'tasks' },
+			{ name: 'Tickets (0-5)', value: '0-5' },
+			{ name: 'Users (Users)', value: 'users' },
 		],
 		default: '0-1',
 		description: 'The HubSpot CRM object type to operate on',
@@ -62,10 +62,10 @@ export const objectDescription: INodeProperties[] = [
 				action: 'Get an object',
 			},
 			{
-				name: 'Get Many',
-				value: 'getMany',
-				description: 'Retrieve a list of objects',
-				action: 'Get many objects',
+				name: 'List',
+				value: 'list',
+				description: 'List objects of a given type',
+				action: 'List objects',
 			},
 			{
 				name: 'Update',
@@ -74,7 +74,7 @@ export const objectDescription: INodeProperties[] = [
 				action: 'Update an object',
 			},
 		],
-		default: 'getMany',
+		default: 'list',
 	},
 
 	// ── Object ID (shared by get + update) ────────────────────────────────────
@@ -120,8 +120,16 @@ export const objectDescription: INodeProperties[] = [
 				name: 'associations',
 				type: 'string',
 				default: '',
-				placeholder: 'deals,companies',
+				placeholder: '0-2,0-3',
 				description: 'Comma-separated list of object types to retrieve associated records for',
+			},
+			{
+				displayName: 'Error When Not Found',
+				name: 'errorWhenNotFound',
+				type: 'boolean',
+				default: true,
+				description:
+					'Whether to throw an error when the record does not exist. When disabled, returns {"objectFound": false} instead.',
 			},
 			{
 				displayName: 'ID Property',
@@ -163,7 +171,22 @@ export const objectDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['objects'],
-				operation: ['getMany'],
+				operation: ['list'],
+			},
+		},
+	},
+	{
+		displayName: 'Max Pages',
+		name: 'maxPages',
+		type: 'number',
+		typeOptions: { minValue: 1, numberPrecision: 0 },
+		default: 1,
+		description: 'Maximum number of pages to fetch. Each page contains up to 100 results.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['list'],
+				returnAll: [true],
 			},
 		},
 	},
@@ -177,7 +200,7 @@ export const objectDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['objects'],
-				operation: ['getMany'],
+				operation: ['list'],
 				returnAll: [false],
 			},
 		},
@@ -191,7 +214,7 @@ export const objectDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['objects'],
-				operation: ['getMany'],
+				operation: ['list'],
 			},
 		},
 		options: [
@@ -208,7 +231,15 @@ export const objectDescription: INodeProperties[] = [
 				name: 'archived',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to include archived records in the response',
+				description: 'Whether to only show archived records in the response',
+			},
+			{
+				displayName: 'Associations',
+				name: 'associations',
+				type: 'string',
+				default: '',
+				placeholder: '0-2,0-3',
+				description: 'Comma-separated list of object types to retrieve associated records for',
 			},
 			{
 				displayName: 'Properties',
@@ -218,6 +249,15 @@ export const objectDescription: INodeProperties[] = [
 				placeholder: 'email,firstname,lastname',
 				description:
 					'Comma-separated list of property names to return. Returns all simple properties when left blank.',
+			},
+			{
+				displayName: 'Properties With History',
+				name: 'propertiesWithHistory',
+				type: 'string',
+				default: '',
+				placeholder: 'email,phone',
+				description:
+					'Comma-separated list of properties to return along with their historical values',
 			},
 		],
 	},

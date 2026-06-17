@@ -21,7 +21,7 @@ const BASE_HEADERS = {
 
 export class HubspotApi implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'HubSpot-P',
+		displayName: 'HubSpot',
 		name: 'hubspotApi',
 		icon: 'file:app-icon.svg',
 		group: ['transform'],
@@ -31,7 +31,7 @@ export class HubspotApi implements INodeType {
 			'Interact with HubSpot CRM objects. Docs: https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis',
 		usableAsTool: true,
 		defaults: {
-			name: 'HubSpot-P',
+			name: 'HubSpot',
 		},
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
@@ -49,7 +49,8 @@ export class HubspotApi implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
-						name: 'Object',
+						// eslint-disable-next-line n8n-nodes-base/node-param-resource-with-plural-option
+						name: 'Objects',
 						value: 'objects',
 						description:
 							'Work with HubSpot CRM objects — contacts, companies, deals, and more',
@@ -83,6 +84,7 @@ export class HubspotApi implements INodeType {
 							associations?: string;
 							idProperty?: string;
 							archived?: boolean;
+							errorWhenNotFound?: boolean;
 						};
 
 						const propertiesList = opts.properties
@@ -103,24 +105,42 @@ export class HubspotApi implements INodeType {
 							archived: opts.archived,
 						});
 
-						const response = await this.helpers.httpRequestWithAuthentication.call(
-							this,
-							'hubspotApi',
-							{
-								method: 'GET',
-								url,
-								headers: BASE_HEADERS,
-							},
-						);
+						const errorWhenNotFound = opts.errorWhenNotFound !== false;
 
-						returnData.push({ json: response as JsonObject, pairedItem: { item: i } });
+						try {
+							const response = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{
+									method: 'GET',
+									url,
+									headers: BASE_HEADERS,
+								},
+							)) as JsonObject;
+
+							returnData.push({
+								json: { ...response, objectFound: true },
+								pairedItem: { item: i },
+							});
+						} catch (error) {
+							const is404 =
+								(error as { httpCode?: string | null }).httpCode === '404' ||
+								(error as { response?: { status?: number } }).response?.status === 404;
+							if (!errorWhenNotFound && is404) {
+								returnData.push({ json: { objectFound: false }, pairedItem: { item: i } });
+							} else {
+								throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex: i });
+							}
+						}
 					}
 
-					// ── GET MANY ───────────────────────────────────────────────────
-					if (operation === 'getMany') {
+					// ── LIST ───────────────────────────────────────────────────────
+					if (operation === 'list') {
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const opts = this.getNodeParameter('listOptions', i) as {
 							properties?: string;
+							propertiesWithHistory?: string;
+							associations?: string;
 							after?: string;
 							archived?: boolean;
 						};
@@ -128,15 +148,25 @@ export class HubspotApi implements INodeType {
 						const propertiesList = opts.properties
 							? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
 							: [];
+						const propertiesWithHistoryList = opts.propertiesWithHistory
+							? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
+							: [];
+						const associationsList = opts.associations
+							? opts.associations.split(',').map((s) => s.trim()).filter(Boolean)
+							: [];
 
 						if (returnAll) {
+							const maxPages = Math.max(1, Math.floor(this.getNodeParameter('maxPages', i) as number));
 							let after: string | undefined;
+							let pageCount = 0;
 
 							do {
 								const url = buildHubSpotUrl(HUBSPOT_BASE, objectsPath, {
 									limit: 100,
 									after,
 									properties: propertiesList,
+									propertiesWithHistory: propertiesWithHistoryList,
+									associations: associationsList,
 									archived: opts.archived,
 								});
 
@@ -150,16 +180,14 @@ export class HubspotApi implements INodeType {
 									},
 								)) as JsonObject;
 
-								const results = (response.results as JsonObject[]) ?? [];
-								for (const result of results) {
-									returnData.push({ json: result, pairedItem: { item: i } });
-								}
+								returnData.push({ json: response, pairedItem: { item: i } });
+								pageCount++;
 
 								const paging = response.paging as JsonObject | undefined;
 								after = (paging?.next as JsonObject | undefined)?.after as
 									| string
 									| undefined;
-							} while (after);
+							} while (after && pageCount < maxPages);
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
 
@@ -167,6 +195,8 @@ export class HubspotApi implements INodeType {
 								limit,
 								after: opts.after || undefined,
 								properties: propertiesList,
+								propertiesWithHistory: propertiesWithHistoryList,
+								associations: associationsList,
 								archived: opts.archived,
 							});
 
@@ -180,10 +210,7 @@ export class HubspotApi implements INodeType {
 								},
 							)) as JsonObject;
 
-							const results = (response.results as JsonObject[]) ?? [];
-							for (const result of results) {
-								returnData.push({ json: result, pairedItem: { item: i } });
-							}
+							returnData.push({ json: response, pairedItem: { item: i } });
 						}
 					}
 
