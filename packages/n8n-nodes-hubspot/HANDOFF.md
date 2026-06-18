@@ -70,9 +70,17 @@ The dropdown supports expressions (no validation enforced — arbitrary values p
 | List | GET | `/crm/v3/objects/{objectType}` |
 | Create | POST | `/crm/v3/objects/{objectType}` |
 | Update | PATCH | `/crm/v3/objects/{objectType}/{objectId}` |
+| Delete | DELETE | `/crm/v3/objects/{objectType}/{objectId}` |
+| Search | POST | `/crm/v3/objects/{objectType}/search` |
+| Batch Read | POST | `/crm/v3/objects/{objectType}/batch/read` |
+| Batch Create | POST | `/crm/v3/objects/{objectType}/batch/create` |
+| Batch Upsert | POST | `/crm/v3/objects/{objectType}/batch/upsert` |
+| Batch Delete | POST | `/crm/v3/objects/{objectType}/batch/archive` |
+
+All single-record operations (Get, List, Create, Update, Delete, Search) have a **Milliseconds Between Items** option in their Additional Options (default 50ms). The delay is applied between each input item — useful for rate limiting when processing many items.
 
 #### Get
-Additional options: `properties`, `propertiesWithHistory`, `associations`, `idProperty`, `archived`, `errorWhenNotFound`
+Additional options: `properties`, `propertiesWithHistory`, `associations`, `idProperty`, `archived`, `errorWhenNotFound`, `millisecondsBetweenItems`
 
 - `idProperty` — look up by a property value (e.g. `email`) instead of the record ID
 - `propertiesWithHistory` — returns property values alongside their historical values
@@ -84,11 +92,31 @@ Additional options: `properties`, `propertiesWithHistory`, `associations`, `idPr
 - `returnAll: false` — single request, respects `limit` (1–100, default 50)
 - `returnAll: true` — paginates via `paging.next.after`; each page is one output item (full raw response including `paging` block)
   - **Max Pages** field appears when Return All is on; `minValue: 1`, `numberPrecision: 0` (integer only). Value is also sanitized in code via `Math.max(1, Math.floor(...))`.
-- Additional options: `properties`, `propertiesWithHistory`, `associations`, `after` cursor, `archived`
+- Additional options: `properties`, `propertiesWithHistory`, `associations`, `after` cursor, `archived`, `millisecondsBetweenItems`
 
 #### Create / Update
 - Properties passed as a `fixedCollection` of `name`/`value` pairs
 - Update supports `idProperty` option (same semantics as Get — match record by property value instead of ID)
+- Both have `millisecondsBetweenItems` in their Additional Options
+
+#### Delete
+- Requires `objectId` (record ID or property value)
+- Additional options: `idProperty`, `millisecondsBetweenItems`
+- **idProperty flow**: when set, a GET is made first to resolve the property value to a real record ID, then the DELETE is issued against the real ID. Response: `{ success: true, id: "<realId>" }`
+- Without `idProperty`: DELETE is issued directly against the provided `objectId`
+- HubSpot DELETE returns 204 No Content
+
+#### Search
+- Accepts a JSON body following [HubSpot search syntax](https://developers.hubspot.com/docs/api-reference/legacy/crm/objects/objects/search/search-objects)
+- Pre-filled with an example filter on `email`
+- Supports `returnAll` (shared with List) and `maxPages` for pagination — sets `limit: 100` per page and tracks `paging.next.after`
+- `searchLimit` (1–200, default 10) used when `returnAll` is false
+- Additional options: `millisecondsBetweenItems`
+
+#### Batch operations
+- All accept a raw JSON body (pre-filled with a relevant example)
+- No Additional Options; no inter-item delay
+- Batch Delete calls `POST .../batch/archive` (HubSpot's archive endpoint)
 
 ### Helpers — `nodes/HubSpot/helpers.ts`
 `buildHubSpotUrl(base, path, params)` — builds URLs with proper repeated params for arrays
@@ -116,7 +144,6 @@ Stub only — `poll()` returns `null`. Not yet implemented.
 2. **Lists resource** — HubSpot lists API.
 3. **Events resource** — HubSpot events API.
 4. **Trigger node** — Implement polling on any object type filtered by `lastmodifieddate`.
-5. **Search operation** — `POST /crm/v3/objects/{objectType}/search` with filters, sorts, and pagination.
 
 ---
 
