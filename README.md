@@ -37,6 +37,7 @@ npm run dev       # start dev mode
 npm run build     # compile TypeScript
 npm run lint      # lint
 npm run lint:fix  # lint and auto-fix
+npm publish       # to publish
 ```
 
 ## Publishing

@@ -13,7 +13,7 @@ export class EclipseApiTrigger implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Epicor Eclipse Trigger',
     name: 'eclipseApiTrigger',
-    icon: 'file:eclipse-icon.svg',
+    icon: 'file:app-icon.svg',
     group: ['trigger'],
     version: 1,
     description: 'Polls for new or updated Epicor Eclipse records on a schedule.',
@@ -45,21 +45,24 @@ export class EclipseApiTrigger implements INodeType {
         default: 'customer',
       },
       {
-        displayName: 'Lookback Window',
+        displayName: 'Lookback Window (Minutes)',
         name: 'pollInterval',
-        type: 'options',
-        // eslint-disable-next-line @n8n/community-nodes/options-sorted-alphabetically
-        options: [
-          { name: '1 Minute', value: 1 },
-          { name: '5 Minutes', value: 5 },
-          { name: '30 Minutes', value: 30 },
-          { name: '1 Hour', value: 60 },
-          { name: '4 Hours', value: 240 },
-          { name: '24 Hours', value: 1440 },
-          { name: 'Custom Date', value: 'custom' },
-        ],
+        type: 'number',
+        typeOptions: { minValue: 1 },
         default: 5,
-        description: 'How far back to look for updated records on each poll, in minutes. Any decimal values will be rounded up to the nearest minute.',
+        description: 'How far back to look for updated records on each poll, in minutes. Common values: 1, 5, 10, 30, 60, 240, 1440. Any decimal values will be rounded up to the nearest minute.',
+        displayOptions: {
+          show: {
+            useCustomDate: [false],
+          },
+        },
+      },
+      {
+        displayName: 'Use Custom Date',
+        name: 'useCustomDate',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to use a fixed date instead of a rolling lookback window',
       },
       {
         displayName: 'Updated After',
@@ -70,7 +73,7 @@ export class EclipseApiTrigger implements INodeType {
         description: 'Only return records updated after this date and time. Timezone is always UTC.',
         displayOptions: {
           show: {
-            pollInterval: ['custom'],
+            useCustomDate: [true],
           },
         },
       },
@@ -381,7 +384,8 @@ export class EclipseApiTrigger implements INodeType {
     const headers = { Accept: 'application/json', sessionToken };
 
     const resource = this.getNodeParameter('resource') as string;
-    const pollInterval = this.getNodeParameter('pollInterval') as number | string;
+    const useCustomDate = this.getNodeParameter('useCustomDate') as boolean;
+    const pollInterval = useCustomDate ? 0 : this.getNodeParameter('pollInterval') as number;
     const returnAll = this.getNodeParameter('returnAll') as boolean;
     const pageSize = this.getNodeParameter('pageSize') as number;
     const fieldsFilterMode = (this.getNodeParameter('fieldsFilterMode') as string).trim();
@@ -395,17 +399,22 @@ export class EclipseApiTrigger implements INodeType {
     const workflowStaticData = this.getWorkflowStaticData('node');
     let lookbackTime: string;
 
-    if (pollInterval === 'custom') {
+    if (useCustomDate) {
       lookbackTime = this.getNodeParameter('updatedAfter') as string;
     } else {
-      const intervalLookback = new Date(Date.now() - Math.ceil(pollInterval as number) * 60 * 1000).toISOString();
-      const lastRun = workflowStaticData.lastRunTime as string | undefined;
-      // Use whichever is earlier: the configured interval lookback, or lastRunTime.
-      // Normally these are the same (lastRunTime ≈ now - interval). If lastRunTime is
-      // more recent (e.g. from a shorter prior run), the interval wins so we always
-      // look back at least the configured window. If the workflow was off longer than
-      // the interval, lastRunTime wins so we resume from where we left off.
-      lookbackTime = lastRun && lastRun < intervalLookback ? lastRun : intervalLookback;
+      const intervalLookback = new Date(Date.now() - Math.ceil(pollInterval) * 60 * 1000).toISOString();
+      const isManual = this.getMode() === 'manual';
+      if (isManual) {
+        lookbackTime = intervalLookback;
+      } else {
+        const lastRun = workflowStaticData.lastRunTime as string | undefined;
+        // Use whichever is earlier: the configured interval lookback, or lastRunTime.
+        // Normally these are the same (lastRunTime ≈ now - interval). If lastRunTime is
+        // more recent (e.g. from a shorter prior run), the interval wins so we always
+        // look back at least the configured window. If the workflow was off longer than
+        // the interval, lastRunTime wins so we resume from where we left off.
+        lookbackTime = lastRun && lastRun < intervalLookback ? lastRun : intervalLookback;
+      }
     }
 
     // Capture current time before the request so we don't miss records
@@ -512,7 +521,7 @@ export class EclipseApiTrigger implements INodeType {
         const results: JsonObject[] = response.results ?? [];
         totalResults += results.length;
         returnData.push({
-          json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
+          json: { search: { lastModifiedDateStart: lookbackTime, triggerDateTime: currentRunTime }, ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
         });
         if (results.length < pageSize) break;
         currentStart += pageSize;
@@ -528,12 +537,12 @@ export class EclipseApiTrigger implements INodeType {
       const results: JsonObject[] = response.results ?? [];
       totalResults += results.length;
       returnData.push({
-        json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
+        json: { search: { lastModifiedDateStart: lookbackTime, triggerDateTime: currentRunTime }, ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
       });
     }
 
     // Only persist lastRunTime for rolling window modes, not custom date
-    if (pollInterval !== 'custom') {
+    if (!useCustomDate) {
       workflowStaticData.lastRunTime = currentRunTime;
     }
 

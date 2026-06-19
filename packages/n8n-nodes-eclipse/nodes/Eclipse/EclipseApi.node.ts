@@ -18,7 +18,7 @@ export class EclipseApi implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Epicor Eclipse',
     name: 'eclipseApi',
-    icon: 'file:eclipse-icon.svg',
+    icon: 'file:app-icon.svg',
     group: ['transform'],
     version: 1,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
@@ -197,18 +197,35 @@ export class EclipseApi implements INodeType {
               ? additionalOptions.id.split(',').map((s) => s.trim()).filter(Boolean)
               : [];
 
-            const buildUrl = (startIndex: number): string => {
+            const buildUrl = (startIndex: number, idSubset: string[] = ids): string => {
               const params = new URLSearchParams();
               params.set('pageSize', String(pageSize));
               params.set('startIndex', String(startIndex));
               params.set('includeTotalItems', 'true');
-              for (const id of ids) params.append('id', id);
+              for (const id of idSubset) params.append('id', id);
               if (additionalOptions.updatedAfter) params.set('updatedAfter', additionalOptions.updatedAfter);
               if (additionalOptions.keyword) params.set('keyword', additionalOptions.keyword);
               return `${baseUrl}/${endpoint}?${params.toString()}`;
             };
 
-            if (returnAll) {
+            const BATCH_SIZE = 200;
+            // When fetching products by ID and the list exceeds 250, split into batches
+            // and return one output item per batch regardless of the Return All setting.
+            if (resource === 'product' && ids.length > BATCH_SIZE) {
+              for (let b = 0; b < ids.length; b += BATCH_SIZE) {
+                const chunk = ids.slice(b, b + BATCH_SIZE);
+                const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                  method: 'GET',
+                  url: buildUrl(1, chunk),
+                  headers,
+                });
+                const results: JsonObject[] = response.results ?? [];
+                returnData.push({
+                  json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
+                  pairedItem: { item: i },
+                });
+              }
+            } else if (returnAll) {
               let currentStart = 1;
 
               while (true) {

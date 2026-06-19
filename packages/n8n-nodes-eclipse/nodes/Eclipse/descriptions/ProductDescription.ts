@@ -139,7 +139,7 @@ export const productDescription: INodeProperties[] = [
         type: 'string',
         default: '',
         placeholder: '123 or 123,456,789',
-        description: 'Filter by product ID. Separate multiple IDs with commas.',
+        description: 'Filter by product ID. Separate multiple IDs with commas. If more than 200 IDs are provided, requests are automatically split into batches of 200 and all batches are fetched regardless of the Return All setting.',
       },
       {
         displayName: 'Keyword',
