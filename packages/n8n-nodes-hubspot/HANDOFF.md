@@ -21,7 +21,7 @@ A custom n8n community node (`@profitpad-inc/n8n-nodes-hubspot`) for the HubSpot
 - Credential test: `GET https://api.hubapi.com/crm/v3/objects/contacts?limit=1`
 - Icon: `file:app-icon.svg`
 
-### Node — `nodes/HubSpot/HubSpotApi.node.ts`
+### Node — `nodes/HubSpot/HubspotApi.node.ts`
 - Base URL: `https://api.hubapi.com`
 - All object paths: `/crm/v3/objects/{objectType}` where `objectType` is the HubSpot type ID
 - Auth: `httpRequestWithAuthentication('hubspotApi', ...)` — credentials inject the Bearer header

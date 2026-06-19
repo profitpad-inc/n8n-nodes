@@ -246,6 +246,7 @@ export const objectDescription: INodeProperties[] = [
 		name: 'limit',
 		type: 'number',
 		typeOptions: { minValue: 1, maxValue: 100 },
+		// eslint-disable-next-line n8n-nodes-base/node-param-default-wrong-for-limit
 		default: 100,
 		description: 'Max number of results to return',
 		displayOptions: {
