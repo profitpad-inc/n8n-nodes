@@ -8,11 +8,13 @@ import {
 	NodeConnectionTypes,
 } from 'n8n-workflow';
 
+import { associationDescription } from './descriptions/AssociationDescription';
 import { objectDescription } from './descriptions/ObjectDescription';
 import { buildHubSpotUrl } from './helpers';
 
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const OBJECTS_BASE_PATH = '/crm/v3/objects';
+const ASSOC_BASE_PATH = '/crm/associations/2026-03';
 
 const BASE_HEADERS = {
 	'content-type': 'application/json',
@@ -31,7 +33,8 @@ export class HubspotApi implements INodeType {
 		icon: 'file:app-icon.svg',
 		group: ['transform'],
 		version: 1,
-		subtitle: '={{$parameter["operation"] + ": " + $parameter["objectType"]}}',
+		subtitle:
+			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
 		description:
 			'Interact with HubSpot CRM objects. Docs: https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis',
 		usableAsTool: true,
@@ -55,6 +58,11 @@ export class HubspotApi implements INodeType {
 				options: [
 					{
 						// eslint-disable-next-line n8n-nodes-base/node-param-resource-with-plural-option
+						name: 'Associations',
+						value: 'associations',
+						description: 'Manage associations between HubSpot CRM records',
+					},
+					{
 						name: 'Objects',
 						value: 'objects',
 						description:
@@ -63,6 +71,7 @@ export class HubspotApi implements INodeType {
 				],
 				default: 'objects',
 			},
+			...associationDescription,
 			...objectDescription,
 		],
 	};
@@ -78,13 +87,138 @@ export class HubspotApi implements INodeType {
 				const resource = this.getNodeParameter('resource', i) as string;
 				const operation = this.getNodeParameter('operation', i) as string;
 
+				if (resource === 'associations') {
+					const fromObjectType = this.getNodeParameter('fromObjectType', i) as string;
+					const toObjectType = this.getNodeParameter('toObjectType', i) as string;
+					const assocBase = `${HUBSPOT_BASE}${ASSOC_BASE_PATH}/${fromObjectType}/${toObjectType}`;
+
+					// ── ASSOC BATCH READ ──────────────────────────────────────────────
+					if (operation === 'assocBatchRead') {
+						const fromIdsRaw = String(this.getNodeParameter('fromIds', i)).trim();
+						const fromIdProperty = (
+							this.getNodeParameter('fromIdProperty', i) as string
+						).trim();
+
+						let fromIds = fromIdsRaw
+							.split(',')
+							.map((s) => s.trim())
+							.filter(Boolean);
+
+						if (fromIdProperty) {
+							const resolvedIds: string[] = [];
+							for (let j = 0; j < fromIds.length; j += 100) {
+								const batch = fromIds.slice(j, j + 100);
+								const batchResponse = (await this.helpers.httpRequestWithAuthentication.call(
+									this,
+									'hubspotApi',
+									{
+										method: 'POST',
+										url: `${HUBSPOT_BASE}${OBJECTS_BASE_PATH}/${fromObjectType}/batch/read`,
+										headers: BASE_HEADERS,
+										body: JSON.stringify({
+											inputs: batch.map((id) => ({ id })),
+											idProperty: fromIdProperty,
+										}),
+									},
+								)) as { results?: Array<{ id: string }> };
+								resolvedIds.push(...(batchResponse.results ?? []).map((r) => r.id));
+							}
+							fromIds = resolvedIds;
+						}
+
+						if (fromIds.length === 0) {
+							returnData.push({
+								json: { status: 'COMPLETE', results: [], numErrors: 0 },
+								pairedItem: { item: i },
+							});
+						} else {
+							for (let j = 0; j < fromIds.length; j += 1000) {
+								const batch = fromIds.slice(j, j + 1000);
+								const response = (await this.helpers.httpRequestWithAuthentication.call(
+									this,
+									'hubspotApi',
+									{
+										method: 'POST',
+										url: `${assocBase}/batch/read`,
+										headers: BASE_HEADERS,
+										body: JSON.stringify({ inputs: batch.map((id) => ({ id })) }),
+									},
+								)) as JsonObject;
+								returnData.push({ json: response, pairedItem: { item: i } });
+							}
+						}
+					}
+
+					// ── ASSOC BATCH DELETE ────────────────────────────────────────────
+					if (operation === 'assocBatchDelete') {
+						const body = parseJsonParam(this.getNodeParameter('assocBatchDeleteBody', i));
+						await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+							method: 'POST',
+							url: `${assocBase}/batch/archive`,
+							headers: BASE_HEADERS,
+							body: JSON.stringify(body),
+						});
+						returnData.push({ json: { success: true }, pairedItem: { item: i } });
+					}
+
+					// ── ASSOC BATCH CREATE DEFAULT ────────────────────────────────────
+					if (operation === 'assocBatchCreateDefault') {
+						const body = parseJsonParam(
+							this.getNodeParameter('assocBatchCreateDefaultBody', i),
+						);
+						const response = (await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'POST',
+								url: `${assocBase}/batch/associate/default`,
+								headers: BASE_HEADERS,
+								body: JSON.stringify(body),
+							},
+						)) as JsonObject;
+						returnData.push({ json: response, pairedItem: { item: i } });
+					}
+
+					// ── ASSOC BATCH CREATE LABELED ────────────────────────────────────
+					if (operation === 'assocBatchCreateLabeled') {
+						const body = parseJsonParam(
+							this.getNodeParameter('assocBatchCreateLabeledBody', i),
+						);
+						const response = (await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'POST',
+								url: `${assocBase}/batch/create`,
+								headers: BASE_HEADERS,
+								body: JSON.stringify(body),
+							},
+						)) as JsonObject;
+						returnData.push({ json: response, pairedItem: { item: i } });
+					}
+
+					// ── ASSOC READ LABELS ─────────────────────────────────────────────
+					if (operation === 'assocReadLabels') {
+						const response = (await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'GET',
+								url: `${assocBase}/labels`,
+								headers: BASE_HEADERS,
+							},
+						)) as JsonObject;
+						returnData.push({ json: response, pairedItem: { item: i } });
+					}
+				}
+
 				if (resource === 'objects') {
 					const objectType = this.getNodeParameter('objectType', i) as string;
 					const objectsPath = `${OBJECTS_BASE_PATH}/${objectType}`;
 
 					// ── GET ──────────────────────────────────────────────────────────
 					if (operation === 'get') {
-						const objectId = (this.getNodeParameter('objectId', i) as string).trim();
+						const objectId = String(this.getNodeParameter('objectId', i)).trim();
 						const opts = this.getNodeParameter('additionalOptions', i) as {
 							properties?: string;
 							propertiesWithHistory?: string;
@@ -267,7 +401,7 @@ export class HubspotApi implements INodeType {
 
 					// ── UPDATE ────────────────────────────────────────────────────────
 					if (operation === 'update') {
-						const objectId = (this.getNodeParameter('objectId', i) as string).trim();
+						const objectId = String(this.getNodeParameter('objectId', i)).trim();
 						const updateInputMode = this.getNodeParameter('updateInputMode', i) as string;
 						const updateOpts = this.getNodeParameter('updateOptions', i) as {
 							idProperty?: string;
@@ -310,7 +444,7 @@ export class HubspotApi implements INodeType {
 
 					// ── DELETE ────────────────────────────────────────────────────────
 					if (operation === 'delete') {
-						const objectId = (this.getNodeParameter('objectId', i) as string).trim();
+						const objectId = String(this.getNodeParameter('objectId', i)).trim();
 						const deleteOpts = this.getNodeParameter('deleteOptions', i) as {
 							idProperty?: string;
 							millisecondsBetweenItems?: number;

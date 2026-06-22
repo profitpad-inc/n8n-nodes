@@ -11,6 +11,16 @@ export class EclipseApi implements ICredentialType {
 
   properties: INodeProperties[] = [
     {
+      displayName: 'Credential Notes',
+      name: 'notes',
+      type: 'string',
+      typeOptions: {
+        rows: 3,
+      },
+      default: '',
+      description: 'Optional notes about this credential (not used in requests)',
+    },
+    {
       displayName: 'Base URL',
       name: 'baseUrl',
       type: 'string',
