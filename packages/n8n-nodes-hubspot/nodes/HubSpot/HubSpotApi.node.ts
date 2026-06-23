@@ -609,6 +609,24 @@ export class HubspotApi implements INodeType {
 						returnData.push({ json: response, pairedItem: { item: i } });
 					}
 
+					// ── BATCH UPDATE ──────────────────────────────────────────────────
+					if (operation === 'batchUpdate') {
+						const body = parseJsonParam(this.getNodeParameter('batchUpdateBody', i));
+
+						const response = (await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'POST',
+								url: `${HUBSPOT_BASE}${objectsPath}/batch/update`,
+								headers: BASE_HEADERS,
+								body: JSON.stringify(body),
+							},
+						)) as JsonObject;
+
+						returnData.push({ json: response, pairedItem: { item: i } });
+					}
+
 					// ── BATCH UPSERT ──────────────────────────────────────────────────
 					if (operation === 'batchUpsert') {
 						const body = parseJsonParam(this.getNodeParameter('batchUpsertBody', i));

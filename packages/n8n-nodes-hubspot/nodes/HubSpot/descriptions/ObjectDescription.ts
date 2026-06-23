@@ -82,6 +82,12 @@ export const objectDescription: INodeProperties[] = [
 				action: 'Batch read objects',
 			},
 			{
+				name: 'Batch Update',
+				value: 'batchUpdate',
+				description: 'Update multiple existing objects in a single request',
+				action: 'Batch update objects',
+			},
+			{
 				name: 'Batch Upsert',
 				value: 'batchUpsert',
 				description: 'Create or update multiple objects in a single request',
@@ -699,6 +705,39 @@ export const objectDescription: INodeProperties[] = [
 			show: {
 				resource: ['objects'],
 				operation: ['batchCreate'],
+			},
+		},
+	},
+
+	// ── BATCH UPDATE ──────────────────────────────────────────────────────────
+	{
+		displayName: 'Body',
+		name: 'batchUpdateBody',
+		type: 'json',
+		default: JSON.stringify(
+			{
+				inputs: [
+					{
+						id: '12345',
+						properties: {
+							firstname: 'Jane',
+							phone: '+1-555-0123',
+						},
+					},
+				],
+			},
+			null,
+			2,
+		),
+		// eslint-disable-next-line n8n-nodes-base/node-param-placeholder-miscased-id
+		placeholder: '{\n  "inputs": [{"id": "12345", "properties": {"firstname": "Jane"}}]\n}',
+		// eslint-disable-next-line n8n-nodes-base/node-param-description-miscased-id
+		description:
+			'JSON body for the batch update request. Each input must have an <code>id</code> field and a <code>properties</code> object with the fields to update.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchUpdate'],
 			},
 		},
 	},
