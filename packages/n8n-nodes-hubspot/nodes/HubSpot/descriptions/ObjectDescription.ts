@@ -227,6 +227,38 @@ export const objectDescription: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Return All Mode',
+		name: 'returnAllMode',
+		type: 'options',
+		noDataExpression: true,
+		default: 'eachResult',
+		description: 'How to output the fetched results',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['list', 'search'],
+				returnAll: [true],
+			},
+		},
+		options: [
+			{
+				name: 'All Results as 1 Item',
+				value: 'allInOne',
+				description: 'Aggregate all pages and return every result combined in a single output item',
+			},
+			{
+				name: 'Each Page as 1 Item',
+				value: 'eachPage',
+				description: 'Return each API page response as a separate output item',
+			},
+			{
+				name: 'Each Result as 1 Item',
+				value: 'eachResult',
+				description: 'Return each individual record as a separate output item',
+			},
+		],
+	},
+	{
 		displayName: 'Max Pages',
 		name: 'maxPages',
 		type: 'number',

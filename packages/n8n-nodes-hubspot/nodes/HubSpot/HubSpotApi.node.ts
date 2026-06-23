@@ -307,8 +307,10 @@ export class HubspotApi implements INodeType {
 								1,
 								Math.floor(this.getNodeParameter('maxPages', i) as number),
 							);
+							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
 							let after: string | undefined;
 							let pageCount = 0;
+							const allResults: JsonObject[] = [];
 
 							do {
 								const url = buildHubSpotUrl(HUBSPOT_BASE, objectsPath, {
@@ -330,12 +332,26 @@ export class HubspotApi implements INodeType {
 									},
 								)) as JsonObject;
 
-								returnData.push({ json: response, pairedItem: { item: i } });
-								pageCount++;
+								const results = (response.results as JsonObject[] | undefined) ?? [];
 
+								if (returnAllMode === 'eachPage') {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								} else if (returnAllMode === 'eachResult') {
+									for (const result of results) {
+										returnData.push({ json: result, pairedItem: { item: i } });
+									}
+								} else {
+									allResults.push(...results);
+								}
+
+								pageCount++;
 								const paging = response.paging as JsonObject | undefined;
 								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
 							} while (after && pageCount < maxPages);
+
+							if (returnAllMode === 'allInOne') {
+								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+							}
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
 
@@ -498,8 +514,10 @@ export class HubspotApi implements INodeType {
 								1,
 								Math.floor(this.getNodeParameter('maxPages', i) as number),
 							);
+							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
 							let pageCount = 0;
 							let after: string | undefined;
+							const allResults: JsonObject[] = [];
 
 							do {
 								const pageBody: JsonObject = {
@@ -519,12 +537,26 @@ export class HubspotApi implements INodeType {
 									},
 								)) as JsonObject;
 
-								returnData.push({ json: response, pairedItem: { item: i } });
-								pageCount++;
+								const results = (response.results as JsonObject[] | undefined) ?? [];
 
+								if (returnAllMode === 'eachPage') {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								} else if (returnAllMode === 'eachResult') {
+									for (const result of results) {
+										returnData.push({ json: result, pairedItem: { item: i } });
+									}
+								} else {
+									allResults.push(...results);
+								}
+
+								pageCount++;
 								const paging = response.paging as JsonObject | undefined;
 								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
 							} while (after && pageCount < maxPages);
+
+							if (returnAllMode === 'allInOne') {
+								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+							}
 						} else {
 							const response = (await this.helpers.httpRequestWithAuthentication.call(
 								this,
