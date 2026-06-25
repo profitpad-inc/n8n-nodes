@@ -645,6 +645,92 @@ export class HubspotApi implements INodeType {
 						returnData.push({ json: response, pairedItem: { item: i } });
 					}
 
+					// ── MERGE ────────────────────────────────────────────────────────
+					if (operation === 'merge') {
+						const primaryObjectId = String(
+							this.getNodeParameter('primaryObjectId', i),
+						).trim();
+						const objectIdsToMergeRaw = String(
+							this.getNodeParameter('objectIdsToMerge', i),
+						).trim();
+						const preserveFromPrimaryRaw = String(
+							this.getNodeParameter('preserveFromPrimary', i) ?? '',
+						).trim();
+						const mergeOpts = this.getNodeParameter('mergeOptions', i) as {
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = mergeOpts.millisecondsBetweenItems ?? 50;
+
+						const secondaryIds = objectIdsToMergeRaw
+							.split(',')
+							.map((s) => s.trim())
+							.filter(Boolean);
+
+						const propertiesToPreserve = preserveFromPrimaryRaw
+							? preserveFromPrimaryRaw.split(',').map((s) => s.trim()).filter(Boolean)
+							: [];
+
+						// Step 1: Read primary's properties before any merges
+						const preservedValues: Record<string, unknown> = {};
+						if (propertiesToPreserve.length > 0) {
+							const getUrl = buildHubSpotUrl(
+								HUBSPOT_BASE,
+								`${objectsPath}/${primaryObjectId}`,
+								{ properties: propertiesToPreserve },
+							);
+							const primaryRecord = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{ method: 'GET', url: getUrl, headers: BASE_HEADERS },
+							)) as { properties?: Record<string, unknown> };
+
+							const allProps = primaryRecord.properties ?? {};
+							for (const prop of propertiesToPreserve) {
+								if (allProps[prop] !== undefined && allProps[prop] !== null && allProps[prop] !== '') {
+									preservedValues[prop] = allProps[prop];
+								}
+							}
+						}
+
+						// Step 2: Merge each secondary into the current primary sequentially
+						let currentPrimaryId = primaryObjectId;
+						let mergeResponse: JsonObject = {};
+
+						for (const secondaryId of secondaryIds) {
+							mergeResponse = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{
+									method: 'POST',
+									url: `${HUBSPOT_BASE}${objectsPath}/merge`,
+									headers: BASE_HEADERS,
+									body: JSON.stringify({
+										primaryObjectId: currentPrimaryId,
+										objectIdToMerge: secondaryId,
+									}),
+								},
+							)) as JsonObject;
+
+							currentPrimaryId = (mergeResponse.id as string) ?? currentPrimaryId;
+						}
+
+						// Step 3: Restore preserved property values on the surviving record
+						if (Object.keys(preservedValues).length > 0) {
+							await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+								method: 'PATCH',
+								url: `${HUBSPOT_BASE}${objectsPath}/${currentPrimaryId}`,
+								headers: BASE_HEADERS,
+								body: JSON.stringify({ properties: preservedValues }),
+							});
+						}
+
+						returnData.push({
+							json: { ...mergeResponse, survivingId: currentPrimaryId },
+							pairedItem: { item: i },
+						});
+					}
+
 					// ── BATCH DELETE ──────────────────────────────────────────────────
 					if (operation === 'batchDelete') {
 						const body = parseJsonParam(this.getNodeParameter('batchDeleteBody', i));

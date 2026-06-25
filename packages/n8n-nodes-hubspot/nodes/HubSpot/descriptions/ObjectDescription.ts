@@ -1,5 +1,7 @@
 import { INodeProperties } from 'n8n-workflow';
 
+const MERGE_ELIGIBLE_TYPES = ['0-1', '0-2', '0-3', '0-5'];
+
 const msOption: INodeProperties = {
 	displayName: 'Milliseconds Between Items',
 	name: 'millisecondsBetweenItems',
@@ -51,7 +53,7 @@ export const objectDescription: INodeProperties[] = [
 		description: 'The HubSpot CRM object type to operate on',
 	},
 
-	// ── Operation ─────────────────────────────────────────────────────────────
+	// ── Operation (Contacts, Companies, Deals, Tickets — includes Merge) ────────
 	{
 		displayName: 'Operation',
 		name: 'operation',
@@ -60,6 +62,98 @@ export const objectDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['objects'],
+				objectType: MERGE_ELIGIBLE_TYPES,
+			},
+		},
+		options: [
+			{
+				name: 'Batch Create',
+				value: 'batchCreate',
+				description: 'Create multiple objects in a single request',
+				action: 'Batch create objects',
+			},
+			{
+				name: 'Batch Delete',
+				value: 'batchDelete',
+				description: 'Archive multiple objects in a single request',
+				action: 'Batch delete objects',
+			},
+			{
+				name: 'Batch Read',
+				value: 'batchRead',
+				description: 'Read multiple objects by ID in a single request',
+				action: 'Batch read objects',
+			},
+			{
+				name: 'Batch Update',
+				value: 'batchUpdate',
+				description: 'Update multiple existing objects in a single request',
+				action: 'Batch update objects',
+			},
+			{
+				name: 'Batch Upsert',
+				value: 'batchUpsert',
+				description: 'Create or update multiple objects in a single request',
+				action: 'Batch upsert objects',
+			},
+			{
+				name: 'Create',
+				value: 'create',
+				description: 'Create a new object',
+				action: 'Create an object',
+			},
+			{
+				name: 'Delete',
+				value: 'delete',
+				description: 'Delete an object by ID',
+				action: 'Delete an object',
+			},
+			{
+				name: 'Get',
+				value: 'get',
+				description: 'Retrieve a single object by ID',
+				action: 'Get an object',
+			},
+			{
+				name: 'List',
+				value: 'list',
+				description: 'List objects of a given type',
+				action: 'List objects',
+			},
+			{
+				name: 'Merge',
+				value: 'merge',
+				description: 'Merge two or more records into a single surviving record',
+				action: 'Merge objects',
+			},
+			{
+				name: 'Search',
+				value: 'search',
+				description: 'Search for objects using filters',
+				action: 'Search objects',
+			},
+			{
+				name: 'Update',
+				value: 'update',
+				description: 'Update an existing object',
+				action: 'Update an object',
+			},
+		],
+		default: 'list',
+	},
+
+	// ── Operation (all other object types — no Merge) ─────────────────────────
+	{
+		displayName: 'Operation',
+		name: 'operation',
+		type: 'options',
+		noDataExpression: true,
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+			},
+			hide: {
+				objectType: MERGE_ELIGIBLE_TYPES,
 			},
 		},
 		options: [
@@ -800,5 +894,67 @@ export const objectDescription: INodeProperties[] = [
 				operation: ['batchDelete'],
 			},
 		},
+	},
+
+	// ── MERGE ─────────────────────────────────────────────────────────────────
+	{
+		displayName: 'Primary Object ID',
+		name: 'primaryObjectId',
+		type: 'string',
+		required: true,
+		default: '',
+		description:
+			'HubSpot record ID of the primary object. This record survives the merge and all secondary records are absorbed into it.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['merge'],
+			},
+		},
+	},
+	{
+		displayName: 'Object IDs to Merge',
+		name: 'objectIdsToMerge',
+		type: 'string',
+		required: true,
+		default: '',
+		placeholder: '123,456,789',
+		description:
+			'Comma-separated list of HubSpot record IDs to merge into the primary. When multiple IDs are provided, each is merged sequentially: after the first merge, the surviving record ID is used as the primary for the next merge.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['merge'],
+			},
+		},
+	},
+	{
+		displayName: 'Properties to Preserve From Primary',
+		name: 'preserveFromPrimary',
+		type: 'string',
+		default: '',
+		placeholder: 'email,firstname,phone',
+		description:
+			'Comma-separated list of property names to read from the primary object before merging. After the merge completes, these property values are written back to the surviving record to ensure they are not overwritten by the secondary.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['merge'],
+			},
+		},
+	},
+	{
+		displayName: 'Additional Options',
+		name: 'mergeOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['merge'],
+			},
+		},
+		options: [msOption],
 	},
 ];
