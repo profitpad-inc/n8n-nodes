@@ -748,6 +748,31 @@ export const objectDescription: INodeProperties[] = [
 
 	// ── BATCH READ ────────────────────────────────────────────────────────────
 	{
+		displayName: 'Input Mode',
+		name: 'batchReadInputMode',
+		type: 'options',
+		noDataExpression: true,
+		options: [
+			{
+				name: 'Custom JSON',
+				value: 'json',
+				description: 'Provide the raw batch read request body as JSON',
+			},
+			{
+				name: 'Fields',
+				value: 'ui',
+				description: 'Provide a list of object IDs and options',
+			},
+		],
+		default: 'json',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchRead'],
+			},
+		},
+	},
+	{
 		displayName: 'Body',
 		name: 'batchReadBody',
 		type: 'json',
@@ -768,8 +793,150 @@ export const objectDescription: INodeProperties[] = [
 			show: {
 				resource: ['objects'],
 				operation: ['batchRead'],
+				batchReadInputMode: ['json'],
 			},
 		},
+	},
+	{
+		displayName: 'Object IDs',
+		name: 'batchReadObjectIds',
+		type: 'string',
+		required: true,
+		default: '',
+		placeholder: '123,456,789',
+		description:
+			'Comma-separated list of HubSpot record IDs, or values of the property specified in <em>ID Property</em>',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchRead'],
+				batchReadInputMode: ['ui'],
+			},
+		},
+	},
+	{
+		displayName: 'Return All',
+		name: 'batchReadReturnAll',
+		type: 'boolean',
+		default: false,
+		description: 'Whether to read all provided object IDs or only up to a given limit',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchRead'],
+				batchReadInputMode: ['ui'],
+			},
+		},
+	},
+	{
+		displayName: 'Return All Mode',
+		name: 'batchReadReturnAllMode',
+		type: 'options',
+		noDataExpression: true,
+		default: 'eachResult',
+		description: 'How to output the fetched results',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchRead'],
+				batchReadInputMode: ['ui'],
+				batchReadReturnAll: [true],
+			},
+		},
+		options: [
+			{
+				name: 'All Results as 1 Item',
+				value: 'allInOne',
+				description:
+					'Aggregate all batches and return every result combined in a single output item',
+			},
+			{
+				name: 'Each Page as 1 Item',
+				value: 'eachPage',
+				description: 'Return each batch response as a separate output item',
+			},
+			{
+				name: 'Each Result as 1 Item',
+				value: 'eachResult',
+				description: 'Return each individual record as a separate output item',
+			},
+		],
+	},
+	{
+		displayName: 'Max Pages',
+		name: 'batchReadMaxPages',
+		type: 'number',
+		typeOptions: { minValue: 1, numberPrecision: 0 },
+		default: 10,
+		description: 'Maximum number of batch requests to send. Each batch reads up to 100 object IDs.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchRead'],
+				batchReadInputMode: ['ui'],
+				batchReadReturnAll: [true],
+			},
+		},
+	},
+	{
+		displayName: 'Limit',
+		name: 'batchReadLimit',
+		type: 'number',
+		typeOptions: { minValue: 1, maxValue: 100 },
+		default: 100,
+		description: 'Max number of object IDs to read',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchRead'],
+				batchReadInputMode: ['ui'],
+				batchReadReturnAll: [false],
+			},
+		},
+	},
+	{
+		displayName: 'Additional Options',
+		name: 'batchReadOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchRead'],
+				batchReadInputMode: ['ui'],
+			},
+		},
+		options: [
+			{
+				displayName: 'ID Property',
+				name: 'idProperty',
+				type: 'string',
+				default: '',
+				placeholder: 'email',
+				description:
+					'Look up records by this property instead of the record ID (e.g. <em>email</em> for contacts)',
+			},
+			msOption,
+			{
+				displayName: 'Properties',
+				name: 'properties',
+				type: 'string',
+				default: '',
+				placeholder: 'email,firstname,lastname',
+				description:
+					'Comma-separated list of property names to return. Returns all simple properties when left blank.',
+			},
+			{
+				displayName: 'Properties With History',
+				name: 'propertiesWithHistory',
+				type: 'string',
+				default: '',
+				placeholder: 'email,phone',
+				description:
+					'Comma-separated list of properties to return along with their historical values',
+			},
+		],
 	},
 
 	// ── BATCH CREATE ──────────────────────────────────────────────────────────

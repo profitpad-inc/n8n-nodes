@@ -575,20 +575,109 @@ export class HubspotApi implements INodeType {
 
 					// ── BATCH READ ────────────────────────────────────────────────────
 					if (operation === 'batchRead') {
-						const body = parseJsonParam(this.getNodeParameter('batchReadBody', i));
+						const batchReadInputMode = this.getNodeParameter(
+							'batchReadInputMode',
+							i,
+						) as string;
 
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
-							this,
-							'hubspotApi',
-							{
-								method: 'POST',
-								url: `${HUBSPOT_BASE}${objectsPath}/batch/read`,
-								headers: BASE_HEADERS,
-								body: JSON.stringify(body),
-							},
-						)) as JsonObject;
+						if (batchReadInputMode === 'json') {
+							const body = parseJsonParam(this.getNodeParameter('batchReadBody', i));
 
-						returnData.push({ json: response, pairedItem: { item: i } });
+							const response = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{
+									method: 'POST',
+									url: `${HUBSPOT_BASE}${objectsPath}/batch/read`,
+									headers: BASE_HEADERS,
+									body: JSON.stringify(body),
+								},
+							)) as JsonObject;
+
+							returnData.push({ json: response, pairedItem: { item: i } });
+						} else {
+							const objectIds = String(this.getNodeParameter('batchReadObjectIds', i))
+								.split(',')
+								.map((s) => s.trim())
+								.filter(Boolean);
+							const returnAll = this.getNodeParameter('batchReadReturnAll', i) as boolean;
+							const opts = this.getNodeParameter('batchReadOptions', i) as {
+								properties?: string;
+								propertiesWithHistory?: string;
+								idProperty?: string;
+								millisecondsBetweenItems?: number;
+							};
+
+							delayMs = opts.millisecondsBetweenItems ?? 50;
+
+							const propertiesList = opts.properties
+								? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
+								: [];
+							const propertiesWithHistoryList = opts.propertiesWithHistory
+								? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
+								: [];
+
+							const idsToProcess = returnAll
+								? objectIds
+								: objectIds.slice(0, this.getNodeParameter('batchReadLimit', i) as number);
+
+							const maxPages = returnAll
+								? Math.max(
+										1,
+										Math.floor(this.getNodeParameter('batchReadMaxPages', i) as number),
+									)
+								: 1;
+							const returnAllMode = returnAll
+								? (this.getNodeParameter('batchReadReturnAllMode', i) as string)
+								: 'eachPage';
+
+							const chunks: string[][] = [];
+							for (let c = 0; c < idsToProcess.length; c += 100) {
+								chunks.push(idsToProcess.slice(c, c + 100));
+							}
+
+							const allResults: JsonObject[] = [];
+
+							for (const [pageIndex, chunk] of chunks.entries()) {
+								if (pageIndex >= maxPages) break;
+
+								const body: JsonObject = {
+									inputs: chunk.map((id) => ({ id })),
+									...(propertiesList.length ? { properties: propertiesList } : {}),
+									...(propertiesWithHistoryList.length
+										? { propertiesWithHistory: propertiesWithHistoryList }
+										: {}),
+									...(opts.idProperty ? { idProperty: opts.idProperty } : {}),
+								};
+
+								const response = (await this.helpers.httpRequestWithAuthentication.call(
+									this,
+									'hubspotApi',
+									{
+										method: 'POST',
+										url: `${HUBSPOT_BASE}${objectsPath}/batch/read`,
+										headers: BASE_HEADERS,
+										body: JSON.stringify(body),
+									},
+								)) as JsonObject;
+
+								const results = (response.results as JsonObject[] | undefined) ?? [];
+
+								if (returnAllMode === 'eachPage') {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								} else if (returnAllMode === 'eachResult') {
+									for (const result of results) {
+										returnData.push({ json: result, pairedItem: { item: i } });
+									}
+								} else {
+									allResults.push(...results);
+								}
+							}
+
+							if (returnAllMode === 'allInOne') {
+								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+							}
+						}
 					}
 
 					// ── BATCH CREATE ──────────────────────────────────────────────────
