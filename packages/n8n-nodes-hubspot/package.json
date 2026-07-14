@@ -1,6 +1,6 @@
 {
   "name": "@profitpad-inc/n8n-nodes-hubspot",
-  "version": "0.1.27",
+  "version": "0.1.28",
   "description": "n8n community node for the Hubspot API",
   "license": "MIT",
   "homepage": "",
