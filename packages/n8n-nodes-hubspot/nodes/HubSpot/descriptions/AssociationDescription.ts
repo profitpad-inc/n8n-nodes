@@ -1,30 +1,6 @@
 import { INodeProperties } from 'n8n-workflow';
 
-const OBJECT_TYPE_OPTIONS = [
-	{ name: 'Calls (0-48)', value: '0-48' },
-	{ name: 'Carts (0-142)', value: '0-142' },
-	{ name: 'Communications (0-18)', value: '0-18' },
-	{ name: 'Companies (0-2)', value: '0-2' },
-	{ name: 'Contacts (0-1)', value: '0-1' },
-	{ name: 'Contracts (0-721)', value: '0-721' },
-	{ name: 'Deals (0-3)', value: '0-3' },
-	{ name: 'Emails (0-49)', value: '0-49' },
-	{ name: 'Invoices (0-53)', value: '0-53' },
-	{ name: 'Leads (0-136)', value: '0-136' },
-	{ name: 'Line Items (0-8)', value: '0-8' },
-	{ name: 'Meetings (0-47)', value: '0-47' },
-	{ name: 'Notes (0-46)', value: '0-46' },
-	{ name: 'Orders (0-123)', value: '0-123' },
-	{ name: 'Payments (0-101)', value: '0-101' },
-	{ name: 'Products (0-7)', value: '0-7' },
-	{ name: 'Projects (0-970)', value: '0-970' },
-	{ name: 'Quotes (0-14)', value: '0-14' },
-	{ name: 'Services (0-162)', value: '0-162' },
-	{ name: 'Subscriptions (0-69)', value: '0-69' },
-	{ name: 'Tasks (0-27)', value: '0-27' },
-	{ name: 'Tickets (0-5)', value: '0-5' },
-	{ name: 'Users (Users)', value: 'users' },
-];
+import { OBJECT_TYPE_OPTIONS } from '../helpers';
 
 export const associationDescription: INodeProperties[] = [
 	// ── Operation ─────────────────────────────────────────────────────────────

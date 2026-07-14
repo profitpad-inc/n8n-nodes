@@ -29,6 +29,7 @@ be approved
   implement the missing parts** based on the real requirements / API docs.
 - Never output `Wordpress`-specific code unless the project is actually about
   WordPress.
+- Don't test things in a dev n8n instance.  Let the user do the testing
 
 ## Project structure
 There are two main folders in this project:

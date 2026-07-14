@@ -10,11 +10,18 @@ import {
 
 import { associationDescription } from './descriptions/AssociationDescription';
 import { objectDescription } from './descriptions/ObjectDescription';
-import { buildHubSpotUrl } from './helpers';
+import { propertyDescription } from './descriptions/PropertyDescription';
+import {
+	buildHubSpotUrl,
+	getAllProperties,
+	getEnumerationProperties,
+	getProperties,
+} from './helpers';
 
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const OBJECTS_BASE_PATH = '/crm/v3/objects';
 const ASSOC_BASE_PATH = '/crm/associations/2026-03';
+const PROPERTIES_BASE_PATH = '/crm/properties/2026-03';
 
 const BASE_HEADERS = {
 	'content-type': 'application/json',
@@ -68,12 +75,26 @@ export class HubspotApi implements INodeType {
 						description:
 							'Work with HubSpot CRM objects — contacts, companies, deals, and more',
 					},
+					{
+						name: 'Properties',
+						value: 'properties',
+						description: 'Manage HubSpot CRM property definitions and their dropdown options',
+					},
 				],
 				default: 'objects',
 			},
 			...associationDescription,
 			...objectDescription,
+			...propertyDescription,
 		],
+	};
+
+	methods = {
+		loadOptions: {
+			getProperties,
+			getEnumerationProperties,
+			getAllProperties,
+		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -832,6 +853,151 @@ export class HubspotApi implements INodeType {
 						});
 
 						returnData.push({ json: { success: true }, pairedItem: { item: i } });
+					}
+				}
+
+				if (resource === 'properties') {
+					const objectType = this.getNodeParameter('objectType', i) as string;
+					const propertiesPath = `${PROPERTIES_BASE_PATH}/${objectType}`;
+
+					// ── GET PROPERTY ──────────────────────────────────────────────────────
+					if (operation === 'getProperty') {
+						const propertyName = String(this.getNodeParameter('getPropertyName', i)).trim();
+
+						const response = (await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'GET',
+								url: `${HUBSPOT_BASE}${propertiesPath}/${propertyName}`,
+								headers: BASE_HEADERS,
+							},
+						)) as JsonObject;
+
+						returnData.push({ json: response, pairedItem: { item: i } });
+					}
+
+					// ── LIST PROPERTIES ─────────────────────────────────────────────────
+					if (operation === 'listProperties') {
+						const response = (await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'GET',
+								url: `${HUBSPOT_BASE}${propertiesPath}`,
+								headers: BASE_HEADERS,
+							},
+						)) as JsonObject;
+
+						returnData.push({ json: response, pairedItem: { item: i } });
+					}
+
+					// ── LIST PROPERTY GROUPS ─────────────────────────────────────────────
+					if (operation === 'listPropertyGroups') {
+						const response = (await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'GET',
+								url: `${HUBSPOT_BASE}${propertiesPath}/groups`,
+								headers: BASE_HEADERS,
+							},
+						)) as JsonObject;
+
+						returnData.push({ json: response, pairedItem: { item: i } });
+					}
+
+					// ── UPDATE PROPERTY LABEL ────────────────────────────────────────────
+					if (operation === 'updatePropertyLabel') {
+						const propertyName = String(this.getNodeParameter('propertyName', i)).trim();
+						const label = this.getNodeParameter('label', i) as string;
+						const fields = this.getNodeParameter('updatePropertyLabelFields', i) as {
+							description?: string;
+						};
+
+						const body: JsonObject = { label };
+						if (fields.description !== undefined) {
+							body.description = fields.description;
+						}
+
+						const response = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'PATCH',
+								url: `${HUBSPOT_BASE}${propertiesPath}/${propertyName}`,
+								headers: BASE_HEADERS,
+								body: JSON.stringify(body),
+							},
+						);
+
+						returnData.push({ json: response as JsonObject, pairedItem: { item: i } });
+					}
+
+					// ── UPDATE DROPDOWN OPTIONS ───────────────────────────────────────────
+					if (operation === 'updateDropdownOptions') {
+						const propertyName = String(
+							this.getNodeParameter('dropdownPropertyName', i),
+						).trim();
+						const mode = this.getNodeParameter('dropdownUpdateMode', i) as string;
+						const propertyUrl = `${HUBSPOT_BASE}${propertiesPath}/${propertyName}`;
+
+						let finalOptions: JsonObject[];
+
+						if (mode === 'remove') {
+							const valuesToRemove = new Set(
+								String(this.getNodeParameter('removeOptionValues', i))
+									.split(',')
+									.map((value) => value.trim())
+									.filter(Boolean),
+							);
+
+							const currentProperty = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{ method: 'GET', url: propertyUrl, headers: BASE_HEADERS },
+							)) as { options?: JsonObject[] };
+							const currentOptions = currentProperty.options ?? [];
+
+							finalOptions = currentOptions.filter(
+								(option) => !valuesToRemove.has(option.value as string),
+							);
+						} else {
+							const providedBody = parseJsonParam(
+								this.getNodeParameter('dropdownOptions', i),
+							) as { options?: JsonObject[] };
+							const providedOptions = providedBody.options ?? [];
+
+							if (mode === 'overwrite') {
+								finalOptions = providedOptions;
+							} else {
+								const currentProperty = (await this.helpers.httpRequestWithAuthentication.call(
+									this,
+									'hubspotApi',
+									{ method: 'GET', url: propertyUrl, headers: BASE_HEADERS },
+								)) as { options?: JsonObject[] };
+								const currentOptions = currentProperty.options ?? [];
+								const providedValues = new Set(providedOptions.map((option) => option.value));
+
+								finalOptions = [
+									...currentOptions.filter((option) => !providedValues.has(option.value)),
+									...providedOptions,
+								];
+							}
+						}
+
+						const response = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'PATCH',
+								url: propertyUrl,
+								headers: BASE_HEADERS,
+								body: JSON.stringify({ options: finalOptions }),
+							},
+						);
+
+						returnData.push({ json: response as JsonObject, pairedItem: { item: i } });
 					}
 				}
 			} catch (error) {
