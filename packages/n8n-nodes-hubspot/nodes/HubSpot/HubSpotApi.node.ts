@@ -6,22 +6,36 @@ import {
 	JsonObject,
 	NodeApiError,
 	NodeConnectionTypes,
+	NodeOperationError,
 } from 'n8n-workflow';
 
 import { associationDescription } from './descriptions/AssociationDescription';
 import { objectDescription } from './descriptions/ObjectDescription';
+import { ownerDescription } from './descriptions/OwnerDescription';
 import { propertyDescription } from './descriptions/PropertyDescription';
 import {
 	buildHubSpotUrl,
+	findOwnerByField,
 	getAllProperties,
 	getEnumerationProperties,
 	getProperties,
+	OWNERS_BASE_PATH,
+	resolveUsersLookup,
+	UsersLookup,
 } from './helpers';
 
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const OBJECTS_BASE_PATH = '/crm/v3/objects';
 const ASSOC_BASE_PATH = '/crm/associations/2026-03';
 const PROPERTIES_BASE_PATH = '/crm/properties/2026-03';
+const USERS_OBJECT_PATH = `${OBJECTS_BASE_PATH}/users`;
+const USERS_ALWAYS_INCLUDED_PROPERTIES = [
+	'hs_internal_user_id',
+	'hs_searchable_calculated_name',
+	'hs_family_name',
+	'hs_given_name',
+	'hs_email',
+];
 
 const BASE_HEADERS = {
 	'content-type': 'application/json',
@@ -76,6 +90,11 @@ export class HubspotApi implements INodeType {
 							'Work with HubSpot CRM objects — contacts, companies, deals, and more',
 					},
 					{
+						name: 'Owners',
+						value: 'owners',
+						description: 'Work with HubSpot users and the owners assigned to CRM records',
+					},
+					{
 						name: 'Properties',
 						value: 'properties',
 						description: 'Manage HubSpot CRM property definitions and their dropdown options',
@@ -85,6 +104,7 @@ export class HubspotApi implements INodeType {
 			},
 			...associationDescription,
 			...objectDescription,
+			...ownerDescription,
 			...propertyDescription,
 		],
 	};
@@ -422,6 +442,40 @@ export class HubspotApi implements INodeType {
 							);
 						}
 
+						let createAssociations: unknown[];
+						if (createInputMode === 'json') {
+							const parsedAssociations = parseJsonParam(
+								this.getNodeParameter('createAssociationsJson', i),
+							) as unknown;
+							createAssociations = Array.isArray(parsedAssociations) ? parsedAssociations : [];
+						} else {
+							const createAssocParam = this.getNodeParameter('createAssociations', i) as {
+								associationValues?: Array<{
+									toObjectId: string;
+									associationTypeIds: string;
+									associationCategory: string;
+								}>;
+							};
+							createAssociations = (createAssocParam.associationValues ?? []).map(
+								({ toObjectId, associationTypeIds, associationCategory }) => ({
+									to: { id: String(toObjectId).trim() },
+									types: String(associationTypeIds)
+										.split(',')
+										.map((s) => s.trim())
+										.filter(Boolean)
+										.map((associationTypeId) => ({
+											associationTypeId: Number(associationTypeId),
+											associationCategory,
+										})),
+								}),
+							);
+						}
+
+						const createBody: Record<string, unknown> = { properties: createProperties };
+						if (createAssociations.length > 0) {
+							createBody.associations = createAssociations;
+						}
+
 						const response = await this.helpers.httpRequestWithAuthentication.call(
 							this,
 							'hubspotApi',
@@ -429,7 +483,7 @@ export class HubspotApi implements INodeType {
 								method: 'POST',
 								url: `${HUBSPOT_BASE}${objectsPath}`,
 								headers: BASE_HEADERS,
-								body: JSON.stringify({ properties: createProperties }),
+								body: JSON.stringify(createBody),
 							},
 						);
 
@@ -853,6 +907,438 @@ export class HubspotApi implements INodeType {
 						});
 
 						returnData.push({ json: { success: true }, pairedItem: { item: i } });
+					}
+				}
+
+				if (resource === 'owners') {
+					const objectType = this.getNodeParameter('objectType', i) as string;
+
+					const fetchLinkedUser = async (
+						userId: number | string | null | undefined,
+					): Promise<JsonObject | null> => {
+						if (userId === undefined || userId === null) return null;
+						const userUrl = buildHubSpotUrl(HUBSPOT_BASE, `${USERS_OBJECT_PATH}/${userId}`, {
+							idProperty: 'hs_internal_user_id',
+							properties: USERS_ALWAYS_INCLUDED_PROPERTIES,
+						});
+						try {
+							return (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+								method: 'GET',
+								url: userUrl,
+								headers: BASE_HEADERS,
+							})) as JsonObject;
+						} catch {
+							return null;
+						}
+					};
+
+					const fetchLinkedOwner = async (
+						hsInternalUserId: unknown,
+						archived: boolean,
+					): Promise<JsonObject | null> => {
+						if (hsInternalUserId === undefined || hsInternalUserId === null || hsInternalUserId === '') {
+							return null;
+						}
+						const match = await findOwnerByField.call(
+							this,
+							'userId',
+							String(hsInternalUserId),
+							archived,
+						);
+						return (match as JsonObject | undefined) ?? null;
+					};
+
+					// ── GET ──────────────────────────────────────────────────────────
+					if (operation === 'get') {
+						const objectId = String(this.getNodeParameter('objectId', i)).trim();
+						const idProperty = String(this.getNodeParameter('idProperty', i)).trim();
+
+						if (objectType === 'users') {
+							const opts = this.getNodeParameter('additionalOptions', i) as {
+								properties?: string;
+								propertiesWithHistory?: string;
+								archived?: boolean;
+								errorWhenNotFound?: boolean;
+								millisecondsBetweenItems?: number;
+							};
+
+							delayMs = opts.millisecondsBetweenItems ?? 50;
+							const errorWhenNotFound = opts.errorWhenNotFound !== false;
+
+							let lookup: UsersLookup | undefined;
+							try {
+								lookup = await resolveUsersLookup.call(this, idProperty, objectId, i);
+							} catch (error) {
+								if (errorWhenNotFound) {
+									throw new NodeOperationError(this.getNode(), error as Error, { itemIndex: i });
+								}
+							}
+
+							if (!lookup) {
+								returnData.push({ json: { objectFound: false }, pairedItem: { item: i } });
+							} else {
+								const propertiesList = Array.from(
+									new Set([
+										...USERS_ALWAYS_INCLUDED_PROPERTIES,
+										...(opts.properties
+											? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
+											: []),
+									]),
+								);
+								const propertiesWithHistoryList = opts.propertiesWithHistory
+									? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
+									: [];
+
+								const url = buildHubSpotUrl(HUBSPOT_BASE, `${USERS_OBJECT_PATH}/${lookup.realId}`, {
+									properties: propertiesList,
+									propertiesWithHistory: propertiesWithHistoryList,
+									idProperty: lookup.idPropertyParam,
+									archived: opts.archived,
+								});
+
+								try {
+									const response = (await this.helpers.httpRequestWithAuthentication.call(
+										this,
+										'hubspotApi',
+										{ method: 'GET', url, headers: BASE_HEADERS },
+									)) as JsonObject;
+
+									const responseProperties =
+										(response.properties as JsonObject | undefined) ?? {};
+									const owner = await fetchLinkedOwner(
+										responseProperties.hs_internal_user_id,
+										opts.archived ?? false,
+									);
+
+									returnData.push({
+										json: { ...response, objectFound: true, owner },
+										pairedItem: { item: i },
+									});
+								} catch (error) {
+									const is404 =
+										(error as { httpCode?: string | null }).httpCode === '404' ||
+										(error as { response?: { status?: number } }).response?.status === 404;
+									if (!errorWhenNotFound && is404) {
+										returnData.push({ json: { objectFound: false }, pairedItem: { item: i } });
+									} else {
+										throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex: i });
+									}
+								}
+							}
+						} else {
+							const opts = this.getNodeParameter('additionalOptions', i) as {
+								archived?: boolean;
+								errorWhenNotFound?: boolean;
+								millisecondsBetweenItems?: number;
+							};
+
+							delayMs = opts.millisecondsBetweenItems ?? 50;
+							const errorWhenNotFound = opts.errorWhenNotFound !== false;
+							const archived = opts.archived ?? false;
+
+							if (idProperty === 'ownerId' || idProperty === 'id') {
+								const url = buildHubSpotUrl(HUBSPOT_BASE, `${OWNERS_BASE_PATH}/${objectId}`, {
+									archived,
+								});
+
+								try {
+									const response = (await this.helpers.httpRequestWithAuthentication.call(
+										this,
+										'hubspotApi',
+										{ method: 'GET', url, headers: BASE_HEADERS },
+									)) as JsonObject;
+
+									const user = await fetchLinkedUser(
+										response.userId as number | string | null | undefined,
+									);
+
+									returnData.push({
+										json: { ...response, objectFound: true, user },
+										pairedItem: { item: i },
+									});
+								} catch (error) {
+									const is404 =
+										(error as { httpCode?: string | null }).httpCode === '404' ||
+										(error as { response?: { status?: number } }).response?.status === 404;
+									if (!errorWhenNotFound && is404) {
+										returnData.push({ json: { objectFound: false }, pairedItem: { item: i } });
+									} else {
+										throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex: i });
+									}
+								}
+							} else {
+								const match = await findOwnerByField.call(this, idProperty, objectId, archived);
+
+								if (match) {
+									const user = await fetchLinkedUser(
+										match.userId as number | string | null | undefined,
+									);
+
+									returnData.push({
+										json: { ...match, objectFound: true, user },
+										pairedItem: { item: i },
+									});
+								} else if (!errorWhenNotFound) {
+									returnData.push({ json: { objectFound: false }, pairedItem: { item: i } });
+								} else {
+									throw new NodeOperationError(
+										this.getNode(),
+										`No owner found where "${idProperty}" is "${objectId}"`,
+										{ itemIndex: i },
+									);
+								}
+							}
+						}
+					}
+
+					// ── LIST ─────────────────────────────────────────────────────────
+					if (operation === 'list') {
+						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+						const opts = this.getNodeParameter('listOptions', i) as {
+							after?: string;
+							archived?: boolean;
+							properties?: string;
+							propertiesWithHistory?: string;
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = opts.millisecondsBetweenItems ?? 50;
+
+						const basePath = objectType === 'users' ? USERS_OBJECT_PATH : OWNERS_BASE_PATH;
+						const propertiesList =
+							objectType === 'users'
+								? Array.from(
+										new Set([
+											...USERS_ALWAYS_INCLUDED_PROPERTIES,
+											...(opts.properties
+												? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
+												: []),
+										]),
+									)
+								: [];
+						const propertiesWithHistoryList =
+							objectType === 'users' && opts.propertiesWithHistory
+								? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
+								: [];
+
+						if (returnAll) {
+							const maxPages = Math.max(
+								1,
+								Math.floor(this.getNodeParameter('maxPages', i) as number),
+							);
+							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+							let after: string | undefined;
+							let pageCount = 0;
+							const allResults: JsonObject[] = [];
+
+							do {
+								const url = buildHubSpotUrl(HUBSPOT_BASE, basePath, {
+									limit: 100,
+									after,
+									properties: propertiesList,
+									propertiesWithHistory: propertiesWithHistoryList,
+									archived: opts.archived,
+								});
+
+								const response = (await this.helpers.httpRequestWithAuthentication.call(
+									this,
+									'hubspotApi',
+									{ method: 'GET', url, headers: BASE_HEADERS },
+								)) as JsonObject;
+
+								const results = (response.results as JsonObject[] | undefined) ?? [];
+
+								if (returnAllMode === 'eachPage') {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								} else if (returnAllMode === 'eachResult') {
+									for (const result of results) {
+										returnData.push({ json: result, pairedItem: { item: i } });
+									}
+								} else {
+									allResults.push(...results);
+								}
+
+								pageCount++;
+								const paging = response.paging as JsonObject | undefined;
+								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
+							} while (after && pageCount < maxPages);
+
+							if (returnAllMode === 'allInOne') {
+								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+							}
+						} else {
+							const limit = this.getNodeParameter('limit', i) as number;
+
+							const url = buildHubSpotUrl(HUBSPOT_BASE, basePath, {
+								limit,
+								after: opts.after || undefined,
+								properties: propertiesList,
+								propertiesWithHistory: propertiesWithHistoryList,
+								archived: opts.archived,
+							});
+
+							const response = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{ method: 'GET', url, headers: BASE_HEADERS },
+							)) as JsonObject;
+
+							returnData.push({ json: response, pairedItem: { item: i } });
+						}
+					}
+
+					// ── SEARCH (Users only) ───────────────────────────────────────────
+					if (operation === 'search') {
+						const searchBodyRaw = this.getNodeParameter('searchBody', i);
+						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+						const opts = this.getNodeParameter('searchOptions', i) as {
+							archived?: boolean;
+							errorWhenNotFound?: boolean;
+							properties?: string;
+							propertiesWithHistory?: string;
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = opts.millisecondsBetweenItems ?? 50;
+						const errorWhenNotFound = opts.errorWhenNotFound !== false;
+
+						const propertiesList = opts.properties
+							? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
+							: [];
+						const propertiesWithHistoryList = opts.propertiesWithHistory
+							? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
+							: [];
+
+						const searchBodyBase: JsonObject = {
+							...parseJsonParam(searchBodyRaw),
+							...(opts.archived !== undefined ? { archived: opts.archived } : {}),
+							...(propertiesList.length ? { properties: propertiesList } : {}),
+							...(propertiesWithHistoryList.length
+								? { propertiesWithHistory: propertiesWithHistoryList }
+								: {}),
+						};
+						const searchUrl = `${HUBSPOT_BASE}${USERS_OBJECT_PATH}/search`;
+						let totalFound = 0;
+
+						if (returnAll) {
+							const maxPages = Math.max(
+								1,
+								Math.floor(this.getNodeParameter('maxPages', i) as number),
+							);
+							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+							let pageCount = 0;
+							let after: string | undefined;
+							const allResults: JsonObject[] = [];
+
+							do {
+								const pageBody: JsonObject = {
+									...searchBodyBase,
+									limit: 200,
+									...(after ? { after } : {}),
+								};
+
+								const response = (await this.helpers.httpRequestWithAuthentication.call(
+									this,
+									'hubspotApi',
+									{
+										method: 'POST',
+										url: searchUrl,
+										headers: BASE_HEADERS,
+										body: JSON.stringify(pageBody),
+									},
+								)) as JsonObject;
+
+								const results = (response.results as JsonObject[] | undefined) ?? [];
+								totalFound += results.length;
+
+								if (returnAllMode === 'eachPage') {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								} else if (returnAllMode === 'eachResult') {
+									for (const result of results) {
+										returnData.push({ json: result, pairedItem: { item: i } });
+									}
+								} else {
+									allResults.push(...results);
+								}
+
+								pageCount++;
+								const paging = response.paging as JsonObject | undefined;
+								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
+							} while (after && pageCount < maxPages);
+
+							if (returnAllMode === 'allInOne') {
+								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+							}
+						} else {
+							const response = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{
+									method: 'POST',
+									url: searchUrl,
+									headers: BASE_HEADERS,
+									body: JSON.stringify(searchBodyBase),
+								},
+							)) as JsonObject;
+
+							const results = (response.results as JsonObject[] | undefined) ?? [];
+							totalFound = results.length;
+
+							returnData.push({ json: response, pairedItem: { item: i } });
+						}
+
+						if (totalFound === 0 && errorWhenNotFound) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'No users found matching the search criteria',
+								{ itemIndex: i },
+							);
+						}
+					}
+
+					// ── UPDATE (Users only) ────────────────────────────────────────────
+					if (operation === 'update') {
+						const objectId = String(this.getNodeParameter('objectId', i)).trim();
+						const idProperty = String(this.getNodeParameter('idProperty', i)).trim();
+						const updateInputMode = this.getNodeParameter('updateInputMode', i) as string;
+						const updateOpts = this.getNodeParameter('updateOptions', i) as {
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = updateOpts.millisecondsBetweenItems ?? 50;
+
+						let updateProperties: Record<string, unknown>;
+						if (updateInputMode === 'json') {
+							updateProperties = parseJsonParam(
+								this.getNodeParameter('updateJson', i),
+							) as Record<string, unknown>;
+						} else {
+							const updateParam = this.getNodeParameter('updateFields', i) as {
+								propertyValues?: Array<{ name: string; value: string }>;
+							};
+							updateProperties = Object.fromEntries(
+								(updateParam.propertyValues ?? []).map(({ name, value }) => [name, value]),
+							);
+						}
+
+						const lookup = await resolveUsersLookup.call(this, idProperty, objectId, i);
+
+						const url = buildHubSpotUrl(HUBSPOT_BASE, `${USERS_OBJECT_PATH}/${lookup.realId}`, {
+							idProperty: lookup.idPropertyParam,
+						});
+
+						const response = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'PATCH',
+								url,
+								headers: BASE_HEADERS,
+								body: JSON.stringify({ properties: updateProperties }),
+							},
+						);
+
+						returnData.push({ json: response as JsonObject, pairedItem: { item: i } });
 					}
 				}
 

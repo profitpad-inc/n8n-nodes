@@ -515,6 +515,85 @@ export const objectDescription: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Associations',
+		name: 'createAssociations',
+		type: 'fixedCollection',
+		typeOptions: { multipleValues: true },
+		placeholder: 'Add Association',
+		default: {},
+		description: 'Associate the newly created object with other existing records',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['create'],
+				createInputMode: ['ui'],
+			},
+		},
+		options: [
+			{
+				name: 'associationValues',
+				displayName: 'Association',
+				values: [
+					{
+						displayName: 'Object ID to Associate',
+						name: 'toObjectId',
+						type: 'string',
+						default: '',
+						description: 'The record ID of the object to associate this new object with',
+					},
+					{
+						displayName: 'Association Type IDs',
+						name: 'associationTypeIds',
+						type: 'string',
+						default: '',
+						placeholder: '1,2',
+						description:
+							'Comma-separated list of association type IDs. See <a href="https://developers.hubspot.com/docs/api-reference/latest/crm/associations/associate-records/guide">HubSpot association type docs</a> for values.',
+					},
+					{
+						displayName: 'Association Category',
+						name: 'associationCategory',
+						type: 'options',
+						options: [
+							{ name: 'HubSpot Defined', value: 'HUBSPOT_DEFINED' },
+							{ name: 'User Defined', value: 'USER_DEFINED' },
+						],
+						default: 'HUBSPOT_DEFINED',
+						description:
+							'Whether the Association Type IDs are HubSpot-defined default types or custom user-defined types. Applies to all type IDs in this association.',
+					},
+				],
+			},
+		],
+	},
+	{
+		displayName: 'Associations',
+		name: 'createAssociationsJson',
+		type: 'json',
+		default: JSON.stringify(
+			[
+				{
+					to: { id: '123' },
+					types: [{ associationTypeId: 1, associationCategory: 'HUBSPOT_DEFINED' }],
+				},
+			],
+			null,
+			2,
+		),
+		// eslint-disable-next-line n8n-nodes-base/node-param-placeholder-miscased-id
+		placeholder:
+			'[\n  {\n    "to": {"id": "12345"},\n    "types": [{"associationTypeId": 1, "associationCategory": "HUBSPOT_DEFINED"}]\n  }\n]',
+		description:
+			'Associations to create as a JSON array. See <a href="https://developers.hubspot.com/docs/api-reference/legacy/crm/associations/guide">HubSpot association type docs</a> for association type IDs.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['create'],
+				createInputMode: ['json'],
+			},
+		},
+	},
+	{
 		displayName: 'Additional Options',
 		name: 'createOptions',
 		type: 'collection',
