@@ -396,6 +396,11 @@ export function resolveSearchInput(params: {
 			} catch {
 				result.invalidSortsJson = true;
 			}
+		} else {
+			// No separate Sorts (JSON) option set — honour a `sorts` array
+			// embedded directly in the pasted/legacy body instead of silently
+			// dropping it in favour of the default sort.
+			result.sorts = (result.baseSearchBody.sorts as JsonObject[] | undefined) ?? [];
 		}
 	} else {
 		result.filterGroups = buildFilterGroupsFromUi(params.filterGroupsUi ?? {});

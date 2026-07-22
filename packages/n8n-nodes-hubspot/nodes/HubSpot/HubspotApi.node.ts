@@ -593,7 +593,6 @@ export class HubspotApi implements INodeType {
 
 					// ── SEARCH ────────────────────────────────────────────────────────
 					if (operation === 'search') {
-						const searchInputMode = this.getNodeParameter('searchInputMode', i) as string;
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const searchOpts = this.getNodeParameter('searchOptions', i) as {
 							query?: string;
@@ -604,9 +603,22 @@ export class HubspotApi implements INodeType {
 
 						delayMs = searchOpts.millisecondsBetweenItems ?? 50;
 
+						// Back-compat: workflows built before the Fields/Custom JSON split
+						// stored the whole search request under a `searchBody` parameter
+						// that no longer exists in this node's UI. If it still has a value,
+						// treat it as the Custom JSON input so those workflows keep running
+						// instead of silently searching with no filters.
+						const legacySearchBody = (
+							this.getNodeParameter('searchBody', i, '') as string
+						).trim();
+						const searchInputMode = legacySearchBody
+							? 'json'
+							: (this.getNodeParameter('searchInputMode', i) as string);
+
 						const resolved = resolveSearchInput({
 							searchInputMode,
-							filterJson: this.getNodeParameter('filterJson', i, '') as string,
+							filterJson:
+								legacySearchBody || (this.getNodeParameter('filterJson', i, '') as string),
 							filterGroupsUi: this.getNodeParameter('filterGroupsUi', i, {}) as UiFilterGroups,
 							sortsJson: searchOpts.sortsJson,
 							sortsUi: searchOpts.sortsUi,
