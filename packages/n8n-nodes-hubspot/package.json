@@ -34,11 +34,11 @@
     "n8nNodesApiVersion": 1,
     "strict": true,
     "credentials": [
-      "dist/nodes/Hubspot/HubspotApi.credentials.js"
+      "dist/nodes/HubSpot/HubspotApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/Hubspot/HubspotApi.node.js",
-      "dist/nodes/Hubspot/HubspotApiTrigger.node.js"
+      "dist/nodes/HubSpot/HubspotApi.node.js",
+      "dist/nodes/HubSpot/HubspotApiTrigger.node.js"
     ]
   },
   "devDependencies": {

@@ -19,10 +19,13 @@ import {
 	getAllProperties,
 	getEnumerationProperties,
 	getProperties,
+	getSearchFilterProperties,
+	getSearchOperators,
 	OWNERS_BASE_PATH,
 	resolveUsersLookup,
 	UsersLookup,
 } from './helpers';
+import { resolveSearchInput, toStringList, UiFilterGroups, UiSorts } from './searchFilter';
 
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const OBJECTS_BASE_PATH = '/crm/v3/objects';
@@ -114,6 +117,8 @@ export class HubspotApi implements INodeType {
 			getProperties,
 			getEnumerationProperties,
 			getAllProperties,
+			getSearchFilterProperties,
+			getSearchOperators,
 		},
 	};
 
@@ -573,15 +578,50 @@ export class HubspotApi implements INodeType {
 
 					// ── SEARCH ────────────────────────────────────────────────────────
 					if (operation === 'search') {
-						const searchBodyRaw = this.getNodeParameter('searchBody', i);
+						const searchInputMode = this.getNodeParameter('searchInputMode', i) as string;
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const searchOpts = this.getNodeParameter('searchOptions', i) as {
+							query?: string;
+							sortsUi?: UiSorts;
+							sortsJson?: string;
 							millisecondsBetweenItems?: number;
 						};
 
 						delayMs = searchOpts.millisecondsBetweenItems ?? 50;
 
-						const searchBodyBase = parseJsonParam(searchBodyRaw);
+						const resolved = resolveSearchInput({
+							searchInputMode,
+							filterJson: this.getNodeParameter('filterJson', i, '') as string,
+							filterGroupsUi: this.getNodeParameter('filterGroupsUi', i, {}) as UiFilterGroups,
+							sortsJson: searchOpts.sortsJson,
+							sortsUi: searchOpts.sortsUi,
+						});
+
+						if (resolved.invalidFilterJson) {
+							throw new NodeOperationError(this.getNode(), 'Filters (JSON) is not valid JSON', {
+								itemIndex: i,
+							});
+						}
+						if (resolved.invalidSortsJson) {
+							throw new NodeOperationError(this.getNode(), 'Sorts (JSON) is not valid JSON', {
+								itemIndex: i,
+							});
+						}
+
+						const searchPropertiesList = toStringList(
+							this.getNodeParameter('properties', i) as string | string[],
+						);
+						const query = (searchOpts.query ?? '').trim();
+
+						const searchBodyBase: JsonObject = {
+							...resolved.baseSearchBody,
+							filterGroups: resolved.filterGroups,
+							sorts: resolved.sorts.length
+								? resolved.sorts
+								: [{ propertyName: 'hs_lastmodifieddate', direction: 'DESCENDING' }],
+							...(searchPropertiesList.length ? { properties: searchPropertiesList } : {}),
+							...(query ? { query } : {}),
+						};
 						const searchUrl = `${HUBSPOT_BASE}${objectsPath}/search`;
 
 						if (returnAll) {

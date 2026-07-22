@@ -107,11 +107,12 @@ Additional options: `properties`, `propertiesWithHistory`, `associations`, `idPr
 - HubSpot DELETE returns 204 No Content
 
 #### Search
-- Accepts a JSON body following [HubSpot search syntax](https://developers.hubspot.com/docs/api-reference/legacy/crm/objects/objects/search/search-objects)
-- Pre-filled with an example filter on `email`
+- Uses the shared **Search Filter Mode** UX (see `searchFilter.ts` below): a Fields / Custom JSON
+  toggle, a guided AND/OR **Filter Groups** builder with type-aware operator dropdown, a
+  **Properties** multi-select, and **Sorts** / **Sorts (JSON)** under Additional Options
+- Additional options: a **Query** free-text field, `millisecondsBetweenItems`
 - Supports `returnAll` (shared with List) and `maxPages` for pagination — sets `limit: 100` per page and tracks `paging.next.after`
 - `searchLimit` (1–200, default 10) used when `returnAll` is false
-- Additional options: `millisecondsBetweenItems`
 
 #### Batch operations
 - All accept a raw JSON body (pre-filled with a relevant example)
@@ -119,11 +120,59 @@ Additional options: `properties`, `propertiesWithHistory`, `associations`, `idPr
 - Batch Delete calls `POST .../batch/archive` (HubSpot's archive endpoint)
 
 ### Helpers — `nodes/HubSpot/helpers.ts`
-`buildHubSpotUrl(base, path, params)` — builds URLs with proper repeated params for arrays
-(e.g. `?properties=email&properties=firstname` instead of `?properties[0]=email`)
+- `buildHubSpotUrl(base, path, params)` — builds URLs with proper repeated params for arrays
+  (e.g. `?properties=email&properties=firstname` instead of `?properties[0]=email`)
+- `fetchProperties()` (private) — the single source every property `loadOptions` method
+  (`getProperties`, `getEnumerationProperties`, `getAllProperties`, `getSearchFilterProperties`)
+  calls through. Filters out "(legacy)"-labelled properties everywhere, and additionally filters
+  out `hs_createdate` / `hs_lastmodifieddate` when `objectType` is Contacts (`0-1`) — see the
+  Contacts date-property quirk below.
+- `getSearchFilterProperties` also injects `associations.0-<associationTypeId>` pseudo-properties
+  (from `associationTypes.ts`) so Filter Groups can filter by an associated record's ID.
+- `CONTACTS_OBJECT_TYPE` — exported constant (`'0-1'`) shared between `helpers.ts` and the Trigger
+  node so both the dropdown filtering and the polling logic agree on which object type is Contacts.
+
+### Shared search filter UI — `nodes/HubSpot/searchFilter.ts`
+Used by both the Objects → Search operation and the Trigger node so their filter/sort UX stays in
+lockstep:
+- `searchFilterModeProperty` / `filterGroupsUiProperty` / `filterJsonProperty` — the Fields /
+  Custom JSON toggle and the two filter-input variants
+- `propertiesProperty`, `sortsUiOption`, `sortsJsonOption` — the Properties multi-select and Sorts
+  fields
+- `resolveSearchInput(params)` — resolves `filterGroups` / `sorts` / any extra search-body keys from
+  whichever mode is active, and flags invalid JSON via `invalidFilterJson` / `invalidSortsJson`
+  rather than throwing directly (callers decide how to surface the error)
+
+### Association type table — `nodes/HubSpot/associationTypes.ts`
+`ASSOCIATION_TYPES` — a per-object-type table of `[associationTypeId, label]` pairs used to build
+the `associations.0-<id>` pseudo-property options in `getSearchFilterProperties`.
 
 ### Trigger node — `nodes/HubSpot/HubspotApiTrigger.node.ts`
-Stub only — `poll()` returns `null`. Not yet implemented.
+Fully implemented polling trigger. `objectType` (same dropdown as Objects) + `triggerOn`:
+- **New Records** / **Updated Records** / **New or Updated Records** — standard `lastmodifieddate`-
+  (or `createdate`-) windowed search, same Filter Groups/Filters (JSON)/Sorts UI as Search, living
+  in the main section.
+- **Property Changed** — a top-level **Trigger Properties** multi-select (fires if any selected
+  property changed value). Filter Groups/Filters (JSON) move into **Additional Options** (a
+  single-instance `fixedCollection` named "Search Filters", so one "Add Search Filters" click
+  reveals the mode toggle + both filter editors together — a bare `collection` would otherwise
+  require adding each one separately). Since HubSpot's Search API can't filter by *which* property
+  changed, `poll()` re-reads search candidates via `POST .../batch/read` with
+  `propertiesWithHistory`, chunked in groups of 100, and only keeps records where a watched
+  property's most recent history entry falls within the poll window. Each emitted record gets a
+  `changedProperties: [{ propertyName, value, timestamp }]` array. Manual "fetch test event" runs
+  skip the window check (any prior change validates the property selection) — same "skip time
+  filtering in manual mode" convention as the other trigger modes.
+- Poll-window filter values are ISO 8601 strings with a UTC offset (`toIsoStringWithOffset()`),
+  not raw epoch ms.
+- **Contacts date-property quirk**: Contacts doesn't accept `hs_createdate` / `hs_lastmodifieddate`
+  as search/sort properties, only the unprefixed `createdate` / `lastmodifieddate`. `poll()` derives
+  `createDateProperty` / `lastModifiedDateProperty` based on `objectType === CONTACTS_OBJECT_TYPE`
+  and uses those wherever it builds a time filter or default sort. Every other object type keeps
+  the `hs_`-prefixed versions.
+- `staticData.lastPollTime` (workflow static data) tracks the last successful poll; falls back to
+  "1 minute ago" if missing. Manual mode skips the poll-window filter entirely so the test run
+  validates filters/properties against all matching records, not just the last window.
 
 ---
 
@@ -140,10 +189,13 @@ Stub only — `poll()` returns `null`. Not yet implemented.
 
 ## What's next (suggested)
 
-1. **Associations resource** — `/crm/v3/associations/{fromObjectType}/{toObjectType}/batch/read` (and create/delete). User mentioned this is planned as a second resource.
-2. **Lists resource** — HubSpot lists API.
-3. **Events resource** — HubSpot events API.
-4. **Trigger node** — Implement polling on any object type filtered by `lastmodifieddate`.
+Associations, Owners, and Properties resources, plus the polling Trigger (including its Property
+Changed mode), are all implemented — see `descriptions/AssociationDescription.ts`,
+`descriptions/OwnerDescription.ts`, `descriptions/PropertyDescription.ts`, and
+`HubspotApiTrigger.node.ts` above. Remaining suggestions:
+
+1. **Lists resource** — HubSpot lists API.
+2. **Events resource** — HubSpot events API.
 
 ---
 
@@ -155,4 +207,7 @@ npm run lint     # run n8n linter (strict mode)
 npm run dev      # start n8n dev server with hot reload at http://localhost:5678
 ```
 
-Build output goes to `dist/nodes/Hubspot/` (lowercase s — matches `package.json` `n8n.nodes` paths).
+Build output goes to `dist/nodes/HubSpot/` (matches the real `nodes/HubSpot/` source folder casing).
+`package.json`'s `n8n.nodes` / `n8n.credentials` paths point there; the individual file basenames
+are lowercase-s (`HubspotApi.node.js`, `HubspotApiTrigger.node.js`, `HubspotApi.credentials.js`) to
+match their class names, per n8n's file-naming lint rule.

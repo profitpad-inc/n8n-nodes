@@ -1,6 +1,22 @@
 import { INodeProperties } from 'n8n-workflow';
 
 import { OBJECT_TYPE_OPTIONS } from '../helpers';
+import {
+	filterGroupsUiProperty,
+	filterJsonProperty,
+	propertiesProperty,
+	searchFilterModeProperty,
+	sortsJsonOption,
+	sortsUiOption,
+} from '../searchFilter';
+
+const SEARCH_SHOW = { resource: ['objects'], operation: ['search'] };
+
+const SEARCH_FILTER_MODE_DESCRIPTION =
+	'How to define the search filters. Searches are not case-sensitive.';
+
+const SEARCH_FILTER_JSON_DESCRIPTION =
+	'A JSON object containing <code>filterGroups</code> (and optionally <code>query</code>). Filter groups are OR\'d; filters within a group are AND\'d. See <a href="https://developers.hubspot.com/docs/api-reference/legacy/crm/objects/objects/search/search-objects">HubSpot search docs</a> for operators: BETWEEN, CONTAINS_TOKEN, EQ, GT, GTE, HAS_PROPERTY, IN, LT, LTE, NEQ, NOT_CONTAINS_TOKEN, NOT_HAS_PROPERTY, NOT_IN.';
 
 const MERGE_ELIGIBLE_TYPES = ['0-1', '0-2', '0-3', '0-5'];
 
@@ -751,40 +767,23 @@ export const objectDescription: INodeProperties[] = [
 	},
 
 	// ── SEARCH ────────────────────────────────────────────────────────────────
+	searchFilterModeProperty(SEARCH_SHOW, SEARCH_FILTER_MODE_DESCRIPTION),
+	filterGroupsUiProperty(SEARCH_SHOW),
+	filterJsonProperty(SEARCH_SHOW, SEARCH_FILTER_JSON_DESCRIPTION),
+	propertiesProperty(SEARCH_SHOW),
 	{
-		displayName: 'Search Body',
-		name: 'searchBody',
-		type: 'json',
-		default: JSON.stringify(
-			{
-				limit: 200,
-				after: 0,
-				query: 'John',
-				properties: ['email', 'firstname', 'lastname'],
-				filterGroups: [
-					{
-						filters: [
-							{
-								propertyName: 'email',
-								operator: 'EQ',
-								value: 'john@example.com',
-							},
-						],
-					},
-				],
-				sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
-			},
-			null,
-			2,
-		),
-		placeholder:
-			'{\n  "filterGroups": [{"filters": [{"propertyName": "email", "operator": "EQ", "value": "..."}]}]\n}',
-		description:
-			'JSON body for the search request. See <a href="https://developers.hubspot.com/docs/api-reference/legacy/crm/objects/objects/search/search-objects">HubSpot search docs</a> for details.  Available operators: BETWEEN, CONTAINS_TOKEN, EQ, GT, GTE, HAS_PROPERTY, IN, LT, LTE, NEQ, NOT_CONTAINS_TOKEN, NOT_HAS_PROPERTY, NOT_IN.',
+		displayName: 'Limit',
+		name: 'limit',
+		type: 'number',
+		typeOptions: { minValue: 1, maxValue: 200 },
+		// eslint-disable-next-line n8n-nodes-base/node-param-default-wrong-for-limit
+		default: 100,
+		description: 'Max number of results to return',
 		displayOptions: {
 			show: {
 				resource: ['objects'],
 				operation: ['search'],
+				returnAll: [false],
 			},
 		},
 	},
@@ -800,7 +799,19 @@ export const objectDescription: INodeProperties[] = [
 				operation: ['search'],
 			},
 		},
-		options: [msOption],
+		options: [
+			msOption,
+			{
+				displayName: 'Query',
+				name: 'query',
+				type: 'string',
+				default: '',
+				description:
+					'Free-text search string matched across the object\'s default searchable properties',
+			},
+			sortsUiOption,
+			sortsJsonOption,
+		],
 	},
 
 	// ── BATCH READ ────────────────────────────────────────────────────────────

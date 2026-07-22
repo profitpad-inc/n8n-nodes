@@ -5,6 +5,8 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
+import { ASSOCIATION_TYPES } from './associationTypes';
+
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const PROPERTIES_BASE_PATH = '/crm/properties/2026-03';
 export const OWNERS_BASE_PATH = '/crm/v3/owners';
@@ -62,6 +64,14 @@ interface HubSpotPropertySummary {
 	};
 }
 
+// Contacts is the one CRM object where the unified hs_createdate /
+// hs_lastmodifieddate properties HubSpot exposes elsewhere are not valid
+// search/sort properties (Contacts predates that naming and only accepts the
+// unprefixed createdate / lastmodifieddate). Excluded at the source so every
+// dropdown built from fetchProperties stays consistent.
+export const CONTACTS_OBJECT_TYPE = '0-1';
+const CONTACTS_INVALID_SEARCH_PROPERTIES = ['hs_createdate', 'hs_lastmodifieddate'];
+
 async function fetchProperties(this: ILoadOptionsFunctions): Promise<HubSpotPropertySummary[]> {
 	const objectType = this.getCurrentNodeParameter('objectType') as string;
 	if (!objectType) return [];
@@ -72,7 +82,18 @@ async function fetchProperties(this: ILoadOptionsFunctions): Promise<HubSpotProp
 		headers: { accept: 'application/json' },
 	})) as { results?: HubSpotPropertySummary[] };
 
-	return response.results ?? [];
+	// Exclude legacy properties (e.g. owneremail), which HubSpot marks with a
+	// "(legacy)" suffix in the label. They should not be offered in dropdowns.
+	return (response.results ?? []).filter((property) => {
+		if (/\(legacy\)/i.test(property.label ?? '')) return false;
+		if (
+			objectType === CONTACTS_OBJECT_TYPE &&
+			CONTACTS_INVALID_SEARCH_PROPERTIES.includes(property.name)
+		) {
+			return false;
+		}
+		return true;
+	});
 }
 
 export async function getProperties(
@@ -104,6 +125,121 @@ export async function getAllProperties(
 	return properties
 		.map((property) => ({ name: `${property.label} (${property.name})`, value: property.name }))
 		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Property options for search filters. Returns every property of the selected
+ * object type plus a set of `associations.0-<associationTypeId>`
+ * pseudo-properties, which HubSpot's search API uses to filter records by an
+ * associated record's ID (e.g. { propertyName: 'associations.0-279',
+ * operator: 'EQ', value: '123456' } finds contacts associated to company
+ * 123456, since 279 is the "Contact to company" association type ID).
+ */
+export async function getSearchFilterProperties(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const objectType = (this.getCurrentNodeParameter('objectType') as string) ?? '';
+	const properties = await fetchProperties.call(this);
+
+	const associationOptions: INodePropertyOptions[] = (ASSOCIATION_TYPES[objectType] ?? []).map(
+		([typeId, label]) => ({
+			name: `${label} (associations.0-${typeId})`,
+			value: `associations.0-${typeId}`,
+		}),
+	);
+
+	const propertyOptions = properties
+		.map((property) => ({ name: `${property.label} (${property.name})`, value: property.name }))
+		.sort((a, b) => a.name.localeCompare(b.name));
+
+	return [...associationOptions, ...propertyOptions];
+}
+
+/** All HubSpot search operators, in the order they should appear. */
+export const SEARCH_OPERATORS: INodePropertyOptions[] = [
+	{ name: 'Equals', value: 'EQ' },
+	{ name: 'Not Equals', value: 'NEQ' },
+	{ name: 'Less Than', value: 'LT' },
+	{ name: 'Less Than or Equal', value: 'LTE' },
+	{ name: 'Greater Than', value: 'GT' },
+	{ name: 'Greater Than or Equal', value: 'GTE' },
+	{ name: 'Between', value: 'BETWEEN' },
+	{ name: 'In List', value: 'IN' },
+	{ name: 'Not In List', value: 'NOT_IN' },
+	{ name: 'Contains Token', value: 'CONTAINS_TOKEN' },
+	{ name: 'Not Contains Token', value: 'NOT_CONTAINS_TOKEN' },
+	{ name: 'Has Property (Is Known)', value: 'HAS_PROPERTY' },
+	{ name: 'Not Has Property (Is Unknown)', value: 'NOT_HAS_PROPERTY' },
+];
+
+// Operators valid regardless of property type.
+const UNIVERSAL_OPERATORS = ['EQ', 'NEQ', 'HAS_PROPERTY', 'NOT_HAS_PROPERTY'];
+const COMPARISON_OPERATORS = ['LT', 'LTE', 'GT', 'GTE', 'BETWEEN'];
+const TOKEN_OPERATORS = ['CONTAINS_TOKEN', 'NOT_CONTAINS_TOKEN'];
+const LIST_OPERATORS = ['IN', 'NOT_IN'];
+
+/**
+ * Which operators are valid for a given HubSpot property `type`. HubSpot does
+ * not publish a definitive operator/type matrix, so this is grounded in
+ * observed behaviour (e.g. EQ works everywhere, IN is not valid for numbers)
+ * and standard type semantics. Adjust here if HubSpot accepts a combination
+ * this rejects. Unknown types fall back to the full operator list so a valid
+ * query is never blocked.
+ */
+function operatorsForPropertyType(type: string | undefined): string[] {
+	switch (type) {
+		case 'number':
+			return [...UNIVERSAL_OPERATORS, ...COMPARISON_OPERATORS];
+		case 'date':
+		case 'datetime':
+			return [...UNIVERSAL_OPERATORS, ...COMPARISON_OPERATORS, ...LIST_OPERATORS];
+		case 'enumeration':
+			return [...UNIVERSAL_OPERATORS, ...LIST_OPERATORS];
+		case 'bool':
+			return [...UNIVERSAL_OPERATORS];
+		case 'string':
+		case 'phone_number':
+			return [
+				...UNIVERSAL_OPERATORS,
+				...TOKEN_OPERATORS,
+				...LIST_OPERATORS,
+				...COMPARISON_OPERATORS,
+			];
+		default:
+			// Unknown / unmapped type — allow everything.
+			return SEARCH_OPERATORS.map((op) => op.value as string);
+	}
+}
+
+/**
+ * Operator options for a search filter, filtered to those valid for the
+ * property selected in the same filter row. Association pseudo-properties
+ * support equality and list membership. If the sibling property cannot be
+ * resolved (older n8n versions may not pass it), the full list is returned.
+ */
+export async function getSearchOperators(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	let propertyName = '';
+	try {
+		propertyName = (this.getCurrentNodeParameter('&propertyName') as string) ?? '';
+	} catch {
+		propertyName = '';
+	}
+
+	// No property chosen yet — offer everything.
+	if (!propertyName) return SEARCH_OPERATORS;
+
+	if (propertyName.startsWith('associations.')) {
+		const allowed = [...UNIVERSAL_OPERATORS, ...LIST_OPERATORS];
+		return SEARCH_OPERATORS.filter((op) => allowed.includes(op.value as string));
+	}
+
+	const properties = await fetchProperties.call(this);
+	const match = properties.find((property) => property.name === propertyName);
+	const allowed = operatorsForPropertyType(match?.type);
+
+	return SEARCH_OPERATORS.filter((op) => allowed.includes(op.value as string));
 }
 
 interface HubSpotOwner {
