@@ -262,10 +262,10 @@ export const objectDescription: INodeProperties[] = [
 			{
 				displayName: 'Associations',
 				name: 'associations',
-				type: 'string',
-				default: '',
-				placeholder: '0-2,0-3',
-				description: 'Comma-separated list of object types to retrieve associated records for',
+				type: 'multiOptions',
+				options: OBJECT_TYPE_OPTIONS,
+				default: [],
+				description: 'Object types to retrieve associated records for',
 			},
 			{
 				displayName: 'Error When Not Found',
@@ -276,32 +276,42 @@ export const objectDescription: INodeProperties[] = [
 					'Whether to throw an error when the record does not exist. When disabled, returns {"objectFound": false} instead.',
 			},
 			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
 				displayName: 'ID Property',
 				name: 'idProperty',
-				type: 'string',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getUniqueProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
 				default: '',
-				placeholder: 'email',
-				description:
-					'Look up the record by this property instead of the record ID (e.g. <em>email</em> for contacts)',
+				description: 'Look up the record by this property instead of the record ID (e.g. <em>email</em> for contacts). Only properties with a unique value are listed. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			msOption,
 			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
 				displayName: 'Properties',
 				name: 'properties',
-				type: 'string',
-				default: '',
-				placeholder: 'email,firstname,lastname',
+				type: 'multiOptions',
+				typeOptions: {
+					loadOptionsMethod: 'getAllProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
+				default: [],
 				description:
-					'Comma-separated list of property names to return. Returns all simple properties when left blank.',
+					'Properties to return. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Properties With History',
 				name: 'propertiesWithHistory',
-				type: 'string',
-				default: '',
-				placeholder: 'email,phone',
+				type: 'multiOptions',
+				typeOptions: {
+					loadOptionsMethod: 'getAllProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
+				default: [],
 				description:
-					'Comma-separated list of properties to return along with their historical values',
+					'Properties to return along with their historical values. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 		],
 	},
@@ -362,7 +372,22 @@ export const objectDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['objects'],
-				operation: ['list', 'search'],
+				operation: ['list'],
+				returnAll: [true],
+			},
+		},
+	},
+	{
+		displayName: 'Max Pages',
+		name: 'maxPages',
+		type: 'number',
+		typeOptions: { minValue: 1, numberPrecision: 0 },
+		default: 10,
+		description: 'Maximum number of pages to fetch. Each page contains up to 200 results.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['search'],
 				returnAll: [true],
 			},
 		},
@@ -414,29 +439,36 @@ export const objectDescription: INodeProperties[] = [
 			{
 				displayName: 'Associations',
 				name: 'associations',
-				type: 'string',
-				default: '',
-				placeholder: '0-2,0-3',
-				description: 'Comma-separated list of object types to retrieve associated records for',
+				type: 'multiOptions',
+				options: OBJECT_TYPE_OPTIONS,
+				default: [],
+				description: 'Object types to retrieve associated records for',
 			},
 			msOption,
 			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
 				displayName: 'Properties',
 				name: 'properties',
-				type: 'string',
-				default: '',
-				placeholder: 'email,firstname,lastname',
+				type: 'multiOptions',
+				typeOptions: {
+					loadOptionsMethod: 'getAllProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
+				default: [],
 				description:
-					'Comma-separated list of property names to return. Returns all simple properties when left blank.',
+					'Properties to return. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Properties With History',
 				name: 'propertiesWithHistory',
-				type: 'string',
-				default: '',
-				placeholder: 'email,phone',
+				type: 'multiOptions',
+				typeOptions: {
+					loadOptionsMethod: 'getAllProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
+				default: [],
 				description:
-					'Comma-separated list of properties to return along with their historical values',
+					'Properties to return along with their historical values. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 		],
 	},
@@ -489,12 +521,16 @@ export const objectDescription: INodeProperties[] = [
 				displayName: 'Property',
 				values: [
 					{
-						displayName: 'Property Name',
+						displayName: 'Property Name or ID',
 						name: 'name',
-						type: 'string',
+						type: 'options',
+						typeOptions: {
+							loadOptionsMethod: 'getWritableProperties',
+							loadOptionsDependsOn: ['objectType'],
+						},
 						default: '',
-						placeholder: 'email',
-						description: 'HubSpot internal property name',
+						description:
+							'HubSpot internal property name. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 					},
 					{
 						displayName: 'Value',
@@ -551,32 +587,62 @@ export const objectDescription: INodeProperties[] = [
 				displayName: 'Association',
 				values: [
 					{
-						displayName: 'Object ID to Associate',
-						name: 'toObjectId',
-						type: 'string',
-						default: '',
-						description: 'The record ID of the object to associate this new object with',
-					},
-					{
-						displayName: 'Association Type IDs',
-						name: 'associationTypeIds',
-						type: 'string',
-						default: '',
-						placeholder: '1,2',
-						description:
-							'Comma-separated list of association type IDs. See <a href="https://developers.hubspot.com/docs/api-reference/latest/crm/associations/associate-records/guide">HubSpot association type docs</a> for values.',
-					},
-					{
 						displayName: 'Association Category',
 						name: 'associationCategory',
 						type: 'options',
 						options: [
-							{ name: 'HubSpot Defined', value: 'HUBSPOT_DEFINED' },
-							{ name: 'User Defined', value: 'USER_DEFINED' },
+							{
+								name: 'HubSpot Defined',
+								value: 'HUBSPOT_DEFINED',
+							},
+							{
+								name: 'User Defined',
+								value: 'USER_DEFINED',
+							},
 						],
 						default: 'HUBSPOT_DEFINED',
+						description: 'Whether the Association Type IDs are HubSpot-defined default types or custom user-defined types. Applies to all type IDs in this association.',
+					},
+					{
+						displayName: 'Association Type IDs',
+						name: 'associationTypeIds',
+						type: 'multiOptions',
+						typeOptions: {
+							loadOptionsMethod: 'getAssociationTypeIds',
+							loadOptionsDependsOn: ['objectType'],
+						},
+						default: [],
 						description:
-							'Whether the Association Type IDs are HubSpot-defined default types or custom user-defined types. Applies to all type IDs in this association.',
+							'Association type IDs. See <a href="https://developers.hubspot.com/docs/api-reference/latest/crm/associations/associate-records/guide">HubSpot association type docs</a> for values. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+					},
+					{
+						// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+						displayName: 'ID Property',
+						name: 'toIdProperty',
+						type: 'options',
+						typeOptions: {
+							loadOptionsMethod: 'getUniquePropertiesForAssociationTo',
+							loadOptionsDependsOn: ['&toObjectType'],
+						},
+						default: '',
+						description:
+							'Look up the record to associate with by this property instead of its record ID (e.g. <em>email</em> for contacts). Only properties with a unique value are listed. When set, a GET request resolves the real ID first. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+					},
+					{
+						displayName: 'Object ID to Associate',
+						name: 'toObjectId',
+						type: 'string',
+						default: '',
+						description: 'The HubSpot record ID, or the value of the property specified in <em>ID Property</em>, of the object to associate this new object with',
+					},
+					{
+						displayName: 'To Object Type',
+						name: 'toObjectType',
+						type: 'options',
+						typeOptions: { noValidation: true },
+						options: OBJECT_TYPE_OPTIONS,
+						default: '0-2',
+						description: 'The HubSpot CRM object type of the record to associate with',
 					},
 				],
 			},
@@ -672,12 +738,16 @@ export const objectDescription: INodeProperties[] = [
 				displayName: 'Property',
 				values: [
 					{
-						displayName: 'Property Name',
+						displayName: 'Property Name or ID',
 						name: 'name',
-						type: 'string',
+						type: 'options',
+						typeOptions: {
+							loadOptionsMethod: 'getWritableProperties',
+							loadOptionsDependsOn: ['objectType'],
+						},
 						default: '',
-						placeholder: 'email',
-						description: 'HubSpot internal property name',
+						description:
+							'HubSpot internal property name. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 					},
 					{
 						displayName: 'Value',
@@ -727,13 +797,16 @@ export const objectDescription: INodeProperties[] = [
 		},
 		options: [
 			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
 				displayName: 'ID Property',
 				name: 'idProperty',
-				type: 'string',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getUniqueProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
 				default: '',
-				placeholder: 'email',
-				description:
-					'Match the record by this property instead of the record ID (e.g. <em>email</em> for contacts)',
+				description: 'Match the record by this property instead of the record ID (e.g. <em>email</em> for contacts). Only properties with a unique value are listed. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			msOption,
 		],
@@ -754,13 +827,16 @@ export const objectDescription: INodeProperties[] = [
 		},
 		options: [
 			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
 				displayName: 'ID Property',
 				name: 'idProperty',
-				type: 'string',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getUniqueProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
 				default: '',
-				placeholder: 'email',
-				description:
-					'Look up the record by this property instead of the record ID before deleting. A GET request is made first to resolve the real object ID.',
+				description: 'Look up the record by this property instead of the record ID before deleting. A GET request is made first to resolve the real object ID. Only properties with a unique value are listed. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			msOption,
 		],

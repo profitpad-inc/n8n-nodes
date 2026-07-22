@@ -17,10 +17,15 @@ import {
 	buildHubSpotUrl,
 	findOwnerByField,
 	getAllProperties,
+	getAssociationTypeIds,
 	getEnumerationProperties,
 	getProperties,
 	getSearchFilterProperties,
 	getSearchOperators,
+	getUniqueProperties,
+	getUniquePropertiesForAssociationFrom,
+	getUniquePropertiesForAssociationTo,
+	getWritableProperties,
 	OWNERS_BASE_PATH,
 	resolveUsersLookup,
 	UsersLookup,
@@ -119,6 +124,11 @@ export class HubspotApi implements INodeType {
 			getAllProperties,
 			getSearchFilterProperties,
 			getSearchOperators,
+			getWritableProperties,
+			getUniqueProperties,
+			getUniquePropertiesForAssociationFrom,
+			getUniquePropertiesForAssociationTo,
+			getAssociationTypeIds,
 		},
 	};
 
@@ -266,9 +276,9 @@ export class HubspotApi implements INodeType {
 					if (operation === 'get') {
 						const objectId = String(this.getNodeParameter('objectId', i)).trim();
 						const opts = this.getNodeParameter('additionalOptions', i) as {
-							properties?: string;
-							propertiesWithHistory?: string;
-							associations?: string;
+							properties?: string | string[];
+							propertiesWithHistory?: string | string[];
+							associations?: string | string[];
 							idProperty?: string;
 							archived?: boolean;
 							errorWhenNotFound?: boolean;
@@ -277,15 +287,9 @@ export class HubspotApi implements INodeType {
 
 						delayMs = opts.millisecondsBetweenItems ?? 50;
 
-						const propertiesList = opts.properties
-							? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
-							: [];
-						const propertiesWithHistoryList = opts.propertiesWithHistory
-							? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
-							: [];
-						const associationsList = opts.associations
-							? opts.associations.split(',').map((s) => s.trim()).filter(Boolean)
-							: [];
+						const propertiesList = toStringList(opts.properties);
+						const propertiesWithHistoryList = toStringList(opts.propertiesWithHistory);
+						const associationsList = toStringList(opts.associations);
 
 						const url = buildHubSpotUrl(HUBSPOT_BASE, `${objectsPath}/${objectId}`, {
 							properties: propertiesList,
@@ -328,9 +332,9 @@ export class HubspotApi implements INodeType {
 					if (operation === 'list') {
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const opts = this.getNodeParameter('listOptions', i) as {
-							properties?: string;
-							propertiesWithHistory?: string;
-							associations?: string;
+							properties?: string | string[];
+							propertiesWithHistory?: string | string[];
+							associations?: string | string[];
 							after?: string;
 							archived?: boolean;
 							millisecondsBetweenItems?: number;
@@ -338,15 +342,9 @@ export class HubspotApi implements INodeType {
 
 						delayMs = opts.millisecondsBetweenItems ?? 50;
 
-						const propertiesList = opts.properties
-							? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
-							: [];
-						const propertiesWithHistoryList = opts.propertiesWithHistory
-							? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
-							: [];
-						const associationsList = opts.associations
-							? opts.associations.split(',').map((s) => s.trim()).filter(Boolean)
-							: [];
+						const propertiesList = toStringList(opts.properties);
+						const propertiesWithHistoryList = toStringList(opts.propertiesWithHistory);
+						const associationsList = toStringList(opts.associations);
 
 						if (returnAll) {
 							const maxPages = Math.max(
@@ -456,24 +454,41 @@ export class HubspotApi implements INodeType {
 						} else {
 							const createAssocParam = this.getNodeParameter('createAssociations', i) as {
 								associationValues?: Array<{
+									toObjectType: string;
 									toObjectId: string;
-									associationTypeIds: string;
+									toIdProperty?: string;
+									associationTypeIds: string | string[];
 									associationCategory: string;
 								}>;
 							};
-							createAssociations = (createAssocParam.associationValues ?? []).map(
-								({ toObjectId, associationTypeIds, associationCategory }) => ({
-									to: { id: String(toObjectId).trim() },
-									types: String(associationTypeIds)
-										.split(',')
-										.map((s) => s.trim())
-										.filter(Boolean)
-										.map((associationTypeId) => ({
-											associationTypeId: Number(associationTypeId),
-											associationCategory,
-										})),
-								}),
-							);
+
+							createAssociations = [];
+							for (const assoc of createAssocParam.associationValues ?? []) {
+								let resolvedToId = String(assoc.toObjectId).trim();
+								const toIdProperty = (assoc.toIdProperty ?? '').trim();
+
+								if (toIdProperty) {
+									const resolveUrl = buildHubSpotUrl(
+										HUBSPOT_BASE,
+										`${OBJECTS_BASE_PATH}/${assoc.toObjectType}/${resolvedToId}`,
+										{ idProperty: toIdProperty },
+									);
+									const resolveResponse = (await this.helpers.httpRequestWithAuthentication.call(
+										this,
+										'hubspotApi',
+										{ method: 'GET', url: resolveUrl, headers: BASE_HEADERS },
+									)) as { id: string };
+									resolvedToId = resolveResponse.id;
+								}
+
+								createAssociations.push({
+									to: { id: resolvedToId },
+									types: toStringList(assoc.associationTypeIds).map((associationTypeId) => ({
+										associationTypeId: Number(associationTypeId),
+										associationCategory: assoc.associationCategory,
+									})),
+								});
+							}
 						}
 
 						const createBody: Record<string, unknown> = { properties: createProperties };
@@ -673,6 +688,7 @@ export class HubspotApi implements INodeType {
 								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
 							}
 						} else {
+							const limit = this.getNodeParameter('limit', i) as number;
 							const response = (await this.helpers.httpRequestWithAuthentication.call(
 								this,
 								'hubspotApi',
@@ -680,7 +696,7 @@ export class HubspotApi implements INodeType {
 									method: 'POST',
 									url: searchUrl,
 									headers: BASE_HEADERS,
-									body: JSON.stringify(searchBodyBase),
+									body: JSON.stringify({ ...searchBodyBase, limit }),
 								},
 							)) as JsonObject;
 
@@ -1310,6 +1326,7 @@ export class HubspotApi implements INodeType {
 								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
 							}
 						} else {
+							const limit = this.getNodeParameter('limit', i) as number;
 							const response = (await this.helpers.httpRequestWithAuthentication.call(
 								this,
 								'hubspotApi',
@@ -1317,7 +1334,7 @@ export class HubspotApi implements INodeType {
 									method: 'POST',
 									url: searchUrl,
 									headers: BASE_HEADERS,
-									body: JSON.stringify(searchBodyBase),
+									body: JSON.stringify({ ...searchBodyBase, limit }),
 								},
 							)) as JsonObject;
 

@@ -58,6 +58,7 @@ interface HubSpotPropertySummary {
 	name: string;
 	label: string;
 	type: string;
+	hasUniqueValue?: boolean;
 	modificationMetadata?: {
 		readOnlyDefinition?: boolean;
 		readOnlyValue?: boolean;
@@ -72,8 +73,23 @@ interface HubSpotPropertySummary {
 export const CONTACTS_OBJECT_TYPE = '0-1';
 const CONTACTS_INVALID_SEARCH_PROPERTIES = ['hs_createdate', 'hs_lastmodifieddate'];
 
-async function fetchProperties(this: ILoadOptionsFunctions): Promise<HubSpotPropertySummary[]> {
-	const objectType = this.getCurrentNodeParameter('objectType') as string;
+/**
+ * Fetch CRM property definitions for the object type named by
+ * `objectTypeParam` (a plain sibling name like `objectType`/`fromObjectType`,
+ * or a `&`-prefixed name to read a sibling within the same fixedCollection
+ * entry, e.g. `&toObjectType`). Returns [] when that parameter can't be
+ * resolved (not yet set, or not present on the current node/branch).
+ */
+async function fetchPropertiesForParam(
+	this: ILoadOptionsFunctions,
+	objectTypeParam: string,
+): Promise<HubSpotPropertySummary[]> {
+	let objectType = '';
+	try {
+		objectType = (this.getCurrentNodeParameter(objectTypeParam) as string) ?? '';
+	} catch {
+		objectType = '';
+	}
 	if (!objectType) return [];
 
 	const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
@@ -94,6 +110,31 @@ async function fetchProperties(this: ILoadOptionsFunctions): Promise<HubSpotProp
 		}
 		return true;
 	});
+}
+
+async function fetchProperties(this: ILoadOptionsFunctions): Promise<HubSpotPropertySummary[]> {
+	return fetchPropertiesForParam.call(this, 'objectType');
+}
+
+function toOption(property: HubSpotPropertySummary): INodePropertyOptions {
+	return { name: `${property.label} (${property.name})`, value: property.name };
+}
+
+/**
+ * Options for an "ID Property" lookup field: the record ID itself (the
+ * default, represented as an empty value so it round-trips with the
+ * pre-existing "blank means record ID" behaviour) plus every property marked
+ * as having a unique value, which is what HubSpot allows a record to be
+ * looked up by instead of its ID. HubSpot-internal `hs_`-prefixed properties
+ * are excluded — they're rarely meaningful as a lookup key and just add
+ * noise to the list.
+ */
+function toUniqueIdPropertyOptions(properties: HubSpotPropertySummary[]): INodePropertyOptions[] {
+	const uniqueOptions = properties
+		.filter((property) => property.hasUniqueValue && !property.name.startsWith('hs_'))
+		.map(toOption)
+		.sort((a, b) => a.name.localeCompare(b.name));
+	return [{ name: 'Record ID', value: '' }, ...uniqueOptions];
 }
 
 export async function getProperties(
@@ -125,6 +166,55 @@ export async function getAllProperties(
 	return properties
 		.map((property) => ({ name: `${property.label} (${property.name})`, value: property.name }))
 		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Properties that can be written to (used for Create/Update property pickers). */
+export async function getWritableProperties(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const properties = await fetchProperties.call(this);
+	return properties
+		.filter((property) => !property.modificationMetadata?.readOnlyValue)
+		.map(toOption)
+		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** "ID Property" options for the primary `objectType` parameter. */
+export async function getUniqueProperties(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return toUniqueIdPropertyOptions(await fetchProperties.call(this));
+}
+
+/** "ID Property" options scoped to the Associations resource's `fromObjectType`. */
+export async function getUniquePropertiesForAssociationFrom(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return toUniqueIdPropertyOptions(await fetchPropertiesForParam.call(this, 'fromObjectType'));
+}
+
+/**
+ * "ID Property" options scoped to a sibling `toObjectType` field within the
+ * same fixedCollection entry (Object Create's association rows).
+ */
+export async function getUniquePropertiesForAssociationTo(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return toUniqueIdPropertyOptions(await fetchPropertiesForParam.call(this, '&toObjectType'));
+}
+
+/**
+ * HubSpot-defined association type ID options for associating newly created
+ * records of `objectType` with other records, sourced from ASSOCIATION_TYPES.
+ */
+export async function getAssociationTypeIds(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const objectType = (this.getCurrentNodeParameter('objectType') as string) ?? '';
+	return (ASSOCIATION_TYPES[objectType] ?? []).map(([typeId, label]) => ({
+		name: `${label} (${typeId})`,
+		value: String(typeId),
+	}));
 }
 
 /**

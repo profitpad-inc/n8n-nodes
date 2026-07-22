@@ -99,13 +99,16 @@ export const associationDescription: INodeProperties[] = [
 		},
 	},
 	{
+		// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
 		displayName: 'From ID Property',
 		name: 'fromIdProperty',
-		type: 'string',
+		type: 'options',
+		typeOptions: {
+			loadOptionsMethod: 'getUniquePropertiesForAssociationFrom',
+			loadOptionsDependsOn: ['fromObjectType'],
+		},
 		default: '',
-		placeholder: 'email',
-		description:
-			'Look up "From" records by this property instead of the record ID (e.g. <em>email</em> for contacts). When set, a batch object read is performed first — in batches of 100 — to resolve the real HubSpot IDs before reading associations.',
+		description: 'Look up "From" records by this property instead of the record ID (e.g. <em>email</em> for contacts). Only properties with a unique value are listed. When set, a batch object read is performed first — in batches of 100 — to resolve the real HubSpot IDs before reading associations. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 		displayOptions: {
 			show: {
 				resource: ['associations'],

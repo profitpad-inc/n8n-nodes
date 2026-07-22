@@ -311,7 +311,22 @@ export const ownerDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['owners'],
-				operation: ['list', 'search'],
+				operation: ['list'],
+				returnAll: [true],
+			},
+		},
+	},
+	{
+		displayName: 'Max Pages',
+		name: 'maxPages',
+		type: 'number',
+		typeOptions: { minValue: 1, numberPrecision: 0 },
+		default: 10,
+		description: 'Maximum number of pages to fetch. Each page contains up to 200 results.',
+		displayOptions: {
+			show: {
+				resource: ['owners'],
+				operation: ['search'],
 				returnAll: [true],
 			},
 		},
@@ -327,7 +342,7 @@ export const ownerDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['owners'],
-				operation: ['list'],
+				operation: ['list', 'search'],
 				returnAll: [false],
 			},
 		},
