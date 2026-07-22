@@ -513,9 +513,10 @@ export class HubspotApiTrigger implements INodeType {
 		const matchedResults: JsonObject[] = [];
 
 		try {
-			for (let i = 0; i < allResults.length; i += 100) {
+			// HubSpot caps batch/read inputs at 50 when propertiesWithHistory is requested.
+			for (let i = 0; i < allResults.length; i += 50) {
 				const chunk = allResults
-					.slice(i, i + 100)
+					.slice(i, i + 50)
 					.map((result) => ({ id: String(result.id) }));
 
 				const response = (await this.helpers.httpRequestWithAuthentication.call(
