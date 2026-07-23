@@ -497,7 +497,10 @@ export const ownerDescription: INodeProperties[] = [
 		displayName: 'Properties',
 		name: 'updateFields',
 		type: 'fixedCollection',
-		typeOptions: { multipleValues: true },
+		typeOptions: {
+			multipleValues: true,
+			fixedCollection: { itemTitle: '={{$collection.item.value.name}}' },
+		},
 		placeholder: 'Add Property',
 		default: {},
 		description:
