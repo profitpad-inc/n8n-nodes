@@ -300,8 +300,8 @@ export const SEARCH_OPERATORS: INodePropertyOptions[] = [
 	{ name: 'Not In List', value: 'NOT_IN' },
 	{ name: 'Contains Token', value: 'CONTAINS_TOKEN' },
 	{ name: 'Not Contains Token', value: 'NOT_CONTAINS_TOKEN' },
-	{ name: 'Has Property (Is Known)', value: 'HAS_PROPERTY' },
-	{ name: 'Not Has Property (Is Unknown)', value: 'NOT_HAS_PROPERTY' },
+	{ name: 'Is Known (Has Property)', value: 'HAS_PROPERTY' },
+	{ name: 'Is Unknown (Not Has Property)', value: 'NOT_HAS_PROPERTY' },
 ];
 
 // Operators valid regardless of property type.
@@ -362,8 +362,10 @@ export async function getSearchOperators(
 	// No property chosen yet — offer everything.
 	if (!propertyName) return SEARCH_OPERATORS;
 
+	// Has Property / Not Has Property are invalid for association
+	// pseudo-properties — HubSpot rejects the request.
 	if (propertyName.startsWith('associations.')) {
-		const allowed = [...UNIVERSAL_OPERATORS, ...LIST_OPERATORS];
+		const allowed = ['EQ', 'NEQ', ...LIST_OPERATORS];
 		return SEARCH_OPERATORS.filter((op) => allowed.includes(op.value as string));
 	}
 
