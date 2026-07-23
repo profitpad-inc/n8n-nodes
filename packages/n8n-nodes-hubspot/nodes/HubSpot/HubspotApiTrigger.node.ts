@@ -111,7 +111,7 @@ export class HubspotApiTrigger implements INodeType {
 					{ name: 'Subscriptions (0-69)', value: '0-69' },
 					{ name: 'Tasks (0-27)', value: '0-27' },
 					{ name: 'Tickets (0-5)', value: '0-5' },
-					{ name: 'Users (Users)', value: 'users' },
+					{ name: 'Users (0-115)', value: '0-115' },
 				],
 				default: '0-1',
 				description: 'The HubSpot CRM object type to watch for changes',
