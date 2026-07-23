@@ -10,17 +10,16 @@ const msOption: INodeProperties = {
 		'How long to wait between processing each input item, in milliseconds. Useful for avoiding HubSpot rate limits.',
 };
 
+// Only applies to the Owners object type; the Users variants of each
+// collection below simply omit this option instead of using displayOptions,
+// since n8n cannot resolve displayOptions on a child of a collection/
+// fixedCollection.
 const archivedOption: INodeProperties = {
 	displayName: 'Archived',
 	name: 'archived',
 	type: 'boolean',
 	default: false,
 	description: 'Whether to include archived records in the response',
-	displayOptions: {
-		show: {
-			objectType: ['owners'],
-		},
-	},
 };
 
 const errorWhenNotFoundOption: INodeProperties = {
@@ -32,6 +31,8 @@ const errorWhenNotFoundOption: INodeProperties = {
 		'Whether to throw an error if nothing is found, instead of returning a result indicating nothing was found',
 };
 
+// Only applies to the Users object type; see the note on archivedOption above
+// for why this is handled by omission rather than displayOptions.
 const propertiesOption: INodeProperties = {
 	// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
 	displayName: 'Properties',
@@ -43,11 +44,6 @@ const propertiesOption: INodeProperties = {
 	default: [],
 	description:
 		'Properties to return. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
-	displayOptions: {
-		show: {
-			objectType: ['users'],
-		},
-	},
 };
 
 const propertiesWithHistoryOption: INodeProperties = {
@@ -60,11 +56,6 @@ const propertiesWithHistoryOption: INodeProperties = {
 	default: [],
 	description:
 		'Properties to return along with their historical values. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
-	displayOptions: {
-		show: {
-			objectType: ['users'],
-		},
-	},
 };
 
 export const ownerDescription: INodeProperties[] = [
@@ -253,7 +244,7 @@ export const ownerDescription: INodeProperties[] = [
 		},
 	},
 
-	// ── GET additional options ─────────────────────────────────────────────────
+	// ── GET additional options (Users) ────────────────────────────────────────
 	{
 		displayName: 'Additional Options',
 		name: 'additionalOptions',
@@ -263,16 +254,28 @@ export const ownerDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['owners'],
+				objectType: ['users'],
 				operation: ['get'],
 			},
 		},
-		options: [
-			archivedOption,
-			errorWhenNotFoundOption,
-			msOption,
-			propertiesOption,
-			propertiesWithHistoryOption,
-		],
+		options: [errorWhenNotFoundOption, msOption, propertiesOption, propertiesWithHistoryOption],
+	},
+
+	// ── GET additional options (Owners) ───────────────────────────────────────
+	{
+		displayName: 'Additional Options',
+		name: 'additionalOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: {
+			show: {
+				resource: ['owners'],
+				objectType: ['owners'],
+				operation: ['get'],
+			},
+		},
+		options: [archivedOption, errorWhenNotFoundOption, msOption],
 	},
 
 	// ── LIST ──────────────────────────────────────────────────────────────────
@@ -376,6 +379,34 @@ export const ownerDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['owners'],
+				objectType: ['users'],
+				operation: ['list'],
+			},
+		},
+		options: [
+			{
+				displayName: 'After (Cursor)',
+				name: 'after',
+				type: 'string',
+				default: '',
+				description:
+					'Pagination cursor returned by a previous response, used to fetch the next page when not using Return All',
+			},
+			msOption,
+			propertiesOption,
+			propertiesWithHistoryOption,
+		],
+	},
+	{
+		displayName: 'Additional Options',
+		name: 'listOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: {
+			show: {
+				resource: ['owners'],
+				objectType: ['owners'],
 				operation: ['list'],
 			},
 		},
@@ -390,8 +421,6 @@ export const ownerDescription: INodeProperties[] = [
 			},
 			archivedOption,
 			msOption,
-			propertiesOption,
-			propertiesWithHistoryOption,
 		],
 	},
 
