@@ -521,7 +521,8 @@ export const objectDescription: INodeProperties[] = [
 				displayName: 'Property',
 				values: [
 					{
-						displayName: 'Property Name or ID',
+						// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+						displayName: 'Property',
 						name: 'name',
 						type: 'options',
 						typeOptions: {
@@ -738,7 +739,8 @@ export const objectDescription: INodeProperties[] = [
 				displayName: 'Property',
 				values: [
 					{
-						displayName: 'Property Name or ID',
+						// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+						displayName: 'Property',
 						name: 'name',
 						type: 'options',
 						typeOptions: {
@@ -1053,32 +1055,43 @@ export const objectDescription: INodeProperties[] = [
 		},
 		options: [
 			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
 				displayName: 'ID Property',
 				name: 'idProperty',
-				type: 'string',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getUniqueProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
 				default: '',
-				placeholder: 'email',
 				description:
-					'Look up records by this property instead of the record ID (e.g. <em>email</em> for contacts)',
+					'Look up records by this property instead of the record ID (e.g. <em>email</em> for contacts). Only properties with a unique value are listed. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			msOption,
 			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
 				displayName: 'Properties',
 				name: 'properties',
-				type: 'string',
-				default: '',
-				placeholder: 'email,firstname,lastname',
+				type: 'multiOptions',
+				typeOptions: {
+					loadOptionsMethod: 'getAllProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
+				default: [],
 				description:
-					'Comma-separated list of property names to return. Returns all simple properties when left blank.',
+					'Properties to return. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Properties With History',
 				name: 'propertiesWithHistory',
-				type: 'string',
-				default: '',
-				placeholder: 'email,phone',
+				type: 'multiOptions',
+				typeOptions: {
+					loadOptionsMethod: 'getAllProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
+				default: [],
 				description:
-					'Comma-separated list of properties to return along with their historical values',
+					'Properties to return along with their historical values. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 		],
 	},
@@ -1242,11 +1255,14 @@ export const objectDescription: INodeProperties[] = [
 	{
 		displayName: 'Properties to Preserve From Primary',
 		name: 'preserveFromPrimary',
-		type: 'string',
-		default: '',
-		placeholder: 'email,firstname,phone',
+		type: 'multiOptions',
+		typeOptions: {
+			loadOptionsMethod: 'getAllProperties',
+			loadOptionsDependsOn: ['objectType'],
+		},
+		default: [],
 		description:
-			'Comma-separated list of property names to read from the primary object before merging. After the merge completes, these property values are written back to the surviving record to ensure they are not overwritten by the secondary.',
+			'Property names to read from the primary object before merging. After the merge completes, these property values are written back to the surviving record to ensure they are not overwritten by the secondary. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 		displayOptions: {
 			show: {
 				resource: ['objects'],

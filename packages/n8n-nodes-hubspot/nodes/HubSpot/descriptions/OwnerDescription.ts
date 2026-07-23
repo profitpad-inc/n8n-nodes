@@ -28,23 +28,40 @@ const errorWhenNotFoundOption: INodeProperties = {
 };
 
 const propertiesOption: INodeProperties = {
+	// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
 	displayName: 'Properties',
 	name: 'properties',
-	type: 'string',
-	default: '',
-	placeholder: 'hs_job_title,hs_additional_phone',
+	type: 'multiOptions',
+	typeOptions: {
+		loadOptionsMethod: 'getAllProperties',
+		loadOptionsDependsOn: ['objectType'],
+	},
+	default: [],
 	description:
-		'Comma-separated list of property names to return. Returns all simple properties when left blank. Only applies to the Users object type.',
+		'Properties to return. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+	displayOptions: {
+		show: {
+			objectType: ['users'],
+		},
+	},
 };
 
 const propertiesWithHistoryOption: INodeProperties = {
 	displayName: 'Properties With History',
 	name: 'propertiesWithHistory',
-	type: 'string',
-	default: '',
-	placeholder: 'hs_job_title',
+	type: 'multiOptions',
+	typeOptions: {
+		loadOptionsMethod: 'getAllProperties',
+		loadOptionsDependsOn: ['objectType'],
+	},
+	default: [],
 	description:
-		'Comma-separated list of properties to return along with their historical values. Only applies to the Users object type.',
+		'Properties to return along with their historical values. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+	displayOptions: {
+		show: {
+			objectType: ['users'],
+		},
+	},
 };
 
 export const ownerDescription: INodeProperties[] = [
@@ -472,12 +489,17 @@ export const ownerDescription: INodeProperties[] = [
 				displayName: 'Property',
 				values: [
 					{
-						displayName: 'Property Name',
+						// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+						displayName: 'Property',
 						name: 'name',
-						type: 'string',
+						type: 'options',
+						typeOptions: {
+							loadOptionsMethod: 'getWritableProperties',
+							loadOptionsDependsOn: ['objectType'],
+						},
 						default: '',
-						placeholder: 'hs_job_title',
-						description: 'HubSpot internal property name',
+						description:
+							'HubSpot internal property name. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 					},
 					{
 						displayName: 'Value',

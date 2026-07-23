@@ -745,20 +745,16 @@ export class HubspotApi implements INodeType {
 								.filter(Boolean);
 							const returnAll = this.getNodeParameter('batchReadReturnAll', i) as boolean;
 							const opts = this.getNodeParameter('batchReadOptions', i) as {
-								properties?: string;
-								propertiesWithHistory?: string;
+								properties?: string | string[];
+								propertiesWithHistory?: string | string[];
 								idProperty?: string;
 								millisecondsBetweenItems?: number;
 							};
 
 							delayMs = opts.millisecondsBetweenItems ?? 50;
 
-							const propertiesList = opts.properties
-								? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
-								: [];
-							const propertiesWithHistoryList = opts.propertiesWithHistory
-								? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
-								: [];
+							const propertiesList = toStringList(opts.properties);
+							const propertiesWithHistoryList = toStringList(opts.propertiesWithHistory);
 
 							const idsToProcess = returnAll
 								? objectIds
@@ -885,9 +881,9 @@ export class HubspotApi implements INodeType {
 						const objectIdsToMergeRaw = String(
 							this.getNodeParameter('objectIdsToMerge', i),
 						).trim();
-						const preserveFromPrimaryRaw = String(
-							this.getNodeParameter('preserveFromPrimary', i) ?? '',
-						).trim();
+						const propertiesToPreserve = toStringList(
+							this.getNodeParameter('preserveFromPrimary', i) as string | string[],
+						);
 						const mergeOpts = this.getNodeParameter('mergeOptions', i) as {
 							millisecondsBetweenItems?: number;
 						};
@@ -898,10 +894,6 @@ export class HubspotApi implements INodeType {
 							.split(',')
 							.map((s) => s.trim())
 							.filter(Boolean);
-
-						const propertiesToPreserve = preserveFromPrimaryRaw
-							? preserveFromPrimaryRaw.split(',').map((s) => s.trim()).filter(Boolean)
-							: [];
 
 						// Step 1: Read primary's properties before any merges
 						const preservedValues: Record<string, unknown> = {};
@@ -1023,8 +1015,8 @@ export class HubspotApi implements INodeType {
 
 						if (objectType === 'users') {
 							const opts = this.getNodeParameter('additionalOptions', i) as {
-								properties?: string;
-								propertiesWithHistory?: string;
+								properties?: string | string[];
+								propertiesWithHistory?: string | string[];
 								archived?: boolean;
 								errorWhenNotFound?: boolean;
 								millisecondsBetweenItems?: number;
@@ -1048,14 +1040,10 @@ export class HubspotApi implements INodeType {
 								const propertiesList = Array.from(
 									new Set([
 										...USERS_ALWAYS_INCLUDED_PROPERTIES,
-										...(opts.properties
-											? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
-											: []),
+										...toStringList(opts.properties),
 									]),
 								);
-								const propertiesWithHistoryList = opts.propertiesWithHistory
-									? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
-									: [];
+								const propertiesWithHistoryList = toStringList(opts.propertiesWithHistory);
 
 								const url = buildHubSpotUrl(HUBSPOT_BASE, `${USERS_OBJECT_PATH}/${lookup.realId}`, {
 									properties: propertiesList,
@@ -1165,8 +1153,8 @@ export class HubspotApi implements INodeType {
 						const opts = this.getNodeParameter('listOptions', i) as {
 							after?: string;
 							archived?: boolean;
-							properties?: string;
-							propertiesWithHistory?: string;
+							properties?: string | string[];
+							propertiesWithHistory?: string | string[];
 							millisecondsBetweenItems?: number;
 						};
 
@@ -1178,16 +1166,12 @@ export class HubspotApi implements INodeType {
 								? Array.from(
 										new Set([
 											...USERS_ALWAYS_INCLUDED_PROPERTIES,
-											...(opts.properties
-												? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
-												: []),
+											...toStringList(opts.properties),
 										]),
 									)
 								: [];
 						const propertiesWithHistoryList =
-							objectType === 'users' && opts.propertiesWithHistory
-								? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
-								: [];
+							objectType === 'users' ? toStringList(opts.propertiesWithHistory) : [];
 
 						if (returnAll) {
 							const maxPages = Math.max(
@@ -1262,20 +1246,16 @@ export class HubspotApi implements INodeType {
 						const opts = this.getNodeParameter('searchOptions', i) as {
 							archived?: boolean;
 							errorWhenNotFound?: boolean;
-							properties?: string;
-							propertiesWithHistory?: string;
+							properties?: string | string[];
+							propertiesWithHistory?: string | string[];
 							millisecondsBetweenItems?: number;
 						};
 
 						delayMs = opts.millisecondsBetweenItems ?? 50;
 						const errorWhenNotFound = opts.errorWhenNotFound !== false;
 
-						const propertiesList = opts.properties
-							? opts.properties.split(',').map((s) => s.trim()).filter(Boolean)
-							: [];
-						const propertiesWithHistoryList = opts.propertiesWithHistory
-							? opts.propertiesWithHistory.split(',').map((s) => s.trim()).filter(Boolean)
-							: [];
+						const propertiesList = toStringList(opts.properties);
+						const propertiesWithHistoryList = toStringList(opts.propertiesWithHistory);
 
 						const searchBodyBase: JsonObject = {
 							...parseJsonParam(searchBodyRaw),

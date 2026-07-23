@@ -159,7 +159,8 @@ export function filterGroupsUiProperty(baseShow: Show): INodeProperties {
 								displayName: 'Filter',
 								values: [
 									{
-										displayName: 'Property Name or ID',
+										// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+										displayName: 'Property',
 										name: 'propertyName',
 										type: 'options',
 										typeOptions: {
@@ -295,7 +296,8 @@ export const sortsUiOption: INodeProperties = {
 			displayName: 'Sort',
 			values: [
 				{
-					displayName: 'Property Name or ID',
+					// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+					displayName: 'Property',
 					name: 'propertyName',
 					type: 'options',
 					typeOptions: {

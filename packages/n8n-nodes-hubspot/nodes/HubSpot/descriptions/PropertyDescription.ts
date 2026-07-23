@@ -67,7 +67,8 @@ export const propertyDescription: INodeProperties[] = [
 
 	// ── UPDATE PROPERTY LABEL ───────────────────────────────────────────────────
 	{
-		displayName: 'Property Name or ID',
+		// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+		displayName: 'Property',
 		name: 'propertyName',
 		type: 'options',
 		required: true,
@@ -125,7 +126,8 @@ export const propertyDescription: INodeProperties[] = [
 
 	// ── GET PROPERTY ─────────────────────────────────────────────────────────────
 	{
-		displayName: 'Property Name or ID',
+		// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+		displayName: 'Property',
 		name: 'getPropertyName',
 		type: 'options',
 		required: true,
@@ -146,7 +148,8 @@ export const propertyDescription: INodeProperties[] = [
 
 	// ── UPDATE DROPDOWN OPTIONS ─────────────────────────────────────────────────
 	{
-		displayName: 'Property Name or ID',
+		// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+		displayName: 'Property',
 		name: 'dropdownPropertyName',
 		type: 'options',
 		required: true,
