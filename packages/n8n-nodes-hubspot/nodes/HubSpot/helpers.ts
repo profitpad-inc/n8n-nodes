@@ -86,6 +86,14 @@ const CONTACTS_INVALID_SEARCH_PROPERTIES = ['hs_createdate', 'hs_lastmodifieddat
 // type ID is 0-115.
 export const USERS_OBJECT_TYPE = '0-115';
 
+// Property definitions rarely change and every dropdown in this node
+// (Properties, ID Property, Property, etc.) ultimately fetches them through
+// fetchPropertiesForType, so caching here — keyed by credential + object
+// type — dedupes repeated HubSpot calls across every one of those fields.
+// The cache lives for the running n8n process's lifetime; a failed fetch is
+// evicted immediately so a transient error doesn't stick around.
+const propertiesCache = new Map<string, Promise<HubSpotPropertySummary[]>>();
+
 /** Fetch and filter CRM property definitions for a literal object type ID. */
 async function fetchPropertiesForType(
 	this: ILoadOptionsFunctions,
@@ -93,24 +101,37 @@ async function fetchPropertiesForType(
 ): Promise<HubSpotPropertySummary[]> {
 	if (!objectType) return [];
 
-	const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
-		method: 'GET',
-		url: `${HUBSPOT_BASE}${PROPERTIES_BASE_PATH}/${objectType}`,
-		headers: { accept: 'application/json' },
-	})) as { results?: HubSpotPropertySummary[] };
+	const credentialId = this.getNode().credentials?.hubspotApi?.id ?? 'unknown';
+	const cacheKey = `${credentialId}:${objectType}`;
 
-	// Exclude legacy properties (e.g. owneremail), which HubSpot marks with a
-	// "(legacy)" suffix in the label. They should not be offered in dropdowns.
-	return (response.results ?? []).filter((property) => {
-		if (/\(legacy\)/i.test(property.label ?? '')) return false;
-		if (
-			objectType === CONTACTS_OBJECT_TYPE &&
-			CONTACTS_INVALID_SEARCH_PROPERTIES.includes(property.name)
-		) {
-			return false;
-		}
-		return true;
-	});
+	const cached = propertiesCache.get(cacheKey);
+	if (cached) return cached;
+
+	const promise = (async () => {
+		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+			method: 'GET',
+			url: `${HUBSPOT_BASE}${PROPERTIES_BASE_PATH}/${objectType}`,
+			headers: { accept: 'application/json' },
+		})) as { results?: HubSpotPropertySummary[] };
+
+		// Exclude legacy properties (e.g. owneremail), which HubSpot marks with a
+		// "(legacy)" suffix in the label. They should not be offered in dropdowns.
+		return (response.results ?? []).filter((property) => {
+			if (/\(legacy\)/i.test(property.label ?? '')) return false;
+			if (
+				objectType === CONTACTS_OBJECT_TYPE &&
+				CONTACTS_INVALID_SEARCH_PROPERTIES.includes(property.name)
+			) {
+				return false;
+			}
+			return true;
+		});
+	})();
+
+	propertiesCache.set(cacheKey, promise);
+	promise.catch(() => propertiesCache.delete(cacheKey));
+
+	return promise;
 }
 
 /**
