@@ -90,9 +90,14 @@ export const USERS_OBJECT_TYPE = '0-115';
 // (Properties, ID Property, Property, etc.) ultimately fetches them through
 // fetchPropertiesForType, so caching here — keyed by credential + object
 // type — dedupes repeated HubSpot calls across every one of those fields.
-// The cache lives for the running n8n process's lifetime; a failed fetch is
+// Entries expire after PROPERTIES_CACHE_TTL_MS so a property added in HubSpot
+// eventually shows up without requiring an n8n restart; a failed fetch is
 // evicted immediately so a transient error doesn't stick around.
-const propertiesCache = new Map<string, Promise<HubSpotPropertySummary[]>>();
+const PROPERTIES_CACHE_TTL_MS = 15 * 60 * 1000;
+const propertiesCache = new Map<
+	string,
+	{ promise: Promise<HubSpotPropertySummary[]>; expiresAt: number }
+>();
 
 /** Fetch and filter CRM property definitions for a literal object type ID. */
 async function fetchPropertiesForType(
@@ -105,7 +110,7 @@ async function fetchPropertiesForType(
 	const cacheKey = `${credentialId}:${objectType}`;
 
 	const cached = propertiesCache.get(cacheKey);
-	if (cached) return cached;
+	if (cached && cached.expiresAt > Date.now()) return cached.promise;
 
 	const promise = (async () => {
 		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
@@ -128,7 +133,7 @@ async function fetchPropertiesForType(
 		});
 	})();
 
-	propertiesCache.set(cacheKey, promise);
+	propertiesCache.set(cacheKey, { promise, expiresAt: Date.now() + PROPERTIES_CACHE_TTL_MS });
 	promise.catch(() => propertiesCache.delete(cacheKey));
 
 	return promise;
