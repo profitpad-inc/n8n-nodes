@@ -93,7 +93,7 @@ export const USERS_OBJECT_TYPE = '0-115';
 // Entries expire after PROPERTIES_CACHE_TTL_MS so a property added in HubSpot
 // eventually shows up without requiring an n8n restart; a failed fetch is
 // evicted immediately so a transient error doesn't stick around.
-const PROPERTIES_CACHE_TTL_MS = 15 * 60 * 1000;
+const PROPERTIES_CACHE_TTL_MS = 2 * 60 * 1000;
 const propertiesCache = new Map<
 	string,
 	{ promise: Promise<HubSpotPropertySummary[]>; expiresAt: number }
