@@ -279,8 +279,8 @@ export class HubspotApi implements INodeType {
 					// ── GET ──────────────────────────────────────────────────────────
 					if (operation === 'get') {
 						const objectId = String(this.getNodeParameter('objectId', i)).trim();
+						const properties = this.getNodeParameter('properties', i) as string | string[];
 						const opts = this.getNodeParameter('additionalOptions', i) as {
-							properties?: string | string[];
 							propertiesWithHistory?: string | string[];
 							associations?: string | string[];
 							idProperty?: string;
@@ -291,7 +291,7 @@ export class HubspotApi implements INodeType {
 
 						delayMs = opts.millisecondsBetweenItems ?? 50;
 
-						const propertiesList = toStringList(opts.properties);
+						const propertiesList = toStringList(properties);
 						const propertiesWithHistoryList = toStringList(opts.propertiesWithHistory);
 						const associationsList = toStringList(opts.associations);
 
@@ -335,8 +335,8 @@ export class HubspotApi implements INodeType {
 					// ── LIST ──────────────────────────────────────────────────────────
 					if (operation === 'list') {
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+						const properties = this.getNodeParameter('properties', i) as string | string[];
 						const opts = this.getNodeParameter('listOptions', i) as {
-							properties?: string | string[];
 							propertiesWithHistory?: string | string[];
 							associations?: string | string[];
 							after?: string;
@@ -346,7 +346,7 @@ export class HubspotApi implements INodeType {
 
 						delayMs = opts.millisecondsBetweenItems ?? 50;
 
-						const propertiesList = toStringList(opts.properties);
+						const propertiesList = toStringList(properties);
 						const propertiesWithHistoryList = toStringList(opts.propertiesWithHistory);
 						const associationsList = toStringList(opts.associations);
 

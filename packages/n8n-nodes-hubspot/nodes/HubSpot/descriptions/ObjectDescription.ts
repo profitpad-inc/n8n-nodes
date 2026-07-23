@@ -238,6 +238,9 @@ export const objectDescription: INodeProperties[] = [
 		},
 	},
 
+	// ── GET Properties ─────────────────────────────────────────────────────────
+	propertiesProperty({ resource: ['objects'], operation: ['get'] }),
+
 	// ── GET additional options ─────────────────────────────────────────────────
 	{
 		displayName: 'Additional Options',
@@ -288,19 +291,6 @@ export const objectDescription: INodeProperties[] = [
 				description: 'Look up the record by this property instead of the record ID (e.g. <em>email</em> for contacts). Only properties with a unique value are listed. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			msOption,
-			{
-				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
-				displayName: 'Properties',
-				name: 'properties',
-				type: 'multiOptions',
-				typeOptions: {
-					loadOptionsMethod: 'getAllProperties',
-					loadOptionsDependsOn: ['objectType'],
-				},
-				default: [],
-				description:
-					'Properties to return. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
-			},
 			{
 				displayName: 'Properties With History',
 				name: 'propertiesWithHistory',
@@ -408,6 +398,9 @@ export const objectDescription: INodeProperties[] = [
 			},
 		},
 	},
+	// ── LIST Properties ────────────────────────────────────────────────────────
+	propertiesProperty({ resource: ['objects'], operation: ['list'] }),
+
 	{
 		displayName: 'Additional Options',
 		name: 'listOptions',
@@ -445,19 +438,6 @@ export const objectDescription: INodeProperties[] = [
 				description: 'Object types to retrieve associated records for',
 			},
 			msOption,
-			{
-				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
-				displayName: 'Properties',
-				name: 'properties',
-				type: 'multiOptions',
-				typeOptions: {
-					loadOptionsMethod: 'getAllProperties',
-					loadOptionsDependsOn: ['objectType'],
-				},
-				default: [],
-				description:
-					'Properties to return. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
-			},
 			{
 				displayName: 'Properties With History',
 				name: 'propertiesWithHistory',
