@@ -25,7 +25,9 @@ import {
 	getUniqueProperties,
 	getUniquePropertiesForAssociationFrom,
 	getUniquePropertiesForAssociationTo,
+	getUserProperties,
 	getWritableProperties,
+	getWritableUserProperties,
 	OWNERS_BASE_PATH,
 	resolveUsersLookup,
 	UsersLookup,
@@ -129,6 +131,8 @@ export class HubspotApi implements INodeType {
 			getUniquePropertiesForAssociationFrom,
 			getUniquePropertiesForAssociationTo,
 			getAssociationTypeIds,
+			getUserProperties,
+			getWritableUserProperties,
 		},
 	};
 

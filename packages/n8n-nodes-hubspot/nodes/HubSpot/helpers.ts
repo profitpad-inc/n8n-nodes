@@ -34,7 +34,7 @@ export const OBJECT_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Subscriptions (0-69)', value: '0-69' },
 	{ name: 'Tasks (0-27)', value: '0-27' },
 	{ name: 'Tickets (0-5)', value: '0-5' },
-	{ name: 'Users (Users)', value: 'users' },
+	{ name: 'Users (0-115)', value: '0-115' },
 ];
 
 export function buildHubSpotUrl(
@@ -73,23 +73,17 @@ interface HubSpotPropertySummary {
 export const CONTACTS_OBJECT_TYPE = '0-1';
 const CONTACTS_INVALID_SEARCH_PROPERTIES = ['hs_createdate', 'hs_lastmodifieddate'];
 
-/**
- * Fetch CRM property definitions for the object type named by
- * `objectTypeParam` (a plain sibling name like `objectType`/`fromObjectType`,
- * or a `&`-prefixed name to read a sibling within the same fixedCollection
- * entry, e.g. `&toObjectType`). Returns [] when that parameter can't be
- * resolved (not yet set, or not present on the current node/branch).
- */
-async function fetchPropertiesForParam(
+// The Owners resource's "Object Type" field uses the plain strings 'users' /
+// 'owners' to pick an API branch, not a HubSpot CRM type ID, so it can't be
+// passed straight through to the Properties API. The Users object's actual
+// type ID is 0-115.
+export const USERS_OBJECT_TYPE = '0-115';
+
+/** Fetch and filter CRM property definitions for a literal object type ID. */
+async function fetchPropertiesForType(
 	this: ILoadOptionsFunctions,
-	objectTypeParam: string,
+	objectType: string,
 ): Promise<HubSpotPropertySummary[]> {
-	let objectType = '';
-	try {
-		objectType = (this.getCurrentNodeParameter(objectTypeParam) as string) ?? '';
-	} catch {
-		objectType = '';
-	}
 	if (!objectType) return [];
 
 	const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
@@ -110,6 +104,26 @@ async function fetchPropertiesForParam(
 		}
 		return true;
 	});
+}
+
+/**
+ * Fetch CRM property definitions for the object type named by
+ * `objectTypeParam` (a plain sibling name like `objectType`/`fromObjectType`,
+ * or a `&`-prefixed name to read a sibling within the same fixedCollection
+ * entry, e.g. `&toObjectType`). Returns [] when that parameter can't be
+ * resolved (not yet set, or not present on the current node/branch).
+ */
+async function fetchPropertiesForParam(
+	this: ILoadOptionsFunctions,
+	objectTypeParam: string,
+): Promise<HubSpotPropertySummary[]> {
+	let objectType = '';
+	try {
+		objectType = (this.getCurrentNodeParameter(objectTypeParam) as string) ?? '';
+	} catch {
+		objectType = '';
+	}
+	return fetchPropertiesForType.call(this, objectType);
 }
 
 async function fetchProperties(this: ILoadOptionsFunctions): Promise<HubSpotPropertySummary[]> {
@@ -173,6 +187,27 @@ export async function getWritableProperties(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
 	const properties = await fetchProperties.call(this);
+	return properties
+		.filter((property) => !property.modificationMetadata?.readOnlyValue)
+		.map(toOption)
+		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** All properties for the Owners resource's Users object type (0-115). */
+export async function getUserProperties(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const properties = await fetchPropertiesForType.call(this, USERS_OBJECT_TYPE);
+	return properties
+		.map((property) => ({ name: `${property.label} (${property.name})`, value: property.name }))
+		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Writable properties for the Owners resource's Users object type (0-115). */
+export async function getWritableUserProperties(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const properties = await fetchPropertiesForType.call(this, USERS_OBJECT_TYPE);
 	return properties
 		.filter((property) => !property.modificationMetadata?.readOnlyValue)
 		.map(toOption)

@@ -16,6 +16,11 @@ const archivedOption: INodeProperties = {
 	type: 'boolean',
 	default: false,
 	description: 'Whether to include archived records in the response',
+	displayOptions: {
+		show: {
+			objectType: ['owners'],
+		},
+	},
 };
 
 const errorWhenNotFoundOption: INodeProperties = {
@@ -33,8 +38,7 @@ const propertiesOption: INodeProperties = {
 	name: 'properties',
 	type: 'multiOptions',
 	typeOptions: {
-		loadOptionsMethod: 'getAllProperties',
-		loadOptionsDependsOn: ['objectType'],
+		loadOptionsMethod: 'getUserProperties',
 	},
 	default: [],
 	description:
@@ -51,8 +55,7 @@ const propertiesWithHistoryOption: INodeProperties = {
 	name: 'propertiesWithHistory',
 	type: 'multiOptions',
 	typeOptions: {
-		loadOptionsMethod: 'getAllProperties',
-		loadOptionsDependsOn: ['objectType'],
+		loadOptionsMethod: 'getUserProperties',
 	},
 	default: [],
 	description:
@@ -432,13 +435,7 @@ export const ownerDescription: INodeProperties[] = [
 				operation: ['search'],
 			},
 		},
-		options: [
-			archivedOption,
-			errorWhenNotFoundOption,
-			msOption,
-			propertiesOption,
-			propertiesWithHistoryOption,
-		],
+		options: [errorWhenNotFoundOption, msOption, propertiesOption, propertiesWithHistoryOption],
 	},
 
 	// ── UPDATE (Users only) ─────────────────────────────────────────────────────
@@ -494,8 +491,7 @@ export const ownerDescription: INodeProperties[] = [
 						name: 'name',
 						type: 'options',
 						typeOptions: {
-							loadOptionsMethod: 'getWritableProperties',
-							loadOptionsDependsOn: ['objectType'],
+							loadOptionsMethod: 'getWritableUserProperties',
 						},
 						default: '',
 						description:
