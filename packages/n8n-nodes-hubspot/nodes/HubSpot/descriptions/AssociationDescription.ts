@@ -1,6 +1,6 @@
 import { INodeProperties } from 'n8n-workflow';
 
-import { OBJECT_TYPE_OPTIONS } from '../helpers';
+import { ASSOCIATION_OBJECT_TYPE_OPTIONS } from '../helpers';
 
 export const associationDescription: INodeProperties[] = [
 	// ── Operation ─────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ export const associationDescription: INodeProperties[] = [
 				resource: ['associations'],
 			},
 		},
-		options: OBJECT_TYPE_OPTIONS,
+		options: ASSOCIATION_OBJECT_TYPE_OPTIONS,
 		default: '0-1',
 		description: 'The HubSpot CRM object type the associations originate from',
 	},
@@ -76,7 +76,7 @@ export const associationDescription: INodeProperties[] = [
 				resource: ['associations'],
 			},
 		},
-		options: OBJECT_TYPE_OPTIONS,
+		options: ASSOCIATION_OBJECT_TYPE_OPTIONS,
 		default: '0-3',
 		description: 'The HubSpot CRM object type the associations point to',
 	},

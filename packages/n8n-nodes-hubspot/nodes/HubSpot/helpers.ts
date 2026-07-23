@@ -37,6 +37,13 @@ export const OBJECT_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Users (0-115)', value: '0-115' },
 ];
 
+// Users aren't associable CRM records, so the Associations resource's From/To
+// Object Type fields exclude the Users entry that the Objects and Properties
+// resources otherwise share via OBJECT_TYPE_OPTIONS.
+export const ASSOCIATION_OBJECT_TYPE_OPTIONS: INodePropertyOptions[] = OBJECT_TYPE_OPTIONS.filter(
+	(option) => option.value !== '0-115',
+);
+
 export function buildHubSpotUrl(
 	base: string,
 	path: string,
