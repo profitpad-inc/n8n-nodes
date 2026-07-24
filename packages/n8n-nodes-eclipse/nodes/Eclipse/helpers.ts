@@ -46,6 +46,26 @@ export async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promi
   throw lastError;
 }
 
+// n8n's "options" fields show a UI warning when an expression resolves to a
+// value that doesn't exactly match one of the declared options (case included),
+// even though execution isn't actually blocked by it. Since Eclipse's status
+// values are case-sensitive, this normalizes case-insensitive matches (e.g.
+// "shipwhencomplete" from an upstream CRM field) to the exact casing the API
+// expects, so expression-driven input works without the caller needing to
+// match the enum's casing exactly.
+export function normalizeEnumValue(value: string, validValues: Array<{ value: string }>): string {
+  const match = validValues.find((v) => v.value.toLowerCase() === value.toLowerCase());
+  return match ? match.value : value;
+}
+
+// `string`-typed parameters can still resolve to a number at runtime (e.g. an
+// expression pulling an ID field from upstream JSON), and calling `.trim()`
+// directly on that throws "value.trim is not a function". Coerce to string
+// first so both plain numbers and strings are accepted.
+export function toTrimmedString(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
 export function applyFieldFilter(
   results: JsonObject[],
   fieldsFilterMode: string,

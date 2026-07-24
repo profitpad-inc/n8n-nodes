@@ -6,13 +6,14 @@ import {
   JsonObject,
   NodeApiError,
   NodeConnectionTypes,
+  NodeOperationError,
 } from 'n8n-workflow';
 
 import { contactDescription } from './descriptions/ContactDescription';
 import { customerDescription } from './descriptions/CustomerDescription';
 import { productDescription } from './descriptions/ProductDescription';
-import { salesOrderDescription } from './descriptions/SalesOrderDescription';
-import { applyFieldFilter, createSession } from './helpers';
+import { salesOrderDescription, salesOrderUpdateStatuses } from './descriptions/SalesOrderDescription';
+import { applyFieldFilter, createSession, normalizeEnumValue, toTrimmedString } from './helpers';
 
 export class EclipseApi implements INodeType {
   description: INodeTypeDescription = {
@@ -590,10 +591,10 @@ export class EclipseApi implements INodeType {
               const rawJson = (this.getNodeParameter('salesOrderCustomJson', i) as string).trim();
               body = JSON.parse(rawJson) as JsonObject;
             } else {
-              const billToCustomerId = (this.getNodeParameter('billToCustomerId', i) as string).trim();
-              const shipToCustomerId = (this.getNodeParameter('shipToCustomerId', i) as string).trim();
-              const priceBranch = (this.getNodeParameter('salesOrderPriceBranch', i) as string).trim();
-              const shipBranch = (this.getNodeParameter('salesOrderShipBranch', i) as string).trim();
+              const billToCustomerId = toTrimmedString(this.getNodeParameter('billToCustomerId', i));
+              const shipToCustomerId = toTrimmedString(this.getNodeParameter('shipToCustomerId', i));
+              const priceBranch = toTrimmedString(this.getNodeParameter('salesOrderPriceBranch', i));
+              const shipBranch = toTrimmedString(this.getNodeParameter('salesOrderShipBranch', i));
               const orderStatus = (this.getNodeParameter('salesOrderStatus', i) as string).trim();
               const shipDate = (this.getNodeParameter('salesOrderShipDate', i) as string).trim();
               const requiredDate = (this.getNodeParameter('salesOrderRequiredDate', i) as string).trim();
@@ -632,7 +633,7 @@ export class EclipseApi implements INodeType {
                 street2 = (this.getNodeParameter('salesOrderStreet2', i) as string).trim();
                 city = (this.getNodeParameter('salesOrderCity', i) as string).trim();
                 state = (this.getNodeParameter('salesOrderState', i) as string).trim();
-                postalCode = (this.getNodeParameter('salesOrderPostalCode', i) as string).trim();
+                postalCode = toTrimmedString(this.getNodeParameter('salesOrderPostalCode', i));
                 country = (this.getNodeParameter('salesOrderCountry', i) as string).trim();
               }
 
@@ -741,10 +742,21 @@ export class EclipseApi implements INodeType {
           // ── UPDATE STATUS ────────────────────────────────────────────────
           if (operation === 'updateStatus') {
             const rawStatusId = (this.getNodeParameter('statusOrderId', i) as string).trim();
-            const orderStatus = (this.getNodeParameter('statusOrderStatus', i) as string).trim();
+            const orderStatus = normalizeEnumValue(
+              (this.getNodeParameter('statusOrderStatus', i) as string).trim(),
+              salesOrderUpdateStatuses,
+            );
             const shipDate = orderStatus === 'ShipWhenSpecified'
               ? (this.getNodeParameter('statusShipDate', i) as string).trim()
               : undefined;
+
+            if (orderStatus === 'ShipWhenSpecified' && !shipDate) {
+              throw new NodeOperationError(
+                this.getNode(),
+                'Ship Date is required when Order Status is "Ship When Specified"',
+                { itemIndex: i },
+              );
+            }
 
             const statusDotIndex = rawStatusId.indexOf('.');
             const orderId = statusDotIndex !== -1 ? rawStatusId.slice(0, statusDotIndex) : rawStatusId;

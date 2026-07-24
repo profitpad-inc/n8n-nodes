@@ -108,7 +108,7 @@ Polls on a schedule. Two lookback modes:
 Returns `null` (not an empty array) when there are zero results, which is
 the n8n convention for "nothing happened this poll."
 
-## Known n8n editor quirk (not a bug in our code)
+## Known n8n editor quirk: "options" field value warnings
 
 `options`/`multiOptions` type fields (e.g. Sales Order → Update Status →
 Order Status) show an "Issues: The value ... is not supported!" warning in
@@ -118,14 +118,55 @@ the actual `n8n-editor-ui` bundle used by `n8n-node dev`, found under
 `~/.npm/_npx/.../node_modules/n8n-editor-ui/dist/assets/ParameterInputList-*.js`)
 to a hardcoded core n8n check — it applies to every `options`/`multiOptions`
 field in every node, expression mode or not, and there is no property-level
-flag to suppress it. **It's cosmetic only**: `execute()` just does
-`getNodeParameter(...)` and passes whatever the expression resolves to
-straight through with no enum validation, so the workflow still runs
-correctly despite the warning. Don't chase "fixing" this again — the only
-real way to remove the warning is switching the field from `options` to
-plain `string` (losing the dropdown for manual users). That tradeoff was
-discussed and declined as of 2026-07-24 (see git history around that date);
-the dropdown was kept.
+flag to suppress it. **It's cosmetic only**: `execute()` doesn't run n8n's
+built-in enum validation against `getNodeParameter(...)` results, so the
+workflow runs correctly regardless of the warning.
+
+For Sales Order → Update Status specifically, the underlying cause the user
+actually cared about was case sensitivity: upstream systems (e.g. a CRM
+field like `hs_deal.e_open_order_status`) often supply lowercase values like
+`shipwhencomplete`, which don't match Eclipse's PascalCase enum
+(`ShipWhenComplete`). Fixed by normalizing case-insensitively in
+`execute()` before sending to the API: `salesOrderUpdateStatuses` is now
+exported from `SalesOrderDescription.ts` (shared with the property's
+`options` list) and `normalizeEnumValue()` in `helpers.ts` looks up the
+canonical casing by case-insensitive match, falling back to the raw input
+unchanged if nothing matches. The NDV warning can still appear (that part of
+n8n core is unfixable from node code), but the actual request now uses the
+correct casing either way. If another status-like field needs the same
+treatment, reuse `normalizeEnumValue()` rather than re-deriving this.
+
+## Known n8n editor bug (not cosmetic): `required` + expression-driven `displayOptions.show`
+
+This one **does** block execution, unlike the warning above. Found in
+`node-helpers.js#displayParameter()` (n8n-workflow): when checking whether a
+field should be displayed, if *any* controlling parameter's value is a
+string starting with `=` (i.e. it's an expression, value not known until
+runtime), the function immediately returns `true` — the field is force-shown
+— regardless of what the show/hide conditions actually say. If that field
+also has `required: true`, n8n's parameter-issue check then requires it too,
+producing a hard "Workflow execution cannot start" / "Parameter ... is
+required" error even when the real (soon-to-be-resolved) value wouldn't
+need that field at all.
+
+Hit this on Sales Order → Update Status → **Ship Date**, which only makes
+sense when Order Status is `ShipWhenSpecified`
+(`displayOptions.show.statusOrderStatus: ['ShipWhenSpecified']`,
+`required: true`). As soon as **Order Status** itself is set via an
+expression, Ship Date got force-required, blocking every Update Status
+execution regardless of the actual status value.
+
+**Fix pattern**: don't set `required: true` on a field whose visibility
+depends on another field that could plausibly be driven by an expression.
+Keep the `displayOptions` (still useful for the common manual-selection
+case) but drop `required`, and enforce the real requirement in `execute()`
+once the actual resolved value is known — see the `ShipWhenSpecified` /
+`statusShipDate` check right after the `normalizeEnumValue()` call in the
+`updateStatus` block of `EclipseApi.node.ts`, which throws a
+`NodeOperationError` if the (now-known) status needs a ship date but none
+was given. Apply the same pattern to any other "field B is required only
+when field A equals X" case if field A can be expression-driven — which,
+for anything user-facing in this node, it always potentially can be.
 
 ## Gaps / things to know if asked to touch them
 

@@ -1,5 +1,21 @@
 import { INodeProperties } from 'n8n-workflow';
 
+// Exported so EclipseApi.node.ts can normalize case-insensitive expression
+// input (e.g. "shipwhencomplete") to the exact casing the Eclipse API expects.
+export const salesOrderUpdateStatuses = [
+  { name: 'Bid', value: 'Bid' },
+  { name: 'Call When Available', value: 'CallWhenAvailable' },
+  { name: 'Call When Complete', value: 'CallWhenComplete' },
+  { name: 'Call When Specified', value: 'CallWhenSpecified' },
+  { name: 'Direct', value: 'Direct' },
+  { name: 'Pick Up Now', value: 'PickUpNow' },
+  { name: 'Ship Item Complete', value: 'ShipItemComplete' },
+  { name: 'Ship Ticket', value: 'ShipTicket' },
+  { name: 'Ship When Available', value: 'ShipWhenAvailable' },
+  { name: 'Ship When Complete', value: 'ShipWhenComplete' },
+  { name: 'Ship When Specified', value: 'ShipWhenSpecified' },
+];
+
 export const salesOrderDescription: INodeProperties[] = [
   // ── Sales Order operations ────────────────────────────────────────────
   {
@@ -769,29 +785,22 @@ export const salesOrderDescription: INodeProperties[] = [
     name: 'statusOrderStatus',
     type: 'options',
     required: true,
-    options: [
-      { name: 'Bid', value: 'Bid' },
-      { name: 'Call When Available', value: 'CallWhenAvailable' },
-      { name: 'Call When Complete', value: 'CallWhenComplete' },
-      { name: 'Call When Specified', value: 'CallWhenSpecified' },
-      { name: 'Direct', value: 'Direct' },
-      { name: 'Pick Up Now', value: 'PickUpNow' },
-      { name: 'Ship Item Complete', value: 'ShipItemComplete' },
-      { name: 'Ship Ticket', value: 'ShipTicket' },
-      { name: 'Ship When Available', value: 'ShipWhenAvailable' },
-      { name: 'Ship When Complete', value: 'ShipWhenComplete' },
-      { name: 'Ship When Specified', value: 'ShipWhenSpecified' },
-    ],
+    options: salesOrderUpdateStatuses,
     default: 'Bid',
     description: 'The new status for the sales order',
     displayOptions: { show: { resource: ['salesOrder'], operation: ['updateStatus'] } },
   },
   {
+    // Not `required: true`: n8n force-shows (and force-requires) a field whose
+    // displayOptions.show depends on an expression-driven parameter, since it
+    // can't evaluate the condition until runtime. That would make this field
+    // block execution even when Order Status resolves to something other than
+    // "Ship When Specified". The actual requirement is enforced in execute()
+    // once the real value is known.
     displayName: 'Ship Date',
     name: 'statusShipDate',
     type: 'string',
     default: '',
-    required: true,
     placeholder: '2026-07-20',
     description: 'The ship date in ISO format (YYYY-MM-DD). Required when Order Status is "Ship When Specified".',
     displayOptions: { show: { resource: ['salesOrder'], operation: ['updateStatus'], statusOrderStatus: ['ShipWhenSpecified'] } },
