@@ -10,23 +10,33 @@ import { IDisplayOptions, INodeProperties, JsonObject } from 'n8n-workflow';
 export type FilterGroup = { filters: JsonObject[] };
 
 export interface UiFilter {
-	propertyName?: string;
+	propertyName?: string | number;
 	operator?: string;
-	value?: string;
-	highValue?: string;
+	value?: string | number;
+	highValue?: string | number;
 }
 export interface UiFilterGroups {
 	groups?: Array<{ filters?: { conditions?: UiFilter[] } }>;
 }
 export interface UiSorts {
-	sortValues?: Array<{ propertyName?: string; direction?: string }>;
+	sortValues?: Array<{ propertyName?: string | number; direction?: string }>;
 }
 
 export const VALUELESS_OPERATORS = ['HAS_PROPERTY', 'NOT_HAS_PROPERTY'];
 
+/**
+ * Trim a UI-supplied value. Expressions can resolve to numbers (or other
+ * non-string types) even though the field is declared as a string, so this
+ * coerces to a string first rather than assuming `.trim()` is available.
+ */
+function trimmed(value: string | number | undefined | null): string {
+	if (value === undefined || value === null) return '';
+	return (typeof value === 'number' ? String(value) : value).trim();
+}
+
 /** Convert a single UI filter row into a HubSpot search filter object. */
 export function buildFilterFromUi(filter: UiFilter): JsonObject | null {
-	const propertyName = (filter.propertyName ?? '').trim();
+	const propertyName = trimmed(filter.propertyName);
 	if (!propertyName) return null;
 
 	const operator = filter.operator ?? 'EQ';
@@ -35,7 +45,7 @@ export function buildFilterFromUi(filter: UiFilter): JsonObject | null {
 		return { propertyName, operator };
 	}
 
-	const rawValue = (filter.value ?? '').trim();
+	const rawValue = trimmed(filter.value);
 
 	if (operator === 'IN' || operator === 'NOT_IN') {
 		return {
@@ -50,7 +60,7 @@ export function buildFilterFromUi(filter: UiFilter): JsonObject | null {
 			propertyName,
 			operator,
 			value: rawValue,
-			highValue: (filter.highValue ?? '').trim(),
+			highValue: trimmed(filter.highValue),
 		};
 	}
 
@@ -71,9 +81,9 @@ export function buildFilterGroupsFromUi(ui: UiFilterGroups): FilterGroup[] {
 /** Build a sorts array from the Fields-mode UI. */
 export function buildSortsFromUi(ui: UiSorts): JsonObject[] {
 	return (ui.sortValues ?? [])
-		.filter((sort) => (sort.propertyName ?? '').trim())
+		.filter((sort) => trimmed(sort.propertyName))
 		.map((sort) => ({
-			propertyName: (sort.propertyName ?? '').trim(),
+			propertyName: trimmed(sort.propertyName),
 			direction: sort.direction ?? 'DESCENDING',
 		}));
 }
