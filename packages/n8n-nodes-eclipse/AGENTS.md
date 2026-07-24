@@ -1,5 +1,14 @@
 # n8n community node
 
+## Start here
+Before doing anything else in this project, read [`handoff.md`](handoff.md)
+in this same directory. It has project-specific context (architecture,
+known quirks, gotchas) built up from prior sessions that isn't repeated in
+the rest of this document. Keep it up to date: when a session uncovers
+something a future session would benefit from knowing (a new gotcha, a
+changed convention, a decision that was made and why), update
+`handoff.md` accordingly.
+
 ## Overview
 This is a project containing code for an n8n community node. n8n is a workflow
 automation platform where users build workflows with nodes, which are the
