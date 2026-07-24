@@ -7,6 +7,7 @@ export const salesOrderUpdateStatuses = [
   { name: 'Call When Available', value: 'CallWhenAvailable' },
   { name: 'Call When Complete', value: 'CallWhenComplete' },
   { name: 'Call When Specified', value: 'CallWhenSpecified' },
+  { name: 'Cancel', value: 'Cancel' },
   { name: 'Direct', value: 'Direct' },
   { name: 'Pick Up Now', value: 'PickUpNow' },
   { name: 'Ship Item Complete', value: 'ShipItemComplete' },

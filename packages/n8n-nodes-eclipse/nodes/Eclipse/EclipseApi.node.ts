@@ -13,7 +13,7 @@ import { contactDescription } from './descriptions/ContactDescription';
 import { customerDescription } from './descriptions/CustomerDescription';
 import { productDescription } from './descriptions/ProductDescription';
 import { salesOrderDescription, salesOrderUpdateStatuses } from './descriptions/SalesOrderDescription';
-import { applyFieldFilter, createSession, normalizeEnumValue, toTrimmedString } from './helpers';
+import { applyFieldFilter, createSession, normalizeEnumValue, parseJsonParameter, toTrimmedString } from './helpers';
 
 export class EclipseApi implements INodeType {
   description: INodeTypeDescription = {
@@ -612,7 +612,7 @@ export class EclipseApi implements INodeType {
                 shippingInstructions?: string;
                 termsCode?: string;
               };
-              const linesJson = (this.getNodeParameter('salesOrderLines', i) as string).trim();
+              const lines = parseJsonParameter<JsonObject[]>(this.getNodeParameter('salesOrderLines', i));
 
               let street1 = '', street2 = '', city = '', state = '', postalCode = '', country = '';
 
@@ -666,7 +666,7 @@ export class EclipseApi implements INodeType {
               if (options.shippingInstructions?.trim()) body.shippingInstructions = options.shippingInstructions.trim();
               if (options.termsCode?.trim()) body.termsCode = options.termsCode.trim();
 
-              if (linesJson) body.lines = JSON.parse(linesJson) as JsonObject[];
+              if (lines) body.lines = lines;
             }
 
             const createResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {

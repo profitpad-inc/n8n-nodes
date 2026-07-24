@@ -168,6 +168,42 @@ was given. Apply the same pattern to any other "field B is required only
 when field A equals X" case if field A can be expression-driven — which,
 for anything user-facing in this node, it always potentially can be.
 
+## Recurring bug class: expressions resolve to native types, not strings
+
+This node's `execute()` was originally written assuming every `string`/`json`
+typed parameter always comes back as an actual JS string, and calls
+`.trim()` / `JSON.parse()` on it directly. That's only true when the field
+is set manually in the UI. When it's set via an expression (very common —
+most real workflows map fields from upstream JSON), n8n returns whatever
+native type the expression evaluates to: a `string` field fed
+`{{ $json.billToId }}` returns a **number** if the upstream field is
+numeric; a `json` field fed `{{ $json.lines }}` returns the actual
+**array/object**, not a re-stringified JSON string. Calling `.trim()` on a
+number, or `JSON.parse()` on an array, throws at runtime.
+
+Two helpers in `helpers.ts` paper over this:
+- `toTrimmedString(value)` — `String(value ?? '').trim()`. Use for any
+  `string`-typed parameter that gets passed to the API as a plain string
+  (IDs, branch codes, etc.).
+- `parseJsonParameter<T>(value)` — passes non-string values through as-is,
+  only calls `JSON.parse()` if the value is actually a string. Use for
+  `json`-typed parameters.
+
+Currently applied to: `billToCustomerId`, `shipToCustomerId`,
+`salesOrderPriceBranch`, `salesOrderShipBranch`, `salesOrderPostalCode`, and
+`salesOrderLines` (all in the Create Sales Order block). **Not yet applied**
+to every other `(this.getNodeParameter(...) as string).trim()` call in the
+file — there are many (Contact/Customer/Product get/create/update, the
+other Sales Order update operations, `salesOrderCustomJson`, `updateFields`
+in Update Customer, etc.). Each was fixed reactively when a user hit it, not
+proactively across the board. If you're touching one of these blocks and
+have a moment, consider applying the same helper rather than waiting for
+the next report — but don't do a sweeping find-replace across the whole
+file unprompted, since some of these may be intentionally guarded elsewhere
+or behave differently (e.g. fields inside `collection`/`fixedCollection`
+objects come back already-typed per their own declared type, not
+necessarily as the parent's type).
+
 ## Gaps / things to know if asked to touch them
 
 - `CHANGELOG.md` in this package's root is currently **empty**, even though

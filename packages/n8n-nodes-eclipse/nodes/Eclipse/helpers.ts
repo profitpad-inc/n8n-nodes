@@ -66,6 +66,17 @@ export function toTrimmedString(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+// `json`-typed parameters are stored as a raw JSON string when set manually,
+// but when set via an expression that resolves to an array/object, n8n
+// passes that value through as-is (not re-stringified) — calling JSON.parse
+// on it would throw. Accept either shape.
+export function parseJsonParameter<T>(value: unknown): T | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string') return value as T;
+  const trimmed = value.trim();
+  return trimmed ? (JSON.parse(trimmed) as T) : undefined;
+}
+
 export function applyFieldFilter(
   results: JsonObject[],
   fieldsFilterMode: string,
