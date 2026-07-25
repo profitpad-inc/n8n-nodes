@@ -606,11 +606,11 @@ export const objectDescription: INodeProperties[] = [
 						type: 'options',
 						typeOptions: {
 							loadOptionsMethod: 'getUniquePropertiesForAssociationTo',
-							loadOptionsDependsOn: ['&toObjectType'],
+							loadOptionsDependsOn: ['objectType', '&associationTypeIds'],
 						},
 						default: '',
 						description:
-							'Look up the record to associate with by this property instead of its record ID (e.g. <em>email</em> for contacts). Only properties with a unique value are listed. When set, a GET request resolves the real ID first. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+							'Look up the record to associate with by this property instead of its record ID (e.g. <em>email</em> for contacts). Only properties with a unique value are listed, scoped to the object type implied by Association Type IDs. When set, a GET request resolves the real ID first. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 					},
 					{
 						displayName: 'Object ID to Associate',
@@ -618,15 +618,6 @@ export const objectDescription: INodeProperties[] = [
 						type: 'string',
 						default: '',
 						description: 'The HubSpot record ID, or the value of the property specified in <em>ID Property</em>, of the object to associate this new object with',
-					},
-					{
-						displayName: 'To Object Type',
-						name: 'toObjectType',
-						type: 'options',
-						typeOptions: { noValidation: true },
-						options: OBJECT_TYPE_OPTIONS,
-						default: '0-2',
-						description: 'The HubSpot CRM object type of the record to associate with',
 					},
 				],
 			},

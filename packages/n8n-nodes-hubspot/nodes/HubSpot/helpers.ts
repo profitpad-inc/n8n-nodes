@@ -44,6 +44,64 @@ export const ASSOCIATION_OBJECT_TYPE_OPTIONS: INodePropertyOptions[] = OBJECT_TY
 	(option) => option.value !== '0-115',
 );
 
+// Maps the singular object name used in ASSOCIATION_TYPES labels (e.g. the
+// "contact" in "Note to contact") to its object type ID, so that ID can be
+// inferred from a chosen association label instead of asking for it again.
+// Role-prefixed labels ("primary company", "billing contact", "upcoming line
+// item") are matched on their last word(s) in getAssociationTargetObjectType,
+// so only the base entity name needs an entry here.
+const ASSOCIATION_TARGET_OBJECT_TYPE_BY_NAME: Record<string, string> = {
+	call: '0-48',
+	cart: '0-142',
+	communication: '0-18',
+	company: '0-2',
+	contact: '0-1',
+	contract: '0-721',
+	deal: '0-3',
+	email: '0-49',
+	invoice: '0-53',
+	lead: '0-136',
+	'line item': '0-8',
+	meeting: '0-47',
+	note: '0-46',
+	order: '0-123',
+	payment: '0-101',
+	product: '0-7',
+	project: '0-970',
+	quote: '0-14',
+	service: '0-162',
+	subscription: '0-69',
+	task: '0-27',
+	ticket: '0-5',
+	user: '0-115',
+};
+
+/**
+ * Derives an association's target object type from its label (e.g. "Note to
+ * contact" -> Contacts' 0-1) instead of requiring it as separate input — the
+ * association type ID already encodes the from/to pairing. Returns '' for
+ * target kinds this node doesn't otherwise expose an object type for (e.g.
+ * Appointments, Feedback Submissions), which just means the ID Property
+ * lookup won't be offered for that association; a raw record ID still works.
+ */
+export function getAssociationTargetObjectType(
+	fromObjectType: string,
+	associationTypeId: number | string,
+): string {
+	const entry = (ASSOCIATION_TYPES[fromObjectType] ?? []).find(
+		([typeId]) => String(typeId) === String(associationTypeId),
+	);
+	if (!entry) return '';
+
+	const target = entry[1].split(' to ').pop() ?? '';
+	const words = target.trim().toLowerCase().split(/\s+/);
+	const lastTwoWords = words.slice(-2).join(' ');
+	if (lastTwoWords === 'line item') return ASSOCIATION_TARGET_OBJECT_TYPE_BY_NAME['line item'];
+
+	const lastWord = words[words.length - 1] ?? '';
+	return ASSOCIATION_TARGET_OBJECT_TYPE_BY_NAME[lastWord] ?? '';
+}
+
 export function buildHubSpotUrl(
 	base: string,
 	path: string,
@@ -215,13 +273,43 @@ export async function getAllProperties(
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Property names already picked in other rows of a Property/Value
+ * fixedCollection (Object Create's `createProperties` or Update's
+ * `updateFields`), so the picker for one row can exclude what's chosen
+ * elsewhere.
+ */
+function getSelectedPropertyNames(
+	this: ILoadOptionsFunctions,
+	collectionParam: string,
+): string[] {
+	const collection = this.getCurrentNodeParameters()?.[collectionParam] as
+		| { propertyValues?: Array<{ name?: string }> }
+		| undefined;
+	return (collection?.propertyValues ?? [])
+		.map((row) => row?.name)
+		.filter((name): name is string => Boolean(name));
+}
+
 /** Properties that can be written to (used for Create/Update property pickers). */
 export async function getWritableProperties(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
 	const properties = await fetchProperties.call(this);
+	let currentValue = '';
+	try {
+		currentValue = (this.getCurrentNodeParameter('&name') as string) ?? '';
+	} catch {
+		currentValue = '';
+	}
+	const usedElsewhere = new Set([
+		...getSelectedPropertyNames.call(this, 'createProperties'),
+		...getSelectedPropertyNames.call(this, 'updateFields'),
+	]);
+	usedElsewhere.delete(currentValue);
 	return properties
 		.filter((property) => !property.modificationMetadata?.readOnlyValue)
+		.filter((property) => !usedElsewhere.has(property.name))
 		.map(toOption)
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -262,13 +350,28 @@ export async function getUniquePropertiesForAssociationFrom(
 }
 
 /**
- * "ID Property" options scoped to a sibling `toObjectType` field within the
- * same fixedCollection entry (Object Create's association rows).
+ * "ID Property" options for Object Create's association rows, scoped to the
+ * object type implied by the sibling `associationTypeIds` field (e.g.
+ * selecting "Note to contact" scopes this to Contacts) rather than a
+ * separately-picked object type.
  */
 export async function getUniquePropertiesForAssociationTo(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-	return toUniqueIdPropertyOptions(await fetchPropertiesForParam.call(this, '&toObjectType'));
+	const objectType = (this.getCurrentNodeParameter('objectType') as string) ?? '';
+	let associationTypeIds: string | string[] = [];
+	try {
+		associationTypeIds =
+			(this.getCurrentNodeParameter('&associationTypeIds') as string | string[]) ?? [];
+	} catch {
+		associationTypeIds = [];
+	}
+	const firstTypeId = Array.isArray(associationTypeIds) ? associationTypeIds[0] : associationTypeIds;
+	const toObjectType = firstTypeId
+		? getAssociationTargetObjectType(objectType, firstTypeId)
+		: '';
+	if (!toObjectType) return [{ name: 'Record ID', value: '' }];
+	return toUniqueIdPropertyOptions(await fetchPropertiesForType.call(this, toObjectType));
 }
 
 /**

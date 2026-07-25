@@ -17,6 +17,7 @@ import {
 	buildHubSpotUrl,
 	findOwnerByField,
 	getAllProperties,
+	getAssociationTargetObjectType,
 	getAssociationTypeIds,
 	getEnumerationProperties,
 	getProperties,
@@ -472,7 +473,6 @@ export class HubspotApi implements INodeType {
 						} else {
 							const createAssocParam = this.getNodeParameter('createAssociations', i) as {
 								associationValues?: Array<{
-									toObjectType: string;
 									toObjectId: string;
 									toIdProperty?: string;
 									associationTypeIds: string | string[];
@@ -484,11 +484,16 @@ export class HubspotApi implements INodeType {
 							for (const assoc of createAssocParam.associationValues ?? []) {
 								let resolvedToId = String(assoc.toObjectId).trim();
 								const toIdProperty = (assoc.toIdProperty ?? '').trim();
+								const associationTypeIds = toStringList(assoc.associationTypeIds);
 
 								if (toIdProperty) {
+									const toObjectType = getAssociationTargetObjectType(
+										objectType,
+										associationTypeIds[0] ?? '',
+									);
 									const resolveUrl = buildHubSpotUrl(
 										HUBSPOT_BASE,
-										`${OBJECTS_BASE_PATH}/${assoc.toObjectType}/${resolvedToId}`,
+										`${OBJECTS_BASE_PATH}/${toObjectType}/${resolvedToId}`,
 										{ idProperty: toIdProperty },
 									);
 									const resolveResponse = (await this.helpers.httpRequestWithAuthentication.call(
@@ -501,7 +506,7 @@ export class HubspotApi implements INodeType {
 
 								createAssociations.push({
 									to: { id: resolvedToId },
-									types: toStringList(assoc.associationTypeIds).map((associationTypeId) => ({
+									types: associationTypeIds.map((associationTypeId) => ({
 										associationTypeId: Number(associationTypeId),
 										associationCategory: assoc.associationCategory,
 									})),
