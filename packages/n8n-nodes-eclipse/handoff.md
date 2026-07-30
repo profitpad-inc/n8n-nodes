@@ -28,9 +28,11 @@ nodes/Eclipse/
     ContactDescription.ts      Contact: Get, Get Many
     CustomerDescription.ts     Customer: Create, Get, Get Many, Update
     ProductDescription.ts      Product: Get, Get Many, Product Inventory Pricing Inquiry
-    SalesOrderDescription.ts   Sales Order: Create, Create Shipment, Get, Get Many,
-                                Get Order Change Log, Update Internal Notes,
-                                Update PO Number, Update Ship Date, Update Ship Via,
+    SalesOrderDescription.ts   Sales Order: Create, Create Line Items, Create Shipment,
+                                Delete Line Items, Get, Get Many, Get Order Change Log,
+                                Update Internal Notes, Update Line Items Price,
+                                Update Line Items Quantity, Update PO Number,
+                                Update Ship Date, Update Ship Via,
                                 Update Shipping Instructions, Update Status
 ```
 
@@ -73,6 +75,34 @@ const generationId = dotIndex !== -1 ? rawId.slice(dotIndex + 1).padStart(4, '0'
 If you add a new operation that takes a sales order ID and needs the
 generation separately, follow this same pattern rather than inventing a new
 one.
+
+**Not every operation needs the split**, though: the LineItems sub-endpoints
+(`createLineItem`, `updateLineItemPrice`, `updateLineItemQuantity`,
+`deleteLineItem`) just pass the full `S2690635.0001`-style ID straight
+through in the URL path, same as `updateShippingInstructions` /
+`updatePONumber` / `updateShipVia` / `updateShipDate`. Only split it when the
+API actually wants `orderId` and `generationId` as separate body/query
+fields (as `updateStatus` and `updateInternalNotes` do).
+
+## Sales Order line item sub-endpoints
+
+`POST/PUT/DELETE .../SalesOrders/{id}/LineItems*` all take an **array** body
+(even when updating a single line), each entry keyed by `lineId` (the line
+item number as a string, e.g. `"1"` — not the product ID). `Create Line
+Items` reuses the same `lineItemProduct` shape as Create Sales Order's
+`lines` field (`defaultSalesOrderLinesJson`, exported from
+`SalesOrderDescription.ts`, backs both). `Update Line Items Price` and
+`Update Line Items Quantity` use a `fixedCollection` with
+`typeOptions: { multipleValues: true }` in Fields mode (see
+`updatePriceLines` / `updateQtyLines`) so a workflow can update several
+lines in one call — mirrors the `types`/`shipToLists`/`contacts`
+fixedCollection pattern already used in `CustomerDescription.ts`. `Delete
+Line Items` is the odd one out in two ways: the underlying API only accepts
+one `lineItemId` query param per request (not an array in the body), and it
+still needs an empty `{}` JSON body sent regardless. Since the operation
+needs to support deleting multiple lines, the "Line Item IDs" field takes a
+comma-separated list and `execute()` loops, firing one sequential DELETE
+request per ID — there's no bulk-delete endpoint to call instead.
 
 ## Field filtering (`applyFieldFilter` in helpers.ts)
 

@@ -957,6 +957,146 @@ export class EclipseApi implements INodeType {
 
             returnData.push({ json: inResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
           }
+
+          // ── CREATE LINE ITEMS ────────────────────────────────────────────
+          if (operation === 'createLineItem') {
+            const salesOrderId = (this.getNodeParameter('createLineItemSalesOrderId', i) as string).trim();
+            const body = parseJsonParameter<JsonObject[]>(this.getNodeParameter('createLineItemLines', i));
+
+            const clResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'POST',
+              url: `${baseUrl}/SalesOrders/${salesOrderId}/LineItems`,
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body,
+              json: true,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (clResponse.statusCode < 200 || clResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Create line items failed with status ${clResponse.statusCode}`,
+                description: typeof clResponse.body === 'object'
+                  ? JSON.stringify(clResponse.body)
+                  : String(clResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: clResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
+
+          // ── UPDATE LINE ITEMS PRICE ──────────────────────────────────────
+          if (operation === 'updateLineItemPrice') {
+            const orderId = (this.getNodeParameter('updatePriceOrderId', i) as string).trim();
+            const inputMode = (this.getNodeParameter('updatePriceInputMode', i) as string).trim();
+
+            let body: JsonObject[];
+            if (inputMode === 'json') {
+              body = parseJsonParameter<JsonObject[]>(this.getNodeParameter('updatePriceCustomJson', i)) ?? [];
+            } else {
+              const pricesParam = this.getNodeParameter('updatePriceLines', i) as {
+                lineValues?: Array<{ lineId: string; value: number }>;
+              };
+              body = (pricesParam.lineValues ?? []).map(({ lineId, value }) => ({ lineId: toTrimmedString(lineId), value }));
+            }
+
+            const upResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'PUT',
+              url: `${baseUrl}/SalesOrders/${orderId}/LineItems/Price`,
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body,
+              json: true,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (upResponse.statusCode < 200 || upResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Update line items price failed with status ${upResponse.statusCode}`,
+                description: typeof upResponse.body === 'object'
+                  ? JSON.stringify(upResponse.body)
+                  : String(upResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: upResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
+
+          // ── UPDATE LINE ITEMS QUANTITY ───────────────────────────────────
+          if (operation === 'updateLineItemQuantity') {
+            const orderId = (this.getNodeParameter('updateQtyOrderId', i) as string).trim();
+            const inputMode = (this.getNodeParameter('updateQtyInputMode', i) as string).trim();
+
+            let body: JsonObject[];
+            if (inputMode === 'json') {
+              body = parseJsonParameter<JsonObject[]>(this.getNodeParameter('updateQtyCustomJson', i)) ?? [];
+            } else {
+              const qtyParam = this.getNodeParameter('updateQtyLines', i) as {
+                lineValues?: Array<{ lineId: string; qty: number; um: string }>;
+              };
+              body = (qtyParam.lineValues ?? []).map(({ lineId, qty, um }) => ({
+                lineId: toTrimmedString(lineId),
+                qty,
+                um: toTrimmedString(um),
+              }));
+            }
+
+            const uqResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'PUT',
+              url: `${baseUrl}/SalesOrders/${orderId}/QtyLineItems`,
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body,
+              json: true,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (uqResponse.statusCode < 200 || uqResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Update line items quantity failed with status ${uqResponse.statusCode}`,
+                description: typeof uqResponse.body === 'object'
+                  ? JSON.stringify(uqResponse.body)
+                  : String(uqResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: uqResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
+
+          // ── DELETE LINE ITEMS ─────────────────────────────────────────────
+          if (operation === 'deleteLineItem') {
+            const orderId = (this.getNodeParameter('deleteLineItemOrderId', i) as string).trim();
+            const rawLineItemIds = toTrimmedString(this.getNodeParameter('deleteLineItemLineItemId', i));
+            const lineItemIds = rawLineItemIds.split(',').map((id) => id.trim()).filter(Boolean);
+
+            // The API only accepts one lineItemId per request, so multiple
+            // comma-separated IDs are sent as separate sequential requests.
+            // Only the last response is returned to the workflow.
+            let dlResponse: { statusCode: number; body: unknown } | undefined;
+            for (const lineItemId of lineItemIds) {
+              dlResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                method: 'DELETE',
+                url: `${baseUrl}/SalesOrders/${orderId}/LineItems`,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                qs: { lineItemId },
+                body: {},
+                json: true,
+                returnFullResponse: true,
+                ignoreHttpStatusErrors: true,
+              });
+
+              if (dlResponse!.statusCode < 200 || dlResponse!.statusCode >= 300) {
+                throw new NodeApiError(this.getNode(), {
+                  message: `Delete line items failed with status ${dlResponse!.statusCode} (lineItemId ${lineItemId})`,
+                  description: typeof dlResponse!.body === 'object'
+                    ? JSON.stringify(dlResponse!.body)
+                    : String(dlResponse!.body),
+                } as JsonObject, { itemIndex: i });
+              }
+            }
+
+            returnData.push({ json: dlResponse?.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
         }
 
         if (resource === 'product' && operation === 'getProductInventoryPricingInquiry') {

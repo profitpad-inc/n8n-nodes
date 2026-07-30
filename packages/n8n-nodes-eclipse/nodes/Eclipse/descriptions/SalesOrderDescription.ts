@@ -17,6 +17,11 @@ export const salesOrderUpdateStatuses = [
   { name: 'Ship When Specified', value: 'ShipWhenSpecified' },
 ];
 
+// Shared with the Create Line Item operation, which adds line items to an
+// existing order using the same lineItemProduct shape as the Create Sales
+// Order "lines" field.
+export const defaultSalesOrderLinesJson = '[\n  {\n    "lineItemProduct": {\n      "productId": 246,\n      "quantity": 3,\n      "um": "ea",\n      "umQuantity": 1,\n      "unitPrice": 9.99,\n      "comments": ""\n    }\n  },\n  {\n    "lineItemProduct": {\n      "productId": 247,\n      "quantity": 3,\n      "um": "ea",\n      "umQuantity": 1\n    }\n  }\n]';
+
 export const salesOrderDescription: INodeProperties[] = [
   // ── Sales Order operations ────────────────────────────────────────────
   {
@@ -37,10 +42,22 @@ export const salesOrderDescription: INodeProperties[] = [
         action: 'Create a sales order',
       },
       {
+        name: 'Create Line Items',
+        value: 'createLineItem',
+        description: 'Add line items to an existing sales order',
+        action: 'Create sales order line items',
+      },
+      {
         name: 'Create Shipment',
         value: 'createShipment',
         description: 'Create a shipment for a sales order',
         action: 'Create a sales order shipment',
+      },
+      {
+        name: 'Delete Line Items',
+        value: 'deleteLineItem',
+        description: 'Delete one or more line items from a sales order',
+        action: 'Delete sales order line items',
       },
       {
         name: 'Get',
@@ -65,6 +82,18 @@ export const salesOrderDescription: INodeProperties[] = [
         value: 'updateInternalNotes',
         description: 'Update internal notes on a sales order',
         action: 'Update sales order internal notes',
+      },
+      {
+        name: 'Update Line Items Price',
+        value: 'updateLineItemPrice',
+        description: 'Update the price of one or more line items on a sales order',
+        action: 'Update sales order line items price',
+      },
+      {
+        name: 'Update Line Items Quantity',
+        value: 'updateLineItemQuantity',
+        description: 'Update the quantity of one or more line items on a sales order',
+        action: 'Update sales order line items quantity',
       },
       {
         name: 'Update PO Number',
@@ -632,7 +661,7 @@ export const salesOrderDescription: INodeProperties[] = [
     displayName: 'Lines (JSON)',
     name: 'salesOrderLines',
     type: 'json',
-    default: '[\n  {\n    "lineItemProduct": {\n      "productId": 246,\n      "quantity": 3,\n      "um": "ea",\n      "umQuantity": 1,\n      "unitPrice": 9.99,\n      "comments": ""\n    }\n  },\n  {\n    "lineItemProduct": {\n      "productId": 247,\n      "quantity": 3,\n      "um": "ea",\n      "umQuantity": 1\n    }\n  }\n]',
+    default: defaultSalesOrderLinesJson,
     description: 'Array of line items to add to the sales order',
     displayOptions: { show: { resource: ['salesOrder'], operation: ['create'], salesOrderInputMode: ['fields'] } },
   },
@@ -917,5 +946,150 @@ export const salesOrderDescription: INodeProperties[] = [
     default: false,
     description: 'Whether to apply the update to all generations of the order',
     displayOptions: { show: { resource: ['salesOrder'], operation: ['updateInternalNotes'] } },
+  },
+
+  // ── Create Line Item fields ───────────────────────────────────────────
+  {
+    displayName: 'Sales Order ID',
+    name: 'createLineItemSalesOrderId',
+    type: 'string',
+    default: '',
+    required: true,
+    placeholder: 'S2690635.0001',
+    description: 'The full ID of the sales order including generation suffix',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['createLineItem'] } },
+  },
+  {
+    displayName: 'Lines (JSON)',
+    name: 'createLineItemLines',
+    type: 'json',
+    default: defaultSalesOrderLinesJson,
+    description: 'Array of line items to add to the sales order',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['createLineItem'] } },
+  },
+
+  // ── Update Line Item Price fields ─────────────────────────────────────
+  {
+    displayName: 'Sales Order ID',
+    name: 'updatePriceOrderId',
+    type: 'string',
+    default: '',
+    required: true,
+    placeholder: 'S2690635.0001',
+    description: 'The full ID of the sales order including generation suffix',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['updateLineItemPrice'] } },
+  },
+  {
+    displayName: 'Input Mode',
+    name: 'updatePriceInputMode',
+    type: 'options',
+    options: [
+      { name: 'Custom JSON', value: 'json', description: 'Provide a raw JSON body' },
+      { name: 'Fields', value: 'fields', description: 'Fill in individual line prices' },
+    ],
+    default: 'fields',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['updateLineItemPrice'] } },
+  },
+  {
+    displayName: 'Line Prices',
+    name: 'updatePriceLines',
+    type: 'fixedCollection',
+    typeOptions: { multipleValues: true },
+    placeholder: 'Add Line Price',
+    default: {},
+    description: 'Line items to update the price of',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['updateLineItemPrice'], updatePriceInputMode: ['fields'] } },
+    options: [
+      {
+        name: 'lineValues',
+        displayName: 'Line Price',
+        values: [
+          { displayName: 'Line ID', name: 'lineId', type: 'string', default: '', placeholder: '1', description: 'The line item number' },
+          { displayName: 'Value', name: 'value', type: 'number', typeOptions: { numberPrecision: 2 }, default: 0, description: 'The new unit price for the line item' },
+        ],
+      },
+    ],
+  },
+  {
+    displayName: 'JSON Body',
+    name: 'updatePriceCustomJson',
+    type: 'json',
+    default: '[\n  {\n    "lineId": "1",\n    "value": 5.23\n  }\n]',
+    description: 'Raw JSON body to send to the API',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['updateLineItemPrice'], updatePriceInputMode: ['json'] } },
+  },
+
+  // ── Update Line Item Quantity fields ──────────────────────────────────
+  {
+    displayName: 'Sales Order ID',
+    name: 'updateQtyOrderId',
+    type: 'string',
+    default: '',
+    required: true,
+    placeholder: 'S2690635.0001',
+    description: 'The full ID of the sales order including generation suffix',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['updateLineItemQuantity'] } },
+  },
+  {
+    displayName: 'Input Mode',
+    name: 'updateQtyInputMode',
+    type: 'options',
+    options: [
+      { name: 'Custom JSON', value: 'json', description: 'Provide a raw JSON body' },
+      { name: 'Fields', value: 'fields', description: 'Fill in individual line quantities' },
+    ],
+    default: 'fields',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['updateLineItemQuantity'] } },
+  },
+  {
+    displayName: 'Line Quantities',
+    name: 'updateQtyLines',
+    type: 'fixedCollection',
+    typeOptions: { multipleValues: true },
+    placeholder: 'Add Line Quantity',
+    default: {},
+    description: 'Line items to update the quantity of',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['updateLineItemQuantity'], updateQtyInputMode: ['fields'] } },
+    options: [
+      {
+        name: 'lineValues',
+        displayName: 'Line Quantity',
+        values: [
+          { displayName: 'Line ID', name: 'lineId', type: 'string', default: '', placeholder: '1', description: 'The line item number' },
+          { displayName: 'Quantity', name: 'qty', type: 'number', default: 0, description: 'The new quantity for the line item' },
+          { displayName: 'UM', name: 'um', type: 'string', default: '', placeholder: 'ea', description: 'The unit of measure for the line item' },
+        ],
+      },
+    ],
+  },
+  {
+    displayName: 'JSON Body',
+    name: 'updateQtyCustomJson',
+    type: 'json',
+    default: '[\n  {\n    "lineId": "1",\n    "qty": 4,\n    "um": "ea"\n  }\n]',
+    description: 'Raw JSON body to send to the API',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['updateLineItemQuantity'], updateQtyInputMode: ['json'] } },
+  },
+
+  // ── Delete Line Items fields ──────────────────────────────────────────
+  {
+    displayName: 'Sales Order ID',
+    name: 'deleteLineItemOrderId',
+    type: 'string',
+    default: '',
+    required: true,
+    placeholder: 'S2690635.0001',
+    description: 'The full ID of the sales order including generation suffix',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['deleteLineItem'] } },
+  },
+  {
+    displayName: 'Line Item IDs',
+    name: 'deleteLineItemLineItemId',
+    type: 'string',
+    default: '',
+    required: true,
+    placeholder: '1 or 1,2,3',
+    description: 'The line item number(s) to delete. Separate multiple line item IDs with commas — one delete request is sent per ID.',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['deleteLineItem'] } },
   },
 ];
