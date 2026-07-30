@@ -1140,8 +1140,23 @@ export class EclipseApi implements INodeType {
         }
       } catch (error) {
         if (this.continueOnFail()) {
+          const nodeError = error instanceof NodeApiError || error instanceof NodeOperationError
+            ? error
+            : new NodeOperationError(this.getNode(), error as Error, { itemIndex: i });
+          const description = nodeError.description;
+          let details: unknown = description ?? undefined;
+          if (typeof description === 'string') {
+            try {
+              details = JSON.parse(description);
+            } catch {
+              details = description;
+            }
+          }
           returnData.push({
-            json: { error: (error as Error).message },
+            json: {
+              error: nodeError.message,
+              message: details ?? nodeError.message,
+            },
             pairedItem: { item: i },
           });
           continue;
