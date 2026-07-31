@@ -232,7 +232,7 @@ export class EclipseApi implements INodeType {
               if (additionalFields.classifications) body.classifications = additionalFields.classifications;
 
               const entityIds = parseCommaSeparatedList(entities);
-              if (entityIds.length > 0) body.entities = entityIds.map((entityId) => ({ entityId: Number(entityId) }));
+              if (entityIds.length > 0) body.entities = entityIds.map((entityId) => ({ entityId: parseInt(entityId, 10) }));
 
               const emailAddresses = parseCommaSeparatedList(additionalFields.emails ?? '');
               if (emailAddresses.length > 0) body.emails = emailAddresses.map((address) => ({ address }));
@@ -322,7 +322,7 @@ export class EclipseApi implements INodeType {
               if (updateFields.classifications !== undefined && updateFields.classifications !== '') body.classifications = updateFields.classifications;
 
               const entityIds = parseCommaSeparatedList(updateFields.entities ?? '');
-              if (entityIds.length > 0) body.entities = entityIds.map((entityId) => ({ entityId: Number(entityId) }));
+              if (entityIds.length > 0) body.entities = entityIds.map((entityId) => ({ entityId: parseInt(entityId, 10) }));
 
               const emailAddresses = parseCommaSeparatedList(updateFields.emails ?? '');
               if (emailAddresses.length > 0) body.emails = emailAddresses.map((address) => ({ address }));
