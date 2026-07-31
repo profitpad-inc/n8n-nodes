@@ -13,7 +13,7 @@ import { contactDescription } from './descriptions/ContactDescription';
 import { customerDescription } from './descriptions/CustomerDescription';
 import { productDescription } from './descriptions/ProductDescription';
 import { salesOrderDescription, salesOrderUpdateStatuses } from './descriptions/SalesOrderDescription';
-import { applyFieldFilter, createSession, normalizeEnumValue, parseJsonParameter, toTrimmedString } from './helpers';
+import { applyFieldFilter, createSession, normalizeEnumValue, parseCommaSeparatedList, parseJsonParameter, toTrimmedString } from './helpers';
 
 export class EclipseApi implements INodeType {
   description: INodeTypeDescription = {
@@ -173,6 +173,215 @@ export class EclipseApi implements INodeType {
 
             returnData.push({ json: response, pairedItem: { item: i } });
           }
+
+          // ── CREATE ──────────────────────────────────────────────────────
+          if (operation === 'create') {
+            const inputMode = (this.getNodeParameter('inputMode', i) as string).trim();
+            let body: JsonObject;
+
+            if (inputMode === 'json') {
+              const rawJson = (this.getNodeParameter('customJson', i) as string).trim();
+              body = JSON.parse(rawJson) as JsonObject;
+            } else {
+              const firstName = (this.getNodeParameter('firstName', i) as string).trim();
+              const lastName = (this.getNodeParameter('lastName', i) as string).trim();
+              const useEntityAddress = this.getNodeParameter('useEntityAddress', i) as boolean;
+              const entities = this.getNodeParameter('entities', i) as string;
+              const additionalFields = this.getNodeParameter('additionalFields', i) as {
+                middleName?: string;
+                salutation?: string;
+                sortBy?: string;
+                title?: string;
+                website?: string;
+                inactive?: boolean;
+                webEnabled?: boolean;
+                keywords?: string;
+                classifications?: string;
+                emails?: string;
+                phones?: string;
+              };
+
+              body = { firstName, lastName, useEntityAddress };
+
+              if (!useEntityAddress) {
+                const addressLine1 = (this.getNodeParameter('addressLine1', i) as string).trim();
+                const addressLine2 = (this.getNodeParameter('addressLine2', i) as string).trim();
+                const city = (this.getNodeParameter('city', i) as string).trim();
+                const state = (this.getNodeParameter('state', i) as string).trim();
+                const postalCode = (this.getNodeParameter('postalCode', i) as string).trim();
+
+                if (!state) {
+                  throw new NodeOperationError(this.getNode(), 'State is required when "Use Entity Address" is false', { itemIndex: i });
+                }
+
+                body.state = state;
+                if (addressLine1) body.addressLine1 = addressLine1;
+                if (addressLine2) body.addressLine2 = addressLine2;
+                if (city) body.city = city;
+                if (postalCode) body.postalCode = postalCode;
+              }
+
+              if (additionalFields.middleName) body.middleName = additionalFields.middleName;
+              if (additionalFields.salutation) body.salutation = additionalFields.salutation;
+              if (additionalFields.sortBy) body.sortBy = additionalFields.sortBy;
+              if (additionalFields.title) body.title = additionalFields.title;
+              if (additionalFields.website) body.website = additionalFields.website;
+              if (additionalFields.inactive !== undefined) body.inactive = additionalFields.inactive;
+              if (additionalFields.webEnabled !== undefined) body.webEnabled = additionalFields.webEnabled;
+              if (additionalFields.keywords) body.keywords = additionalFields.keywords;
+              if (additionalFields.classifications) body.classifications = additionalFields.classifications;
+
+              const entityIds = parseCommaSeparatedList(entities);
+              if (entityIds.length > 0) body.entities = entityIds.map((entityId) => ({ entityId: Number(entityId) }));
+
+              const emailAddresses = parseCommaSeparatedList(additionalFields.emails ?? '');
+              if (emailAddresses.length > 0) body.emails = emailAddresses.map((address) => ({ address }));
+
+              const phoneNumbers = parseCommaSeparatedList(additionalFields.phones ?? '');
+              if (phoneNumbers.length > 0) body.phones = phoneNumbers.map((number) => ({ number }));
+            }
+
+            const createResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'POST',
+              url: `${baseUrl}/Contacts`,
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body,
+              json: true,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (createResponse.statusCode < 200 || createResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Create contact failed with status ${createResponse.statusCode}`,
+                description: typeof createResponse.body === 'object'
+                  ? JSON.stringify(createResponse.body)
+                  : String(createResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: createResponse.body as JsonObject, pairedItem: { item: i } });
+          }
+
+          // ── UPDATE ──────────────────────────────────────────────────────
+          if (operation === 'update') {
+            const contactId = (this.getNodeParameter('contactId', i) as string).trim();
+            const inputMode = (this.getNodeParameter('inputMode', i) as string).trim();
+
+            const existing = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'GET',
+              url: `${baseUrl}/Contacts/${contactId}`,
+              headers,
+            });
+
+            let body: JsonObject = { ...(existing as JsonObject) };
+
+            if (inputMode === 'json') {
+              const rawJson = (this.getNodeParameter('updateCustomJson', i) as string).trim();
+              body = { ...body, ...(JSON.parse(rawJson) as JsonObject) };
+            } else {
+              const updateFields = this.getNodeParameter('updateFields', i) as {
+                firstName?: string;
+                middleName?: string;
+                lastName?: string;
+                salutation?: string;
+                sortBy?: string;
+                useEntityAddress?: boolean;
+                addressLine1?: string;
+                addressLine2?: string;
+                city?: string;
+                state?: string;
+                postalCode?: string;
+                title?: string;
+                website?: string;
+                inactive?: boolean;
+                webEnabled?: boolean;
+                keywords?: string;
+                classifications?: string;
+                entities?: string;
+                emails?: string;
+                phones?: string;
+              };
+
+              if (updateFields.firstName !== undefined && updateFields.firstName !== '') body.firstName = updateFields.firstName;
+              if (updateFields.middleName !== undefined && updateFields.middleName !== '') body.middleName = updateFields.middleName;
+              if (updateFields.lastName !== undefined && updateFields.lastName !== '') body.lastName = updateFields.lastName;
+              if (updateFields.salutation !== undefined && updateFields.salutation !== '') body.salutation = updateFields.salutation;
+              if (updateFields.sortBy !== undefined && updateFields.sortBy !== '') body.sortBy = updateFields.sortBy;
+              if (updateFields.useEntityAddress !== undefined) body.useEntityAddress = updateFields.useEntityAddress;
+              if (updateFields.addressLine1 !== undefined && updateFields.addressLine1 !== '') body.addressLine1 = updateFields.addressLine1;
+              if (updateFields.addressLine2 !== undefined && updateFields.addressLine2 !== '') body.addressLine2 = updateFields.addressLine2;
+              if (updateFields.city !== undefined && updateFields.city !== '') body.city = updateFields.city;
+              if (updateFields.state !== undefined && updateFields.state !== '') body.state = updateFields.state;
+              if (updateFields.postalCode !== undefined && updateFields.postalCode !== '') body.postalCode = updateFields.postalCode;
+              if (updateFields.title !== undefined && updateFields.title !== '') body.title = updateFields.title;
+              if (updateFields.website !== undefined && updateFields.website !== '') body.website = updateFields.website;
+              if (updateFields.inactive !== undefined) body.inactive = updateFields.inactive;
+              if (updateFields.webEnabled !== undefined) body.webEnabled = updateFields.webEnabled;
+              if (updateFields.keywords !== undefined && updateFields.keywords !== '') body.keywords = updateFields.keywords;
+              if (updateFields.classifications !== undefined && updateFields.classifications !== '') body.classifications = updateFields.classifications;
+
+              const entityIds = parseCommaSeparatedList(updateFields.entities ?? '');
+              if (entityIds.length > 0) body.entities = entityIds.map((entityId) => ({ entityId: Number(entityId) }));
+
+              const emailAddresses = parseCommaSeparatedList(updateFields.emails ?? '');
+              if (emailAddresses.length > 0) body.emails = emailAddresses.map((address) => ({ address }));
+
+              const phoneNumbers = parseCommaSeparatedList(updateFields.phones ?? '');
+              if (phoneNumbers.length > 0) body.phones = phoneNumbers.map((number) => ({ number }));
+
+              const arrayFields = new Set(['entities', 'emails', 'phones']);
+              const clearFields = this.getNodeParameter('clearFields', i) as string[];
+              for (const field of clearFields) {
+                body[field] = arrayFields.has(field) ? [] : '';
+              }
+            }
+
+            const updateResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'PUT',
+              url: `${baseUrl}/Contacts/${contactId}`,
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body,
+              json: true,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (updateResponse.statusCode < 200 || updateResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Update contact failed with status ${updateResponse.statusCode}`,
+                description: typeof updateResponse.body === 'object'
+                  ? JSON.stringify(updateResponse.body)
+                  : String(updateResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: updateResponse.body as JsonObject, pairedItem: { item: i } });
+          }
+
+          // ── DELETE ──────────────────────────────────────────────────────
+          if (operation === 'delete') {
+            const contactId = (this.getNodeParameter('contactId', i) as string).trim();
+
+            const deleteResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'DELETE',
+              url: `${baseUrl}/Contacts/${contactId}`,
+              headers,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (deleteResponse.statusCode < 200 || deleteResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Delete contact failed with status ${deleteResponse.statusCode}`,
+                description: typeof deleteResponse.body === 'object'
+                  ? JSON.stringify(deleteResponse.body)
+                  : String(deleteResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: { success: true, id: contactId }, pairedItem: { item: i } });
+          }
         }
 
         if (resource === 'customer' || resource === 'product') {
@@ -307,10 +516,10 @@ export class EclipseApi implements INodeType {
               defaultTerms?: string;
               homeBranch?: string;
               homeTerritory?: string;
+              types?: string;
+              shipToLists?: string;
+              contacts?: string;
             };
-            const typesParam = this.getNodeParameter('types', i) as { typeValues?: Array<{ type: string }> };
-            const shipToListsParam = this.getNodeParameter('shipToLists', i) as { shipToValues?: Array<{ shipToId: number }> };
-            const contactsParam = this.getNodeParameter('contacts', i) as { contactValues?: Array<{ id: number }> };
 
             body = { name, isBillTo, isShipTo, sortBy, nameIndex };
 
@@ -332,14 +541,14 @@ export class EclipseApi implements INodeType {
             if (additionalFields.homeBranch) body.homeBranch = additionalFields.homeBranch;
             if (additionalFields.homeTerritory) body.homeTerritory = additionalFields.homeTerritory;
 
-            const types = typesParam.typeValues ?? [];
-            if (types.length > 0) body.types = types;
+            const typeValues = parseCommaSeparatedList(additionalFields.types ?? '');
+            if (typeValues.length > 0) body.types = typeValues.map((type) => ({ type }));
 
-            const shipToLists = (shipToListsParam.shipToValues ?? []).map(({ shipToId }) => ({ shipToId }));
-            if (shipToLists.length > 0) body.shipToLists = shipToLists;
+            const shipToListValues = parseCommaSeparatedList(additionalFields.shipToLists ?? '');
+            if (shipToListValues.length > 0) body.shipToLists = shipToListValues.map((shipToId) => ({ shipToId: Number(shipToId) }));
 
-            const contactsList = (contactsParam.contactValues ?? []).map(({ id }) => ({ id }));
-            if (contactsList.length > 0) body.contacts = contactsList;
+            const contactValues = parseCommaSeparatedList(additionalFields.contacts ?? '');
+            if (contactValues.length > 0) body.contacts = contactValues.map((id) => ({ id: Number(id) }));
           }
 
           const createResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
@@ -403,10 +612,10 @@ export class EclipseApi implements INodeType {
               defaultTerms?: string;
               homeBranch?: string;
               homeTerritory?: string;
+              types?: string;
+              shipToLists?: string;
+              contacts?: string;
             };
-            const typesParam = this.getNodeParameter('updateTypes', i) as { typeValues?: Array<{ type: string }> };
-            const shipToListsParam = this.getNodeParameter('updateShipToLists', i) as { shipToValues?: Array<{ shipToId: number }> };
-            const contactsParam = this.getNodeParameter('updateContacts', i) as { contactValues?: Array<{ id: number }> };
 
             if (updateFields.name !== undefined && updateFields.name !== '') body.name = updateFields.name;
             if (updateFields.addressLine1 !== undefined && updateFields.addressLine1 !== '') body.addressLine1 = updateFields.addressLine1;
@@ -430,14 +639,14 @@ export class EclipseApi implements INodeType {
             if (updateFields.homeBranch !== undefined && updateFields.homeBranch !== '') body.homeBranch = updateFields.homeBranch;
             if (updateFields.homeTerritory !== undefined && updateFields.homeTerritory !== '') body.homeTerritory = updateFields.homeTerritory;
 
-            const types = typesParam.typeValues ?? [];
-            if (types.length > 0) body.types = types;
+            const typeValues = parseCommaSeparatedList(updateFields.types ?? '');
+            if (typeValues.length > 0) body.types = typeValues.map((type) => ({ type }));
 
-            const shipToLists = (shipToListsParam.shipToValues ?? []).map(({ shipToId }) => ({ shipToId }));
-            if (shipToLists.length > 0) body.shipToLists = shipToLists;
+            const shipToListValues = parseCommaSeparatedList(updateFields.shipToLists ?? '');
+            if (shipToListValues.length > 0) body.shipToLists = shipToListValues.map((shipToId) => ({ shipToId: Number(shipToId) }));
 
-            const contactsList = (contactsParam.contactValues ?? []).map(({ id }) => ({ id }));
-            if (contactsList.length > 0) body.contacts = contactsList;
+            const contactValues = parseCommaSeparatedList(updateFields.contacts ?? '');
+            if (contactValues.length > 0) body.contacts = contactValues.map((id) => ({ id: Number(id) }));
 
             const arrayFields = new Set(['types', 'shipToLists', 'contacts']);
             const clearFields = this.getNodeParameter('clearFields', i) as string[];
@@ -466,6 +675,30 @@ export class EclipseApi implements INodeType {
           }
 
           returnData.push({ json: updateResponse.body as JsonObject, pairedItem: { item: i } });
+        }
+
+        // ── DELETE CUSTOMER ───────────────────────────────────────────────
+        if (resource === 'customer' && operation === 'delete') {
+          const customerId = (this.getNodeParameter('customerId', i) as string).trim();
+
+          const deleteResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+            method: 'DELETE',
+            url: `${baseUrl}/Customers/${customerId}`,
+            headers,
+            returnFullResponse: true,
+            ignoreHttpStatusErrors: true,
+          });
+
+          if (deleteResponse.statusCode < 200 || deleteResponse.statusCode >= 300) {
+            throw new NodeApiError(this.getNode(), {
+              message: `Delete customer failed with status ${deleteResponse.statusCode}`,
+              description: typeof deleteResponse.body === 'object'
+                ? JSON.stringify(deleteResponse.body)
+                : String(deleteResponse.body),
+            } as JsonObject, { itemIndex: i });
+          }
+
+          returnData.push({ json: { success: true, id: customerId }, pairedItem: { item: i } });
         }
 
         if (resource === 'salesOrder') {

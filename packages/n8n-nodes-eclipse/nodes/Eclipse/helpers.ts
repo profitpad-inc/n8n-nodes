@@ -77,6 +77,16 @@ export function parseJsonParameter<T>(value: unknown): T | undefined {
   return trimmed ? (JSON.parse(trimmed) as T) : undefined;
 }
 
+// Several fields (e.g. entity/contact IDs, ship-to lists, types) accept a
+// comma-separated list in the UI instead of n8n's fixedCollection UI, since
+// a plain string is faster to fill in and works better with expressions.
+export function parseCommaSeparatedList(value: string): string[] {
+  return toTrimmedString(value)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export function applyFieldFilter(
   results: JsonObject[],
   fieldsFilterMode: string,

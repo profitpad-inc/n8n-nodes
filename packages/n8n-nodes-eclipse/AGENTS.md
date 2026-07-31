@@ -81,8 +81,7 @@ project _may_ contain example nodes and/or credentials that need to be
 **removed or renamed** once you start making an actual node.
 
 ## Key guidelines
-- Use the `n8n-node` CLI tool **whenever possible** for building, dev mode,
-  linting, etc.
+- Use the `n8n-node` CLI tool **whenever possible** for linting, but do not start a dev server
 - **Always** address any lint/typecheck errors/warnings, unless there is a
   **very specific reason** to ignore/disable it
 - Make sure to use **proper types whenever possible**
