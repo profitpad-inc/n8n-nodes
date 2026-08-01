@@ -303,32 +303,38 @@ export class EclipseApi implements INodeType {
                 phones?: string;
               };
 
-              if (updateFields.firstName !== undefined && updateFields.firstName !== '') body.firstName = updateFields.firstName;
-              if (updateFields.middleName !== undefined && updateFields.middleName !== '') body.middleName = updateFields.middleName;
-              if (updateFields.lastName !== undefined && updateFields.lastName !== '') body.lastName = updateFields.lastName;
-              if (updateFields.salutation !== undefined && updateFields.salutation !== '') body.salutation = updateFields.salutation;
-              if (updateFields.sortBy !== undefined && updateFields.sortBy !== '') body.sortBy = updateFields.sortBy;
+              if (updateFields.firstName !== undefined) body.firstName = updateFields.firstName;
+              if (updateFields.middleName !== undefined) body.middleName = updateFields.middleName;
+              if (updateFields.lastName !== undefined) body.lastName = updateFields.lastName;
+              if (updateFields.salutation !== undefined) body.salutation = updateFields.salutation;
+              if (updateFields.sortBy !== undefined) body.sortBy = updateFields.sortBy;
               if (updateFields.useEntityAddress !== undefined) body.useEntityAddress = updateFields.useEntityAddress;
-              if (updateFields.addressLine1 !== undefined && updateFields.addressLine1 !== '') body.addressLine1 = updateFields.addressLine1;
-              if (updateFields.addressLine2 !== undefined && updateFields.addressLine2 !== '') body.addressLine2 = updateFields.addressLine2;
-              if (updateFields.city !== undefined && updateFields.city !== '') body.city = updateFields.city;
-              if (updateFields.state !== undefined && updateFields.state !== '') body.state = updateFields.state;
-              if (updateFields.postalCode !== undefined && updateFields.postalCode !== '') body.postalCode = updateFields.postalCode;
-              if (updateFields.title !== undefined && updateFields.title !== '') body.title = updateFields.title;
-              if (updateFields.website !== undefined && updateFields.website !== '') body.website = updateFields.website;
+              if (updateFields.addressLine1 !== undefined) body.addressLine1 = updateFields.addressLine1;
+              if (updateFields.addressLine2 !== undefined) body.addressLine2 = updateFields.addressLine2;
+              if (updateFields.city !== undefined) body.city = updateFields.city;
+              if (updateFields.state !== undefined) body.state = updateFields.state;
+              if (updateFields.postalCode !== undefined) body.postalCode = updateFields.postalCode;
+              if (updateFields.title !== undefined) body.title = updateFields.title;
+              if (updateFields.website !== undefined) body.website = updateFields.website;
               if (updateFields.inactive !== undefined) body.inactive = updateFields.inactive;
               if (updateFields.webEnabled !== undefined) body.webEnabled = updateFields.webEnabled;
-              if (updateFields.keywords !== undefined && updateFields.keywords !== '') body.keywords = updateFields.keywords;
-              if (updateFields.classifications !== undefined && updateFields.classifications !== '') body.classifications = updateFields.classifications;
+              if (updateFields.keywords !== undefined) body.keywords = updateFields.keywords;
+              if (updateFields.classifications !== undefined) body.classifications = updateFields.classifications;
 
-              const entityIds = parseCommaSeparatedList(updateFields.entities ?? '');
-              if (entityIds.length > 0) body.entities = entityIds.map((entityId) => ({ entityId: parseInt(entityId, 10) }));
+              if (updateFields.entities !== undefined) {
+                const entityIds = parseCommaSeparatedList(updateFields.entities);
+                body.entities = entityIds.map((entityId) => ({ entityId: parseInt(entityId, 10) }));
+              }
 
-              const emailAddresses = parseCommaSeparatedList(updateFields.emails ?? '');
-              if (emailAddresses.length > 0) body.emails = emailAddresses.map((address) => ({ address }));
+              if (updateFields.emails !== undefined) {
+                const emailAddresses = parseCommaSeparatedList(updateFields.emails);
+                body.emails = emailAddresses.map((address) => ({ address }));
+              }
 
-              const phoneNumbers = parseCommaSeparatedList(updateFields.phones ?? '');
-              if (phoneNumbers.length > 0) body.phones = phoneNumbers.map((number) => ({ number }));
+              if (updateFields.phones !== undefined) {
+                const phoneNumbers = parseCommaSeparatedList(updateFields.phones);
+                body.phones = phoneNumbers.map((number) => ({ number }));
+              }
 
               const arrayFields = new Set(['entities', 'emails', 'phones']);
               const clearFields = this.getNodeParameter('clearFields', i) as string[];
@@ -617,36 +623,42 @@ export class EclipseApi implements INodeType {
               contacts?: string;
             };
 
-            if (updateFields.name !== undefined && updateFields.name !== '') body.name = updateFields.name;
-            if (updateFields.addressLine1 !== undefined && updateFields.addressLine1 !== '') body.addressLine1 = updateFields.addressLine1;
-            if (updateFields.addressLine2 !== undefined && updateFields.addressLine2 !== '') body.addressLine2 = updateFields.addressLine2;
-            if (updateFields.city !== undefined && updateFields.city !== '') body.city = updateFields.city;
-            if (updateFields.state !== undefined && updateFields.state !== '') body.state = updateFields.state;
-            if (updateFields.postalCode !== undefined && updateFields.postalCode !== '') body.postalCode = updateFields.postalCode;
+            if (updateFields.name !== undefined) body.name = updateFields.name;
+            if (updateFields.addressLine1 !== undefined) body.addressLine1 = updateFields.addressLine1;
+            if (updateFields.addressLine2 !== undefined) body.addressLine2 = updateFields.addressLine2;
+            if (updateFields.city !== undefined) body.city = updateFields.city;
+            if (updateFields.state !== undefined) body.state = updateFields.state;
+            if (updateFields.postalCode !== undefined) body.postalCode = updateFields.postalCode;
             if (updateFields.isBillTo !== undefined) body.isBillTo = updateFields.isBillTo;
             if (updateFields.isShipTo !== undefined) body.isShipTo = updateFields.isShipTo;
-            if (updateFields.sortBy !== undefined && updateFields.sortBy !== '') body.sortBy = updateFields.sortBy;
-            if (updateFields.nameIndex !== undefined && updateFields.nameIndex !== '') body.nameIndex = updateFields.nameIndex;
-            if (updateFields.defaultPriceClass !== undefined && updateFields.defaultPriceClass !== '') body.defaultPriceClass = updateFields.defaultPriceClass;
+            if (updateFields.sortBy !== undefined) body.sortBy = updateFields.sortBy;
+            if (updateFields.nameIndex !== undefined) body.nameIndex = updateFields.nameIndex;
+            if (updateFields.defaultPriceClass !== undefined) body.defaultPriceClass = updateFields.defaultPriceClass;
             if (updateFields.billToId !== undefined && updateFields.billToId !== 0) body.billToId = updateFields.billToId;
-            if (updateFields.outsideSalesperson !== undefined && updateFields.outsideSalesperson !== '') body.outsideSalesperson = updateFields.outsideSalesperson;
-            if (updateFields.insideSalesperson !== undefined && updateFields.insideSalesperson !== '') body.insideSalesperson = updateFields.insideSalesperson;
-            if (updateFields.defaultPoNumber !== undefined && updateFields.defaultPoNumber !== '') body.defaultPoNumber = updateFields.defaultPoNumber;
-            if (updateFields.defaultShipVia !== undefined && updateFields.defaultShipVia !== '') body.defaultShipVia = updateFields.defaultShipVia;
+            if (updateFields.outsideSalesperson !== undefined) body.outsideSalesperson = updateFields.outsideSalesperson;
+            if (updateFields.insideSalesperson !== undefined) body.insideSalesperson = updateFields.insideSalesperson;
+            if (updateFields.defaultPoNumber !== undefined) body.defaultPoNumber = updateFields.defaultPoNumber;
+            if (updateFields.defaultShipVia !== undefined) body.defaultShipVia = updateFields.defaultShipVia;
             if (updateFields.freightInExempt !== undefined) body.freightInExempt = updateFields.freightInExempt;
             if (updateFields.freightOutExempt !== undefined) body.freightOutExempt = updateFields.freightOutExempt;
-            if (updateFields.defaultTerms !== undefined && updateFields.defaultTerms !== '') body.defaultTerms = updateFields.defaultTerms;
-            if (updateFields.homeBranch !== undefined && updateFields.homeBranch !== '') body.homeBranch = updateFields.homeBranch;
-            if (updateFields.homeTerritory !== undefined && updateFields.homeTerritory !== '') body.homeTerritory = updateFields.homeTerritory;
+            if (updateFields.defaultTerms !== undefined) body.defaultTerms = updateFields.defaultTerms;
+            if (updateFields.homeBranch !== undefined) body.homeBranch = updateFields.homeBranch;
+            if (updateFields.homeTerritory !== undefined) body.homeTerritory = updateFields.homeTerritory;
 
-            const typeValues = parseCommaSeparatedList(updateFields.types ?? '');
-            if (typeValues.length > 0) body.types = typeValues.map((type) => ({ type }));
+            if (updateFields.types !== undefined) {
+              const typeValues = parseCommaSeparatedList(updateFields.types);
+              body.types = typeValues.map((type) => ({ type }));
+            }
 
-            const shipToListValues = parseCommaSeparatedList(updateFields.shipToLists ?? '');
-            if (shipToListValues.length > 0) body.shipToLists = shipToListValues.map((shipToId) => ({ shipToId: Number(shipToId) }));
+            if (updateFields.shipToLists !== undefined) {
+              const shipToListValues = parseCommaSeparatedList(updateFields.shipToLists);
+              body.shipToLists = shipToListValues.map((shipToId) => ({ shipToId: Number(shipToId) }));
+            }
 
-            const contactValues = parseCommaSeparatedList(updateFields.contacts ?? '');
-            if (contactValues.length > 0) body.contacts = contactValues.map((id) => ({ id: Number(id) }));
+            if (updateFields.contacts !== undefined) {
+              const contactValues = parseCommaSeparatedList(updateFields.contacts);
+              body.contacts = contactValues.map((id) => ({ id: Number(id) }));
+            }
 
             const arrayFields = new Set(['types', 'shipToLists', 'contacts']);
             const clearFields = this.getNodeParameter('clearFields', i) as string[];
