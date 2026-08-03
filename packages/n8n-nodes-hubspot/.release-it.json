@@ -4,7 +4,7 @@
     "commitMessage": "version ${version}",
     "push": true,
     "tag": true,
-    "tagName": "v${version}"
+    "tagName": "n8n-nodes-hubspot@${version}"
   },
   "npm": {
     "publish": true
