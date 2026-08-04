@@ -180,8 +180,7 @@ export class EclipseApi implements INodeType {
             let body: JsonObject;
 
             if (inputMode === 'json') {
-              const rawJson = (this.getNodeParameter('customJson', i) as string).trim();
-              body = JSON.parse(rawJson) as JsonObject;
+              body = parseJsonParameter<JsonObject>(this.getNodeParameter('customJson', i)) ?? {};
             } else {
               const firstName = (this.getNodeParameter('firstName', i) as string).trim();
               const lastName = (this.getNodeParameter('lastName', i) as string).trim();
@@ -277,8 +276,7 @@ export class EclipseApi implements INodeType {
             let body: JsonObject = { ...(existing as JsonObject) };
 
             if (inputMode === 'json') {
-              const rawJson = (this.getNodeParameter('updateCustomJson', i) as string).trim();
-              body = { ...body, ...(JSON.parse(rawJson) as JsonObject) };
+              body = { ...body, ...(parseJsonParameter<JsonObject>(this.getNodeParameter('updateCustomJson', i)) ?? {}) };
             } else {
               const updateFields = this.getNodeParameter('updateFields', i) as {
                 firstName?: string;
@@ -498,8 +496,7 @@ export class EclipseApi implements INodeType {
           let body: JsonObject;
 
           if (inputMode === 'json') {
-            const rawJson = (this.getNodeParameter('customJson', i) as string).trim();
-            body = JSON.parse(rawJson) as JsonObject;
+            body = parseJsonParameter<JsonObject>(this.getNodeParameter('customJson', i)) ?? {};
           } else {
             const name = (this.getNodeParameter('name', i) as string).trim();
             const isBillTo = this.getNodeParameter('isBillTo', i) as boolean;
@@ -593,8 +590,7 @@ export class EclipseApi implements INodeType {
           let body: JsonObject = { ...(existing as JsonObject) };
 
           if (inputMode === 'json') {
-            const rawJson = (this.getNodeParameter('updateCustomJson', i) as string).trim();
-            body = { ...body, ...(JSON.parse(rawJson) as JsonObject) };
+            body = { ...body, ...(parseJsonParameter<JsonObject>(this.getNodeParameter('updateCustomJson', i)) ?? {}) };
           } else {
             const updateFields = this.getNodeParameter('updateFields', i) as {
               name?: string;
@@ -833,8 +829,7 @@ export class EclipseApi implements INodeType {
             let body: JsonObject;
 
             if (inputMode === 'json') {
-              const rawJson = (this.getNodeParameter('salesOrderCustomJson', i) as string).trim();
-              body = JSON.parse(rawJson) as JsonObject;
+              body = parseJsonParameter<JsonObject>(this.getNodeParameter('salesOrderCustomJson', i)) ?? {};
             } else {
               const billToCustomerId = toTrimmedString(this.getNodeParameter('billToCustomerId', i));
               const shipToCustomerId = toTrimmedString(this.getNodeParameter('shipToCustomerId', i));

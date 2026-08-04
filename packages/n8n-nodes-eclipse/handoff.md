@@ -220,11 +220,21 @@ Two helpers in `helpers.ts` paper over this:
   `json`-typed parameters.
 
 Currently applied to: `billToCustomerId`, `shipToCustomerId`,
-`salesOrderPriceBranch`, `salesOrderShipBranch`, `salesOrderPostalCode`, and
-`salesOrderLines` (all in the Create Sales Order block). **Not yet applied**
-to every other `(this.getNodeParameter(...) as string).trim()` call in the
-file — there are many (Contact/Customer/Product get/create/update, the
-other Sales Order update operations, `salesOrderCustomJson`, `updateFields`
+`salesOrderPriceBranch`, `salesOrderShipBranch`, `salesOrderPostalCode`,
+`salesOrderLines`, `updatePriceCustomJson`, `updateQtyCustomJson`, and (as of
+this fix) every `*CustomJson` field: `customJson` (Customer Create, Contact
+Create), `updateCustomJson` (Customer Update, Contact Update), and
+`salesOrderCustomJson` (Create Sales Order). Each of those previously did
+`(this.getNodeParameter(...) as string).trim()` then `JSON.parse()`, which
+threw whenever a user fed the field a whole-expression object reference
+(e.g. `={{ $json.eNewCustomer }}`) instead of a manually-typed JSON string —
+the workaround users found was calling `.toJsonString()` in the expression,
+which forces a real string before n8n's coercion kicks in. That workaround
+is no longer necessary for these fields.
+
+**Not yet applied** to every other `(this.getNodeParameter(...) as
+string).trim()` call in the file — there are many (Contact/Customer/Product
+get/create/update, the other Sales Order update operations, `updateFields`
 in Update Customer, etc.). Each was fixed reactively when a user hit it, not
 proactively across the board. If you're touching one of these blocks and
 have a moment, consider applying the same helper rather than waiting for
@@ -236,11 +246,13 @@ necessarily as the parent's type).
 
 ## Gaps / things to know if asked to touch them
 
-- `CHANGELOG.md` in this package's root is currently **empty**, even though
-  `AGENTS.md` says to update it on version bumps. `.release-it.json` has no
-  changelog-generation plugin configured, so nothing fills it automatically.
-  If you bump the version, you likely need to actually write the entry by
-  hand (or flag this gap to the user rather than silently skipping it).
+- `CHANGELOG.md` in this package's root is very sparse (only has a handful
+  of entries despite many more version bumps in `package.json`/git log),
+  even though `AGENTS.md` says to update it on version bumps.
+  `.release-it.json` has no changelog-generation plugin configured, so
+  nothing fills it automatically. If you bump the version, you likely need
+  to actually write the entry by hand (or flag this gap to the user rather
+  than silently skipping it).
 - `package.json` version drifts frequently (bumped outside of chat sessions
   sometimes). Don't hardcode "the current version" anywhere assuming it's
   stable — read `package.json` fresh each time.
