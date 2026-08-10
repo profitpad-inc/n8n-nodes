@@ -747,12 +747,14 @@ export class EclipseApi implements INodeType {
             const splitParam = (val: string | undefined): string[] =>
               val ? val.split(',').map((s) => s.trim()).filter(Boolean) : [];
 
-            const buildUrl = (startIndex: number): string => {
+            const idValues = splitParam(additionalOptions.id);
+
+            const buildUrl = (startIndex: number, ids: string[], requestPageSize: number): string => {
               const params = new URLSearchParams();
-              params.set('pageSize', String(pageSize));
+              params.set('pageSize', String(requestPageSize));
               params.set('startIndex', String(startIndex));
               params.set('includeTotalItems', 'true');
-              for (const v of splitParam(additionalOptions.id)) params.append('id', v);
+              for (const v of ids) params.append('id', v);
               for (const v of splitParam(additionalOptions.billTo)) params.append('BillTo', v);
               for (const v of splitParam(additionalOptions.shipTo)) params.append('ShipTo', v);
               for (const v of splitParam(additionalOptions.shipBranch)) params.append('ShipBranch', v);
@@ -773,13 +775,61 @@ export class EclipseApi implements INodeType {
               return `${baseUrl}/SalesOrders?${params.toString()}`;
             };
 
-            if (returnAll) {
+            // Eclipse errors out when a single request carries too many `id` params, so a
+            // longer ID list is split into batches and fired as one request per batch.
+            const ID_BATCH_SIZE = 100;
+
+            if (idValues.length > ID_BATCH_SIZE) {
+              const collected: JsonObject[] = [];
+
+              for (let batchStart = 0; batchStart < idValues.length; batchStart += ID_BATCH_SIZE) {
+                const batchIds = idValues.slice(batchStart, batchStart + ID_BATCH_SIZE);
+                // Ask for one row more than the batch has IDs: an ID filter matches at most one
+                // order per ID, so the page comes back short and one request per batch is enough.
+                // A full page means the filter matched more rows than IDs sent (possible when an
+                // ID is given without its generation), so keep paging that batch.
+                const batchPageSize = batchIds.length + 1;
+                let currentStart = 1;
+
+                while (true) {
+                  const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                    method: 'GET',
+                    url: buildUrl(currentStart, batchIds, batchPageSize),
+                    headers,
+                  });
+
+                  const batchResults: JsonObject[] = response.results ?? [];
+                  collected.push(...batchResults);
+
+                  if (batchResults.length < batchPageSize) break;
+                  currentStart += batchPageSize;
+                }
+              }
+
+              // Output still obeys Page Size: one output item per page-sized chunk of the
+              // combined results, no matter how many requests it took to collect them.
+              const pages: JsonObject[][] = [];
+              for (let offset = 0; offset < collected.length; offset += pageSize) {
+                pages.push(collected.slice(offset, offset + pageSize));
+              }
+              if (pages.length === 0) pages.push([]);
+
+              for (const page of pages) {
+                returnData.push({
+                  json: {
+                    countItems: page.length,
+                    results: applyFieldFilter(page, fieldsFilterMode, fieldsToInclude, fieldsToExclude),
+                  },
+                  pairedItem: { item: i },
+                });
+              }
+            } else if (returnAll) {
               let currentStart = 1;
 
               while (true) {
                 const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
                   method: 'GET',
-                  url: buildUrl(currentStart),
+                  url: buildUrl(currentStart, idValues, pageSize),
                   headers,
                 });
 
@@ -797,7 +847,7 @@ export class EclipseApi implements INodeType {
 
               const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
                 method: 'GET',
-                url: buildUrl(startIndex),
+                url: buildUrl(startIndex, idValues, pageSize),
                 headers,
               });
 

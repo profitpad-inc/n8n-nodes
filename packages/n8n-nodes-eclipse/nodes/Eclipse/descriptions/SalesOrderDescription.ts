@@ -298,7 +298,7 @@ export const salesOrderDescription: INodeProperties[] = [
         type: 'string',
         default: '',
         placeholder: 'S2681000.0001 or S2681000.0001,S2681000.0002',
-        description: 'Filter by sales order ID. Separate multiple IDs with commas.',
+        description: 'Filter by sales order ID. Separate multiple IDs with commas. More than 100 IDs are automatically split into batches of 100 requests, with the combined results returned in chunks of Page Size.',
       },
       {
         displayName: 'Inside Salesperson',

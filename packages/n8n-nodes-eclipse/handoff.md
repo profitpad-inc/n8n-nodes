@@ -122,6 +122,35 @@ on, loop bumping `startIndex += pageSize` until a page comes back shorter
 than `pageSize`. Copy this pattern for new list endpoints instead of
 inventing pagination logic.
 
+## Sales Order Get Many: ID batching
+
+Eclipse errors when a single `GET /SalesOrders` request carries too many `id`
+query params, so Sales Order → Get Many has a third code path (alongside the
+normal Return All / single-page paths) that kicks in when the **ID** option in
+Additional Options resolves to **more than 100** comma-separated IDs:
+
+- The ID list is chunked into batches of 100 and fired as one request per
+  batch. Each batch request asks for `batchIds.length + 1` rows so a short
+  page (the normal case, since an ID filter matches at most one order per ID)
+  ends that batch in a single request, while a *full* page signals the filter
+  matched more rows than IDs sent (e.g. an ID given without its generation)
+  and the batch keeps paging via `startIndex`.
+- All batch results are collected, then re-chunked for output by the user's
+  **Page Size**: 300 IDs with Page Size 200 = 3 requests to Eclipse but 2
+  output items (200 results, then 100). Unlike the non-batched paths, the
+  output items **drop Eclipse's response metadata entirely** — each item is
+  just `{ countItems, results }`, where `countItems` is the length of that
+  item's own `results` array (not the combined total), since the envelope from
+  any one batch response would be misleading once results are recombined.
+- This path ignores `Return All` and `Start Index` — the ID list is itself the
+  bound on how much data can come back, so everything matching is fetched.
+
+`buildUrl` in that block takes `(startIndex, ids, requestPageSize)` so all
+three paths share one query-string builder. Only the sales order `id` filter
+is batched; the other multi-value filters (BillTo, ShipTo, etc.) and the other
+resources' `getMany` operations are untouched — apply the same pattern there
+if a user hits the same limit.
+
 ## Trigger node (`EclipseApiTrigger.node.ts`)
 
 Polls on a schedule. Two lookback modes:
