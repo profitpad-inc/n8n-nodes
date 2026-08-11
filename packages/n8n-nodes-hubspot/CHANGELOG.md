@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+### HubSpot (Objects → Upsert)
+
+- Added a single-record **Upsert** operation, laid out like the single Update
+  operation (Object ID, Input Mode with Fields / Custom JSON, Properties,
+  Additional Options) with **ID Property** promoted to a top-level field rather
+  than an additional option.
+- HubSpot has no single-record upsert endpoint, so the operation posts to
+  `/batch/upsert` with a single input and returns the one result unwrapped from
+  the batch response.
+- **ID Property** is required and does not offer Record ID, since an upsert
+  cannot create a record against an ID that does not exist yet. Object types
+  with no unique properties show a single "No Unique Properties Available"
+  entry pointing at the two ways forward: create a unique property in HubSpot,
+  or use the Create operation.
+
+### HubSpot (Objects → Batch Read)
+
+- Removed **Return All**, **Limit**, and **Max Pages** from Fields mode. Every
+  object ID provided is now read, chunked into batches of 100 automatically.
+- **Return All Mode** is renamed to **Output Mode** and is always shown. The
+  underlying parameter name is unchanged, so a mode picked in a saved workflow
+  is preserved. Note that workflows saved with Return All *off* never showed
+  this field and were hard-coded to one item per batch; they now follow the
+  stored value, which defaults to **Each Result as 1 Item**.
+
+### HubSpot (Objects → Batch Delete)
+
+- The Batch Delete operation now has a **Fields / Custom JSON** input mode
+  toggle, matching Batch Read. Custom JSON keeps the existing raw **Body**
+  field and stays the default, so saved workflows are unaffected.
+- Fields mode takes a comma-separated **Object IDs** list and chunks it into
+  batches of 100 automatically. Every provided ID is deleted, with an **Output
+  Mode** control for how the deleted IDs are returned, plus **ID Property** and
+  **Milliseconds Between Items** under Additional Options.
+- The HubSpot archive endpoint only accepts record IDs, so when **ID Property**
+  is set each batch is resolved through a batch read request first. Values with
+  no matching record are reported back under `notFound` instead of being
+  archived.
+
 ### HubSpot (Objects → Search)
 
 - The object Search operation now uses the same **Search Filter Mode** UX as the

@@ -26,6 +26,7 @@ import {
 	getUniqueProperties,
 	getUniquePropertiesForAssociationFrom,
 	getUniquePropertiesForAssociationTo,
+	getUpsertIdProperties,
 	getUserProperties,
 	getWritableProperties,
 	getWritableUserProperties,
@@ -131,6 +132,7 @@ export class HubspotApi implements INodeType {
 			getUniqueProperties,
 			getUniquePropertiesForAssociationFrom,
 			getUniquePropertiesForAssociationTo,
+			getUpsertIdProperties,
 			getAssociationTypeIds,
 			getUserProperties,
 			getWritableUserProperties,
@@ -576,6 +578,74 @@ export class HubspotApi implements INodeType {
 						returnData.push({ json: response as JsonObject, pairedItem: { item: i } });
 					}
 
+					// ── UPSERT ────────────────────────────────────────────────────────
+					// HubSpot has no single-record upsert endpoint, so this sends a
+					// batch upsert with a single input and unwraps the one result.
+					if (operation === 'upsert') {
+						const objectId = String(this.getNodeParameter('objectId', i)).trim();
+						const upsertIdProperty = String(
+							this.getNodeParameter('upsertIdProperty', i),
+						).trim();
+						if (!upsertIdProperty) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'An ID Property is required to upsert an object',
+								{
+									itemIndex: i,
+									description:
+										'An upsert matches an existing record on a unique property and creates one when there is no match. If this object type has no properties with a unique value, create one in HubSpot, or use the Create operation instead.',
+								},
+							);
+						}
+
+						const upsertInputMode = this.getNodeParameter('upsertInputMode', i) as string;
+						const upsertOpts = this.getNodeParameter('upsertOptions', i) as {
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = upsertOpts.millisecondsBetweenItems ?? 50;
+
+						let upsertProperties: Record<string, unknown>;
+						if (upsertInputMode === 'json') {
+							upsertProperties = parseJsonParam(
+								this.getNodeParameter('upsertJson', i),
+							) as Record<string, unknown>;
+						} else {
+							const upsertParam = this.getNodeParameter('upsertFields', i) as {
+								propertyValues?: Array<{ name: string; value: string }>;
+							};
+							upsertProperties = Object.fromEntries(
+								(upsertParam.propertyValues ?? []).map(({ name, value }) => [name, value]),
+							);
+						}
+
+						const response = (await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'hubspotApi',
+							{
+								method: 'POST',
+								url: `${HUBSPOT_BASE}${objectsPath}/batch/upsert`,
+								headers: BASE_HEADERS,
+								body: JSON.stringify({
+									inputs: [
+										{
+											id: objectId,
+											idProperty: upsertIdProperty,
+											properties: upsertProperties,
+										},
+									],
+								}),
+							},
+						)) as JsonObject & { results?: JsonObject[] };
+
+						const upserted = response.results?.[0];
+
+						returnData.push({
+							json: upserted ?? response,
+							pairedItem: { item: i },
+						});
+					}
+
 					// ── DELETE ────────────────────────────────────────────────────────
 					if (operation === 'delete') {
 						const objectId = String(this.getNodeParameter('objectId', i)).trim();
@@ -766,7 +836,6 @@ export class HubspotApi implements INodeType {
 								.split(',')
 								.map((s) => s.trim())
 								.filter(Boolean);
-							const returnAll = this.getNodeParameter('batchReadReturnAll', i) as boolean;
 							const opts = this.getNodeParameter('batchReadOptions', i) as {
 								properties?: string | string[];
 								propertiesWithHistory?: string | string[];
@@ -779,30 +848,16 @@ export class HubspotApi implements INodeType {
 							const propertiesList = toStringList(opts.properties);
 							const propertiesWithHistoryList = toStringList(opts.propertiesWithHistory);
 
-							const idsToProcess = returnAll
-								? objectIds
-								: objectIds.slice(0, this.getNodeParameter('batchReadLimit', i) as number);
-
-							const maxPages = returnAll
-								? Math.max(
-										1,
-										Math.floor(this.getNodeParameter('batchReadMaxPages', i) as number),
-									)
-								: 1;
-							const returnAllMode = returnAll
-								? (this.getNodeParameter('batchReadReturnAllMode', i) as string)
-								: 'eachPage';
+							const outputMode = this.getNodeParameter('batchReadReturnAllMode', i) as string;
 
 							const chunks: string[][] = [];
-							for (let c = 0; c < idsToProcess.length; c += 100) {
-								chunks.push(idsToProcess.slice(c, c + 100));
+							for (let c = 0; c < objectIds.length; c += 100) {
+								chunks.push(objectIds.slice(c, c + 100));
 							}
 
 							const allResults: JsonObject[] = [];
 
-							for (const [pageIndex, chunk] of chunks.entries()) {
-								if (pageIndex >= maxPages) break;
-
+							for (const chunk of chunks) {
 								const body: JsonObject = {
 									inputs: chunk.map((id) => ({ id })),
 									...(propertiesList.length ? { properties: propertiesList } : {}),
@@ -825,9 +880,9 @@ export class HubspotApi implements INodeType {
 
 								const results = (response.results as JsonObject[] | undefined) ?? [];
 
-								if (returnAllMode === 'eachPage') {
+								if (outputMode === 'eachPage') {
 									returnData.push({ json: response, pairedItem: { item: i } });
-								} else if (returnAllMode === 'eachResult') {
+								} else if (outputMode === 'eachResult') {
 									for (const result of results) {
 										returnData.push({ json: result, pairedItem: { item: i } });
 									}
@@ -836,7 +891,7 @@ export class HubspotApi implements INodeType {
 								}
 							}
 
-							if (returnAllMode === 'allInOne') {
+							if (outputMode === 'allInOne') {
 								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
 							}
 						}
@@ -980,16 +1035,128 @@ export class HubspotApi implements INodeType {
 
 					// ── BATCH DELETE ──────────────────────────────────────────────────
 					if (operation === 'batchDelete') {
-						const body = parseJsonParam(this.getNodeParameter('batchDeleteBody', i));
+						const batchDeleteInputMode = this.getNodeParameter(
+							'batchDeleteInputMode',
+							i,
+						) as string;
 
-						await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
-							method: 'POST',
-							url: `${HUBSPOT_BASE}${objectsPath}/batch/archive`,
-							headers: BASE_HEADERS,
-							body: JSON.stringify(body),
-						});
+						if (batchDeleteInputMode === 'json') {
+							const body = parseJsonParam(this.getNodeParameter('batchDeleteBody', i));
 
-						returnData.push({ json: { success: true }, pairedItem: { item: i } });
+							await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+								method: 'POST',
+								url: `${HUBSPOT_BASE}${objectsPath}/batch/archive`,
+								headers: BASE_HEADERS,
+								body: JSON.stringify(body),
+							});
+
+							returnData.push({ json: { success: true }, pairedItem: { item: i } });
+						} else {
+							const objectIds = String(this.getNodeParameter('batchDeleteObjectIds', i))
+								.split(',')
+								.map((s) => s.trim())
+								.filter(Boolean);
+							const opts = this.getNodeParameter('batchDeleteOptions', i) as {
+								idProperty?: string;
+								millisecondsBetweenItems?: number;
+							};
+
+							delayMs = opts.millisecondsBetweenItems ?? 50;
+
+							const outputMode = this.getNodeParameter('batchDeleteOutputMode', i) as string;
+
+							const chunks: string[][] = [];
+							for (let c = 0; c < objectIds.length; c += 100) {
+								chunks.push(objectIds.slice(c, c + 100));
+							}
+
+							const allDeletedIds: string[] = [];
+							const allNotFoundIds: string[] = [];
+
+							for (const chunk of chunks) {
+								// The archive endpoint only accepts record IDs, so when an ID
+								// Property is set the values are resolved to real record IDs
+								// with a batch read first. Values with no matching record are
+								// reported back instead of being archived.
+								let idsToArchive = chunk;
+								let notFoundIds: string[] = [];
+
+								if (opts.idProperty) {
+									const readResponse = (await this.helpers.httpRequestWithAuthentication.call(
+										this,
+										'hubspotApi',
+										{
+											method: 'POST',
+											url: `${HUBSPOT_BASE}${objectsPath}/batch/read`,
+											headers: BASE_HEADERS,
+											body: JSON.stringify({
+												inputs: chunk.map((id) => ({ id })),
+												idProperty: opts.idProperty,
+												properties: [opts.idProperty],
+											}),
+										},
+									)) as { results?: Array<{ id: string; properties?: JsonObject }> };
+
+									const results = readResponse.results ?? [];
+									idsToArchive = results.map((result) => result.id);
+
+									const resolvedValues = new Set(
+										results.map((result) =>
+											String(result.properties?.[opts.idProperty as string] ?? '')
+												.trim()
+												.toLowerCase(),
+										),
+									);
+									notFoundIds = chunk.filter(
+										(value) => !resolvedValues.has(value.toLowerCase()),
+									);
+								}
+
+								if (idsToArchive.length) {
+									await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+										method: 'POST',
+										url: `${HUBSPOT_BASE}${objectsPath}/batch/archive`,
+										headers: BASE_HEADERS,
+										body: JSON.stringify({ inputs: idsToArchive.map((id) => ({ id })) }),
+									});
+								}
+
+								if (outputMode === 'eachPage') {
+									returnData.push({
+										json: {
+											success: true,
+											ids: idsToArchive,
+											...(notFoundIds.length ? { notFound: notFoundIds } : {}),
+										},
+										pairedItem: { item: i },
+									});
+								} else if (outputMode === 'eachResult') {
+									for (const id of idsToArchive) {
+										returnData.push({ json: { success: true, id }, pairedItem: { item: i } });
+									}
+									for (const notFound of notFoundIds) {
+										returnData.push({
+											json: { success: false, id: notFound, objectFound: false },
+											pairedItem: { item: i },
+										});
+									}
+								} else {
+									allDeletedIds.push(...idsToArchive);
+									allNotFoundIds.push(...notFoundIds);
+								}
+							}
+
+							if (outputMode === 'allInOne') {
+								returnData.push({
+									json: {
+										success: true,
+										ids: allDeletedIds,
+										...(allNotFoundIds.length ? { notFound: allNotFoundIds } : {}),
+									},
+									pairedItem: { item: i },
+								});
+							}
+						}
 					}
 				}
 

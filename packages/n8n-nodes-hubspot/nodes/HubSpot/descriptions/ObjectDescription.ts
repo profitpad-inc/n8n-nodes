@@ -132,6 +132,14 @@ export const objectDescription: INodeProperties[] = [
 				description: 'Update an existing object',
 				action: 'Update an object',
 			},
+			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-option-name-wrong-for-upsert
+				name: 'Upsert',
+				value: 'upsert',
+				// eslint-disable-next-line n8n-nodes-base/node-param-description-wrong-for-upsert
+				description: 'Create or update a single object',
+				action: 'Upsert an object',
+			},
 		],
 		default: 'list',
 	},
@@ -217,11 +225,19 @@ export const objectDescription: INodeProperties[] = [
 				description: 'Update an existing object',
 				action: 'Update an object',
 			},
+			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-option-name-wrong-for-upsert
+				name: 'Upsert',
+				value: 'upsert',
+				// eslint-disable-next-line n8n-nodes-base/node-param-description-wrong-for-upsert
+				description: 'Create or update a single object',
+				action: 'Upsert an object',
+			},
 		],
 		default: 'list',
 	},
 
-	// ── Object ID (get, update, delete) ───────────────────────────────────────
+	// ── Object ID (get, update, delete, upsert) ───────────────────────────────
 	{
 		displayName: 'Object ID',
 		name: 'objectId',
@@ -233,7 +249,7 @@ export const objectDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['objects'],
-				operation: ['get', 'update', 'delete'],
+				operation: ['get', 'update', 'delete', 'upsert'],
 			},
 		},
 	},
@@ -791,6 +807,136 @@ export const objectDescription: INodeProperties[] = [
 		],
 	},
 
+	// ── UPSERT ────────────────────────────────────────────────────────────────
+	{
+		// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+		displayName: 'ID Property',
+		name: 'upsertIdProperty',
+		type: 'options',
+		required: true,
+		typeOptions: {
+			loadOptionsMethod: 'getUpsertIdProperties',
+			loadOptionsDependsOn: ['objectType'],
+		},
+		default: '',
+		description:
+			'The property to match the record on (e.g. <em>email</em> for contacts). The record is updated when a match is found and created when it is not. Only properties with a unique value are listed, and the record ID is not one of them, since an upsert cannot create a record against an ID that does not exist yet. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['upsert'],
+			},
+		},
+	},
+	{
+		displayName: 'Input Mode',
+		name: 'upsertInputMode',
+		type: 'options',
+		noDataExpression: true,
+		options: [
+			{
+				name: 'Custom JSON',
+				value: 'json',
+				description: 'Provide a raw JSON patch (merged on top of existing data)',
+			},
+			{
+				name: 'Fields',
+				value: 'ui',
+				description: 'Fill in individual fields',
+			},
+		],
+		default: 'ui',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['upsert'],
+			},
+		},
+	},
+	{
+		displayName: 'Properties',
+		name: 'upsertFields',
+		type: 'fixedCollection',
+		typeOptions: {
+			multipleValues: true,
+			fixedCollection: { itemTitle: '={{$collection.item.value.name}}' },
+		},
+		placeholder: 'Add Property',
+		default: {},
+		description:
+			'Object properties to set. Use HubSpot internal property names (e.g. <em>email</em>, <em>firstname</em>, <em>lastname</em>).',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['upsert'],
+				upsertInputMode: ['ui'],
+			},
+		},
+		options: [
+			{
+				name: 'propertyValues',
+				displayName: 'Property',
+				values: [
+					{
+						// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+						displayName: 'Property',
+						name: 'name',
+						type: 'options',
+						typeOptions: {
+							loadOptionsMethod: 'getWritableProperties',
+							loadOptionsDependsOn: ['objectType'],
+						},
+						default: '',
+						description:
+							'HubSpot internal property name. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+					},
+					{
+						displayName: 'Value',
+						name: 'value',
+						type: 'string',
+						default: '',
+					},
+				],
+			},
+		],
+	},
+	{
+		displayName: 'Properties',
+		name: 'upsertJson',
+		type: 'json',
+		default: JSON.stringify(
+			{
+				firstname: 'Jane',
+				phone: '+1-555-0123',
+			},
+			null,
+			2,
+		),
+		placeholder: '{\n  "firstname": "Jane",\n  "phone": "+1-555-0123"\n}',
+		description: 'Properties to set as a JSON object. Keys are HubSpot internal property names.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['upsert'],
+				upsertInputMode: ['json'],
+			},
+		},
+	},
+	{
+		displayName: 'Additional Options',
+		name: 'upsertOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['upsert'],
+			},
+		},
+		options: [msOption],
+	},
+
 	// ── DELETE ────────────────────────────────────────────────────────────────
 	{
 		displayName: 'Additional Options',
@@ -938,21 +1084,10 @@ export const objectDescription: INodeProperties[] = [
 		},
 	},
 	{
-		displayName: 'Return All',
-		name: 'batchReadReturnAll',
-		type: 'boolean',
-		default: false,
-		description: 'Whether to read all provided object IDs or only up to a given limit',
-		displayOptions: {
-			show: {
-				resource: ['objects'],
-				operation: ['batchRead'],
-				batchReadInputMode: ['ui'],
-			},
-		},
-	},
-	{
-		displayName: 'Return All Mode',
+		// Kept under its original `batchReadReturnAllMode` name (it was labelled
+		// "Return All Mode" when it only showed with Return All enabled) so
+		// workflows saved before Return All was removed keep their chosen mode.
+		displayName: 'Output Mode',
 		name: 'batchReadReturnAllMode',
 		type: 'options',
 		noDataExpression: true,
@@ -963,7 +1098,6 @@ export const objectDescription: INodeProperties[] = [
 				resource: ['objects'],
 				operation: ['batchRead'],
 				batchReadInputMode: ['ui'],
-				batchReadReturnAll: [true],
 			},
 		},
 		options: [
@@ -984,38 +1118,6 @@ export const objectDescription: INodeProperties[] = [
 				description: 'Return each individual record as a separate output item',
 			},
 		],
-	},
-	{
-		displayName: 'Max Pages',
-		name: 'batchReadMaxPages',
-		type: 'number',
-		typeOptions: { minValue: 1, numberPrecision: 0 },
-		default: 10,
-		description: 'Maximum number of batch requests to send. Each batch reads up to 100 object IDs.',
-		displayOptions: {
-			show: {
-				resource: ['objects'],
-				operation: ['batchRead'],
-				batchReadInputMode: ['ui'],
-				batchReadReturnAll: [true],
-			},
-		},
-	},
-	{
-		displayName: 'Limit',
-		name: 'batchReadLimit',
-		type: 'number',
-		typeOptions: { minValue: 1, maxValue: 100 },
-		default: 100,
-		description: 'Max number of object IDs to read',
-		displayOptions: {
-			show: {
-				resource: ['objects'],
-				operation: ['batchRead'],
-				batchReadInputMode: ['ui'],
-				batchReadReturnAll: [false],
-			},
-		},
 	},
 	{
 		displayName: 'Additional Options',
@@ -1174,6 +1276,31 @@ export const objectDescription: INodeProperties[] = [
 
 	// ── BATCH DELETE ──────────────────────────────────────────────────────────
 	{
+		displayName: 'Input Mode',
+		name: 'batchDeleteInputMode',
+		type: 'options',
+		noDataExpression: true,
+		options: [
+			{
+				name: 'Custom JSON',
+				value: 'json',
+				description: 'Provide the raw batch delete request body as JSON',
+			},
+			{
+				name: 'Fields',
+				value: 'ui',
+				description: 'Provide a list of object IDs and options',
+			},
+		],
+		default: 'json',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchDelete'],
+			},
+		},
+	},
+	{
 		displayName: 'Body',
 		name: 'batchDeleteBody',
 		type: 'json',
@@ -1193,8 +1320,89 @@ export const objectDescription: INodeProperties[] = [
 			show: {
 				resource: ['objects'],
 				operation: ['batchDelete'],
+				batchDeleteInputMode: ['json'],
 			},
 		},
+	},
+	{
+		displayName: 'Object IDs',
+		name: 'batchDeleteObjectIds',
+		type: 'string',
+		required: true,
+		default: '',
+		placeholder: '123,456,789',
+		description:
+			'Comma-separated list of HubSpot record IDs, or values of the property specified in <em>ID Property</em>',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchDelete'],
+				batchDeleteInputMode: ['ui'],
+			},
+		},
+	},
+	{
+		displayName: 'Output Mode',
+		name: 'batchDeleteOutputMode',
+		type: 'options',
+		noDataExpression: true,
+		default: 'eachResult',
+		description: 'How to output the deleted object IDs',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchDelete'],
+				batchDeleteInputMode: ['ui'],
+			},
+		},
+		options: [
+			{
+				name: 'All Results as 1 Item',
+				value: 'allInOne',
+				description:
+					'Aggregate all batches and return every deleted ID combined in a single output item',
+			},
+			{
+				name: 'Each Page as 1 Item',
+				value: 'eachPage',
+				description: 'Return the deleted IDs of each batch as a separate output item',
+			},
+			{
+				name: 'Each Result as 1 Item',
+				value: 'eachResult',
+				description: 'Return each deleted ID as a separate output item',
+			},
+		],
+	},
+	{
+		displayName: 'Additional Options',
+		name: 'batchDeleteOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchDelete'],
+				batchDeleteInputMode: ['ui'],
+			},
+		},
+		options: [
+			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+				displayName: 'ID Property',
+				name: 'idProperty',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getUniqueProperties',
+					loadOptionsDependsOn: ['objectType'],
+				},
+				default: '',
+				description:
+					'Look up records by this property instead of the record ID before deleting (e.g. <em>email</em> for contacts). A batch read request is made first to resolve the real object IDs, since the HubSpot archive endpoint only accepts record IDs. Only properties with a unique value are listed. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+			},
+			msOption,
+		],
 	},
 
 	// ── MERGE ─────────────────────────────────────────────────────────────────

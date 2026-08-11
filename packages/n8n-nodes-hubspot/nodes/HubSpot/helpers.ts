@@ -344,6 +344,38 @@ export async function getUniqueProperties(
 	return toUniqueIdPropertyOptions(await fetchProperties.call(this));
 }
 
+/**
+ * "ID Property" options for the single Upsert operation.
+ *
+ * Unlike the other ID Property pickers this one does not offer Record ID: an
+ * upsert matches an existing record on a unique property and creates one when
+ * there is no match, and a record ID that doesn't exist yet can't be created
+ * against. When the object type has no unique properties at all there is
+ * nothing to upsert on, so a single non-selectable entry explains the two ways
+ * forward instead of showing an empty dropdown.
+ */
+export async function getUpsertIdProperties(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const uniqueOptions = (await fetchProperties.call(this))
+		.filter((property) => property.hasUniqueValue && !property.name.startsWith('hs_'))
+		.map(toOption)
+		.sort((a, b) => a.name.localeCompare(b.name));
+
+	if (!uniqueOptions.length) {
+		return [
+			{
+				name: 'No Unique Properties Available',
+				value: '',
+				description:
+					'This object type has no properties with a unique value, so there is nothing to match an upsert on. Create a unique property for this object type in HubSpot, or use the Create operation instead.',
+			},
+		];
+	}
+
+	return uniqueOptions;
+}
+
 /** "ID Property" options scoped to the Associations resource's `fromObjectType`. */
 export async function getUniquePropertiesForAssociationFrom(
 	this: ILoadOptionsFunctions,
