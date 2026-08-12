@@ -1,5 +1,12 @@
 # n8n community node
 
+## Read this first
+**Always read `HANDOFF.md` before doing anything else** — before answering a
+question, planning, or touching a file. It is the current-state map of this
+package: resources, operations, endpoints, UI conventions, and the API quirks
+already discovered. Read it in full at the start of every task, and update it
+whenever a change makes it stale.
+
 ## Overview
 This is a project containing code for an n8n community node. n8n is a workflow
 automation platform where users build workflows with nodes, which are the
@@ -87,6 +94,7 @@ Load these before working on the relevant area:
 
 | Working on...                        | Read first                                                          |
 |--------------------------------------|---------------------------------------------------------------------|
+| Anything at all                      | `HANDOFF.md` — always, no exceptions                                |
 | Any node file in `nodes/`            | `.agents/nodes.md` and `.agents/properties.md`                      |
 | A declarative-style node             | above + `.agents/nodes-declarative.md`                              |
 | A programmatic-style node            | above + `.agents/nodes-programmatic.md`                             |

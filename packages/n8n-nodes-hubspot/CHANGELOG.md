@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### HubSpot (Objects → Create)
+
+- Creating a **Note** without `hs_timestamp` no longer fails. When the object
+  type is Notes and the property is missing or blank, it is filled with the
+  current time (ISO 8601). An explicitly supplied value is always used as-is.
+  Applies to both Fields and Custom JSON input modes, and to the single Create
+  operation only, since Batch Create takes a raw body.
+
 ### HubSpot (Objects → Upsert)
 
 - Added a single-record **Upsert** operation, laid out like the single Update

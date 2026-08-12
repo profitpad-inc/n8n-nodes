@@ -121,6 +121,17 @@ export function buildHubSpotUrl(
 	return url.toString();
 }
 
+// HubSpot rejects a Note create that omits hs_timestamp, so the Create
+// operation fills it in with the current time when it's missing. The Object
+// Type field is noValidation, meaning a typed-in value or expression can reach
+// this check, so the plain name is matched alongside the type ID.
+export const NOTES_OBJECT_TYPE = '0-46';
+
+export function isNotesObjectType(objectType: string): boolean {
+	const normalized = objectType.trim().toLowerCase();
+	return normalized === NOTES_OBJECT_TYPE || normalized === 'notes' || normalized === 'note';
+}
+
 interface HubSpotPropertySummary {
 	name: string;
 	label: string;

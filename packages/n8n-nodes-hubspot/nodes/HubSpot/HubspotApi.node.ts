@@ -30,6 +30,7 @@ import {
 	getUserProperties,
 	getWritableProperties,
 	getWritableUserProperties,
+	isNotesObjectType,
 	OWNERS_BASE_PATH,
 	resolveUsersLookup,
 	UsersLookup,
@@ -464,6 +465,19 @@ export class HubspotApi implements INodeType {
 							createProperties = Object.fromEntries(
 								(propsParam.propertyValues ?? []).map(({ name, value }) => [name, value]),
 							);
+						}
+
+						// Notes can't be created without hs_timestamp, so default it to the
+						// current time when the item doesn't supply one.
+						if (isNotesObjectType(objectType)) {
+							const timestamp = createProperties.hs_timestamp;
+							if (
+								timestamp === undefined ||
+								timestamp === null ||
+								String(timestamp).trim() === ''
+							) {
+								createProperties.hs_timestamp = new Date().toISOString();
+							}
 						}
 
 						let createAssociations: unknown[];
