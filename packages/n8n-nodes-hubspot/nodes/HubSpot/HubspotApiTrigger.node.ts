@@ -265,6 +265,60 @@ export class HubspotApiTrigger implements INodeType {
 							},
 						],
 					},
+					// Narrows changedProperties entries by who/what made the change,
+					// matched against both Source Type and Source ID since a single
+					// free-text term (e.g. "user:38812") could refer to either.
+					{
+						displayName: 'Filter Change Sources',
+						name: 'changeSourceFilter',
+						type: 'fixedCollection',
+						typeOptions: { multipleValues: false },
+						placeholder: 'Add Filter Change Sources',
+						default: {},
+						description:
+							'Only keep changes whose Source Type or Source ID matches (or does not match) the given sources',
+						displayOptions: {
+							show: { '/triggerOn': ['propertyChanged'] },
+						},
+						options: [
+							{
+								name: 'filter',
+								displayName: 'Filter',
+								values: [
+									{
+										displayName: 'Mode',
+										name: 'mode',
+										type: 'options',
+										noDataExpression: true,
+										default: 'include',
+										options: [
+											{
+												name: 'Include Sources',
+												value: 'include',
+												description:
+													'Only keep changes whose Source Type or Source ID matches one of the given sources',
+											},
+											{
+												name: 'Exclude Sources',
+												value: 'exclude',
+												description:
+													'Drop changes whose Source Type or Source ID matches one of the given sources',
+											},
+										],
+									},
+									{
+										displayName: 'Sources',
+										name: 'sources',
+										type: 'string',
+										default: '',
+										placeholder: 'INTEGRATION, user:38812',
+										description:
+											'Comma-separated values to match (case-insensitive, substring match) against each change\'s Source Type and Source ID',
+									},
+								],
+							},
+						],
+					},
 				],
 			},
 		],
@@ -302,8 +356,19 @@ export class HubspotApiTrigger implements INodeType {
 					filterJson?: string;
 				};
 			};
+			changeSourceFilter?: {
+				filter?: {
+					mode?: 'include' | 'exclude';
+					sources?: string;
+				};
+			};
 		};
 		const propertyChangedFilters = additionalOptions.searchFilters?.filterConfig ?? {};
+		const changeSourceFilterConfig = additionalOptions.changeSourceFilter?.filter ?? {};
+		const changeSourceMode = changeSourceFilterConfig.mode ?? 'include';
+		const changeSourceTerms = toStringList(changeSourceFilterConfig.sources).map((term) =>
+			term.toLowerCase(),
+		);
 
 		let triggerProperties: string[] = [];
 		if (isPropertyChangedMode) {
@@ -503,12 +568,30 @@ export class HubspotApiTrigger implements INodeType {
 			value: string;
 			timestamp: string;
 			sourceType?: string;
+			sourceId?: string;
 		}
 		interface BatchReadResult {
 			id: string;
 			properties: Record<string, string | null>;
 			propertiesWithHistory?: Record<string, PropertyHistoryEntry[]>;
 		}
+
+		// Matches a change's Source Type / Source ID against the configured
+		// terms (case-insensitive substring), honouring the Include/Exclude mode.
+		const passesChangeSourceFilter = (change: {
+			sourceType?: string | null;
+			sourceId?: string | null;
+		}) => {
+			if (changeSourceTerms.length === 0) return true;
+
+			const sourceType = (change.sourceType ?? '').toLowerCase();
+			const sourceId = (change.sourceId ?? '').toLowerCase();
+			const matchesAnyTerm = changeSourceTerms.some(
+				(term) => sourceType.includes(term) || sourceId.includes(term),
+			);
+
+			return changeSourceMode === 'exclude' ? !matchesAnyTerm : matchesAnyTerm;
+		};
 
 		const matchedResults: JsonObject[] = [];
 
@@ -541,13 +624,20 @@ export class HubspotApiTrigger implements INodeType {
 						.filter((propertyName) => (history[propertyName] ?? []).length > 0)
 						.map((propertyName) => {
 							const latest = history[propertyName][0];
-							return { propertyName, value: latest.value, timestamp: latest.timestamp };
+							return {
+								propertyName,
+								value: latest.value,
+								timestamp: latest.timestamp,
+								sourceType: latest.sourceType ?? null,
+								sourceId: latest.sourceId ?? null,
+							};
 						})
 						// In manual mode there is no poll window to compare against — any
 						// prior change is enough to validate the property selection.
 						.filter(
 							(change) => isManualMode || new Date(change.timestamp).getTime() >= pollSince,
-						);
+						)
+						.filter(passesChangeSourceFilter);
 
 					if (changedProperties.length === 0) continue;
 

@@ -764,6 +764,7 @@ export class HubspotApi implements INodeType {
 								Math.floor(this.getNodeParameter('maxPages', i) as number),
 							);
 							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+							const limit = this.getNodeParameter('limit', i) as number;
 							let pageCount = 0;
 							let after: string | undefined;
 							const allResults: JsonObject[] = [];
@@ -771,7 +772,7 @@ export class HubspotApi implements INodeType {
 							do {
 								const pageBody: JsonObject = {
 									...searchBodyBase,
-									limit: 200,
+									limit,
 									...(after ? { after } : {}),
 								};
 

@@ -192,8 +192,9 @@ Top-level **Properties** multi-select; Additional Options: `propertiesWithHistor
   toggle, guided AND/OR **Filter Groups** builder with a type-aware operator dropdown, a
   **Properties** multi-select, and **Sorts** / **Sorts (JSON)** under Additional Options
 - Additional options also include a free-text **Query** and `millisecondsBetweenItems`
-- `returnAll` paginates with `limit: 100` per page plus **Max Pages**; otherwise `searchLimit`
-  (1–200, default 10) applies
+- `returnAll` paginates with **Limit** (1–200, default 200) per page plus **Max Pages**;
+  otherwise **Limit** (1–200, default 100) applies. Both share the `limit` parameter name but
+  are separate field definitions gated on `returnAll`, so each keeps its own default.
 
 #### Batch Read
 - **Fields** mode: comma-separated **Object IDs**, chunked into batches of 100 automatically —
@@ -361,9 +362,15 @@ when a type is added) plus **Trigger On**:
   reveals the mode toggle and both filter editors together (a bare `collection` would require
   adding each separately). Since HubSpot's Search API can't filter by *which* property changed,
   `poll()` re-reads candidates via `POST .../batch/read` with `propertiesWithHistory`, chunked
-  in groups of 100, and keeps only records where a watched property's most recent history entry
-  falls inside the poll window. Each emitted record gets
-  `changedProperties: [{ propertyName, value, timestamp }]`.
+  in groups of 50 (HubSpot's cap when `propertiesWithHistory` is requested), and keeps only
+  records where a watched property's most recent history entry falls inside the poll window.
+  Each emitted record gets
+  `changedProperties: [{ propertyName, value, timestamp, sourceType, sourceId }]`.
+- **Filter Change Sources** (Additional Options, Property Changed only) — another single-instance
+  `fixedCollection`, with a **Mode** (`Include Sources` / `Exclude Sources`) and a comma-separated
+  **Sources** text field. Each term is matched case-insensitively as a substring against both
+  `sourceType` and `sourceId` on every `changedProperties` entry; a record whose entries all get
+  filtered out is dropped entirely. Left empty, no filtering happens regardless of Mode.
 - **Return Mode** (`allInOne` / `eachResult`) and **Max Pages Per Poll** control output shape
   and pagination.
 - Poll-window filter values are ISO 8601 strings with a UTC offset (`toIsoStringWithOffset()`),
