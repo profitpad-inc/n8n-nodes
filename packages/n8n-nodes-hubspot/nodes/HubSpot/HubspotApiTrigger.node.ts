@@ -10,6 +10,8 @@ import {
 
 import {
 	CONTACTS_OBJECT_TYPE,
+	FormSubmissionValue,
+	buildFormSubmissionFields,
 	buildHubSpotUrl,
 	getAllProperties,
 	getForms,
@@ -50,6 +52,11 @@ const SEARCH_FILTER_MODE_DESCRIPTION =
 const SEARCH_FILTER_JSON_DESCRIPTION =
 	'A JSON object containing <code>filterGroups</code>. Filter groups are OR\'d; filters within a group are AND\'d. During automatic polling a time-based filter is injected automatically (skipped for manual test runs). See <a href="https://developers.hubspot.com/docs/api-reference/legacy/crm/objects/objects/search/search-objects">HubSpot search docs</a> for operators: BETWEEN, CONTAINS_TOKEN, EQ, GT, GTE, HAS_PROPERTY, IN, LT, LTE, NEQ, NOT_CONTAINS_TOKEN, NOT_HAS_PROPERTY, NOT_IN.';
 
+// The CRM Records values of "Trigger On" — every value except "Form
+// Submitted" — used to scope CRM-only fields now that there's no separate
+// "Resource" field to gate on.
+const CRM_TRIGGER_ON_VALUES = ['newOrUpdatedRecords', 'newRecords', 'propertyChanged', 'updatedRecords'];
+
 /** Formats an epoch-ms timestamp as an ISO 8601 string with the local UTC offset, e.g. 2026-07-21T21:17:08-04:00. */
 function toIsoStringWithOffset(ms: number): string {
 	const date = new Date(ms);
@@ -69,12 +76,6 @@ function toIsoStringWithOffset(ms: number): string {
 interface SubmissionsResponse {
 	results?: JsonObject[];
 	paging?: JsonObject;
-}
-
-interface FormSubmissionValue {
-	name?: string;
-	value?: string;
-	objectTypeId?: string;
 }
 
 /**
@@ -284,7 +285,13 @@ async function pollFormSubmissions(
 
 	const enriched: JsonObject[] = [];
 	for (const submission of matched) {
-		enriched.push(await enrichSubmissionWithAssociations.call(this, submission));
+		const withFields: JsonObject = {
+			...submission,
+			fields: buildFormSubmissionFields(
+				(submission.values as FormSubmissionValue[] | undefined) ?? [],
+			),
+		};
+		enriched.push(await enrichSubmissionWithAssociations.call(this, withFields));
 	}
 
 	if (returnAllMode === 'allInOne') {
@@ -303,7 +310,7 @@ export class HubspotApiTrigger implements INodeType {
 		version: 1,
 		description: 'Polls HubSpot CRM records or form submissions for changes on a schedule.',
 		subtitle:
-			'={{$parameter["resource"] === "forms" ? ("Form: " + ($parameter["formGuid"] || "")) : ($parameter["objectType"] + " – " + $parameter["triggerOn"])}}',
+			'={{$parameter["triggerOn"] === "formSubmitted" ? ("Form: " + ($parameter["formGuid"] || "")) : ($parameter["objectType"] + " – " + $parameter["triggerOn"])}}',
 		defaults: {
 			name: 'HubSpot Trigger',
 		},
@@ -318,31 +325,9 @@ export class HubspotApiTrigger implements INodeType {
 			},
 		],
 		properties: [
-			// ── Resource ──────────────────────────────────────────────────────────
-			{
-				displayName: 'Resource',
-				name: 'resource',
-				type: 'options',
-				noDataExpression: true,
-				options: [
-					{
-						// eslint-disable-next-line n8n-nodes-base/node-param-resource-with-plural-option
-						name: 'CRM Records',
-						value: 'objects',
-						description:
-							'Watch CRM objects — contacts, companies, deals, and more — for new or updated records',
-					},
-					{
-						name: 'Form Submissions',
-						value: 'forms',
-						description: 'Watch a HubSpot form for new submissions',
-					},
-				],
-				default: 'objects',
-				description: 'What to watch for changes',
-			},
-
 			// ── Object Type ───────────────────────────────────────────────────────
+			// Hidden for "Form Submitted", which watches a form rather than a CRM
+			// object type.
 			{
 				displayName: 'Object Type',
 				name: 'objectType',
@@ -376,16 +361,27 @@ export class HubspotApiTrigger implements INodeType {
 				default: '0-1',
 				description: 'The HubSpot CRM object type to watch for changes',
 				displayOptions: {
-					show: { resource: ['objects'] },
+					hide: { triggerOn: ['formSubmitted'] },
 				},
 			},
 
 			// ── Trigger On ────────────────────────────────────────────────────────
+			// "Form Submitted" lives here (rather than behind a separate Resource
+			// field) because n8n's node-insertion "actions" panel only ever reads
+			// the first property named "Event"/"Events"/"Trigger On" it finds and
+			// lists that property's options — a second, resource-gated field with
+			// the same name is never reached. Keeping every event as one option on
+			// this single field is what makes all 5 show up there.
 			{
 				displayName: 'Trigger On',
 				name: 'triggerOn',
 				type: 'options',
 				options: [
+					{
+						name: 'Form Submitted',
+						value: 'formSubmitted',
+						description: 'Trigger when the selected form receives a new submission',
+					},
 					{
 						name: 'New or Updated Records',
 						value: 'newOrUpdatedRecords',
@@ -409,10 +405,7 @@ export class HubspotApiTrigger implements INodeType {
 					},
 				],
 				default: 'newOrUpdatedRecords',
-				description: 'Which type of record change should fire the trigger',
-				displayOptions: {
-					show: { resource: ['objects'] },
-				},
+				description: 'Which type of change should fire the trigger',
 			},
 
 			// ── Trigger Properties (Property Changed mode) ──────────────────────────
@@ -432,7 +425,6 @@ export class HubspotApiTrigger implements INodeType {
 					'Fires when any one of these properties changes value. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
-						resource: ['objects'],
 						triggerOn: ['propertyChanged'],
 					},
 				},
@@ -443,25 +435,22 @@ export class HubspotApiTrigger implements INodeType {
 			// Additional Options instead — see below.
 			searchFilterModeProperty(
 				{
-					resource: ['objects'],
 					triggerOn: ['newOrUpdatedRecords', 'newRecords', 'updatedRecords'],
 				},
 				SEARCH_FILTER_MODE_DESCRIPTION,
 			),
 
 			filterGroupsUiProperty({
-				resource: ['objects'],
 				triggerOn: ['newOrUpdatedRecords', 'newRecords', 'updatedRecords'],
 			}),
 			filterJsonProperty(
 				{
-					resource: ['objects'],
 					triggerOn: ['newOrUpdatedRecords', 'newRecords', 'updatedRecords'],
 				},
 				SEARCH_FILTER_JSON_DESCRIPTION,
 			),
 
-			// ── Form (Form Submissions resource) ────────────────────────────────────
+			// ── Form (Form Submitted) ────────────────────────────────────────────────
 			{
 				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
 				displayName: 'Form',
@@ -475,7 +464,7 @@ export class HubspotApiTrigger implements INodeType {
 				description:
 					'The form to watch for new submissions. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
-					show: { resource: ['forms'] },
+					show: { triggerOn: ['formSubmitted'] },
 				},
 			},
 
@@ -512,11 +501,11 @@ export class HubspotApiTrigger implements INodeType {
 				description:
 					'Maximum number of search result pages to fetch per poll cycle. Each page contains up to 200 records.',
 				displayOptions: {
-					show: { resource: ['objects'] },
+					show: { triggerOn: CRM_TRIGGER_ON_VALUES },
 				},
 			},
 
-			// ── Max Pages (Form Submissions) ─────────────────────────────────────────
+			// ── Max Pages (Form Submitted) ────────────────────────────────────────────
 			{
 				displayName: 'Max Pages Per Poll',
 				name: 'maxPages',
@@ -526,12 +515,12 @@ export class HubspotApiTrigger implements INodeType {
 				description:
 					'Maximum number of submission pages to fetch per poll cycle. Each page contains up to 50 submissions (HubSpot\'s cap for this endpoint).',
 				displayOptions: {
-					show: { resource: ['forms'] },
+					show: { triggerOn: ['formSubmitted'] },
 				},
 			},
 
 			// ── Properties (CRM Records) ─────────────────────────────────────────────
-			propertiesProperty({ resource: ['objects'] }),
+			propertiesProperty({ triggerOn: CRM_TRIGGER_ON_VALUES }),
 
 			// ── Additional Options (CRM Records) ─────────────────────────────────────
 			{
@@ -541,7 +530,7 @@ export class HubspotApiTrigger implements INodeType {
 				placeholder: 'Add Option',
 				default: {},
 				displayOptions: {
-					show: { resource: ['objects'] },
+					show: { triggerOn: CRM_TRIGGER_ON_VALUES },
 				},
 				options: [
 					sortsUiOption,
@@ -646,9 +635,9 @@ export class HubspotApiTrigger implements INodeType {
 	};
 
 	async poll(this: IPollFunctions): Promise<INodeExecutionData[][] | null> {
-		const resource = this.getNodeParameter('resource') as string;
+		const triggerOn = this.getNodeParameter('triggerOn') as string;
 
-		if (resource === 'forms') {
+		if (triggerOn === 'formSubmitted') {
 			return pollFormSubmissions.call(this);
 		}
 
@@ -658,7 +647,6 @@ export class HubspotApiTrigger implements INodeType {
 		const isManualMode = this.getMode() === 'manual';
 
 		const objectType = this.getNodeParameter('objectType') as string;
-		const triggerOn = this.getNodeParameter('triggerOn') as string;
 		const isPropertyChangedMode = triggerOn === 'propertyChanged';
 		const returnAllMode = this.getNodeParameter('returnAllMode') as string;
 		const maxPages = Math.max(1, Math.floor(this.getNodeParameter('maxPages') as number));

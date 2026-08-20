@@ -15,6 +15,8 @@ import { objectDescription } from './descriptions/ObjectDescription';
 import { ownerDescription } from './descriptions/OwnerDescription';
 import { propertyDescription } from './descriptions/PropertyDescription';
 import {
+	FormSubmissionValue,
+	buildFormSubmissionFields,
 	buildHubSpotUrl,
 	findOwnerByField,
 	getAllProperties,
@@ -358,10 +360,17 @@ export class HubspotApi implements INodeType {
 									{ method: 'GET', url, headers: BASE_HEADERS },
 								)) as JsonObject;
 
-								const results = (response.results as JsonObject[] | undefined) ?? [];
+								const results = (
+									(response.results as JsonObject[] | undefined) ?? []
+								).map((result) => ({
+									...result,
+									fields: buildFormSubmissionFields(
+										(result.values as FormSubmissionValue[] | undefined) ?? [],
+									),
+								}));
 
 								if (returnAllMode === 'eachPage') {
-									returnData.push({ json: response, pairedItem: { item: i } });
+									returnData.push({ json: { ...response, results }, pairedItem: { item: i } });
 								} else if (returnAllMode === 'eachResult') {
 									for (const result of results) {
 										returnData.push({ json: result, pairedItem: { item: i } });
@@ -392,7 +401,16 @@ export class HubspotApi implements INodeType {
 								{ method: 'GET', url, headers: BASE_HEADERS },
 							)) as JsonObject;
 
-							returnData.push({ json: response, pairedItem: { item: i } });
+							const results = ((response.results as JsonObject[] | undefined) ?? []).map(
+								(result) => ({
+									...result,
+									fields: buildFormSubmissionFields(
+										(result.values as FormSubmissionValue[] | undefined) ?? [],
+									),
+								}),
+							);
+
+							returnData.push({ json: { ...response, results }, pairedItem: { item: i } });
 						}
 					}
 				}

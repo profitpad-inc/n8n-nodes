@@ -15,17 +15,28 @@
   → List, since this endpoint does support real `after`-cursor pagination,
   capped at 50 results per page.
 - **Form** is the same `getForms`-backed dropdown used by the Trigger.
+- Every returned submission gets a `fields` object added — its `values`
+  array flattened to `{ "<objectTypeId>__<name>": value }` (e.g.
+  `"0-1__email": "a@b.com"`) via the shared `buildFormSubmissionFields()`
+  helper, same as the Trigger's Form Submissions branch.
 
-### HubSpot Trigger (Form Submissions → new resource)
+### HubSpot Trigger (Trigger On → new "Form Submitted" option)
 
-- The HubSpot Trigger node gained a top-level **Resource** selector — **CRM
-  Records** (the existing behaviour, now scoped under this option) or **Form
-  Submissions**, which polls a single HubSpot form for new submissions using
+- The HubSpot Trigger node's **Trigger On** field gained a 5th option, **Form
+  Submitted**, which polls a single HubSpot form for new submissions using
   the legacy `form-integrations/v1/submissions/forms` endpoint (HubSpot has
   not replaced this API, and it has no built-in since/after-a-date filter).
-  This stays one node rather than a separate trigger, since the branch is a
-  single top-level `if` in `poll()` — no different from how the action node
-  already keeps several resources in one `execute()`.
+  There is no separate "Resource" field — n8n's node-insertion "actions"
+  panel builds a trigger node's quick-add list from the *first* property in
+  the array named "Event"/"Events"/"Trigger On", and lists only that
+  property's options; a `resource` field plus a second, resource-gated
+  "Trigger On"-named field for Forms (tried first) is invisible to it, since
+  the earlier CRM-Records field always wins that lookup. Folding **Form
+  Submitted** directly into the one real **Trigger On** field is what
+  actually makes it discoverable there. **Object Type** is hidden via
+  `displayOptions.hide.triggerOn: ['formSubmitted']` for this option; every
+  CRM-only field is scoped to the other 4 `triggerOn` values instead of the
+  removed `resource: ['objects']`.
 - **Form** is a dropdown sourced from `marketing/v3/forms`, paginated via
   `after` with `formTypes=all` so every form in the account is offered, not
   just marketing-type forms capped at a default page size (the same
@@ -40,6 +51,9 @@
   submissions — enough to confirm the Form selection without pulling a full
   page. Automatic polling is unaffected: it still returns everything that
   happened in the poll window, capped only by **Max Pages Per Poll**.
+- Each matched submission gets a `fields` object added (see above), added
+  before the contact/associations enrichment below so it's present
+  regardless of whether a contact was found.
 - Each matched submission is enriched with the contact it belongs to. Rather
   than assuming an `email` field exists, the first two *distinct* values
   tagged `objectTypeId: '0-1'` (Contacts) in submission order are used (just

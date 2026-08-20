@@ -595,6 +595,29 @@ export async function getForms(this: ILoadOptionsFunctions): Promise<INodeProper
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export interface FormSubmissionValue {
+	name?: string;
+	value?: string;
+	objectTypeId?: string;
+}
+
+/**
+ * Flattens a form submission's `values` array into a `{ "<objectTypeId>__<name>": value }`
+ * object, keeping the originating CRM object type visible in the key (mirroring this
+ * package's `associations.0-<id>` pseudo-property convention) rather than just `{ name: value
+ * }`, since the same field `name` isn't guaranteed unique across object types. When more than
+ * one value shares the same objectTypeId + name (e.g. a multi-value checkbox field), the last
+ * one wins.
+ */
+export function buildFormSubmissionFields(values: FormSubmissionValue[]): Record<string, string> {
+	const fields: Record<string, string> = {};
+	for (const value of values) {
+		if (!value.name || value.objectTypeId === undefined || value.value === undefined) continue;
+		fields[`${value.objectTypeId}__${value.name}`] = value.value;
+	}
+	return fields;
+}
+
 interface HubSpotOwner {
 	id: string;
 	email?: string;
