@@ -605,15 +605,27 @@ export interface FormSubmissionValue {
  * Flattens a form submission's `values` array into a `{ "<objectTypeId>__<name>": value }`
  * object, keeping the originating CRM object type visible in the key (mirroring this
  * package's `associations.0-<id>` pseudo-property convention) rather than just `{ name: value
- * }`, since the same field `name` isn't guaranteed unique across object types. When more than
- * one value shares the same objectTypeId + name (e.g. a multi-value checkbox field), the last
- * one wins.
+ * }`, since the same field `name` isn't guaranteed unique across object types. A multi-value
+ * field (e.g. a checkbox group) submits one `values` entry per checked option, all sharing the
+ * same objectTypeId + name — those are joined with `;`, matching this package's existing
+ * semicolon-separated multi-value convention (the IN / NOT IN search filter operator).
  */
 export function buildFormSubmissionFields(values: FormSubmissionValue[]): Record<string, string> {
-	const fields: Record<string, string> = {};
+	const valuesByKey = new Map<string, string[]>();
 	for (const value of values) {
 		if (!value.name || value.objectTypeId === undefined || value.value === undefined) continue;
-		fields[`${value.objectTypeId}__${value.name}`] = value.value;
+		const key = `${value.objectTypeId}__${value.name}`;
+		const existing = valuesByKey.get(key);
+		if (existing) {
+			existing.push(value.value);
+		} else {
+			valuesByKey.set(key, [value.value]);
+		}
+	}
+
+	const fields: Record<string, string> = {};
+	for (const [key, fieldValues] of valuesByKey) {
+		fields[key] = fieldValues.join(';');
 	}
 	return fields;
 }

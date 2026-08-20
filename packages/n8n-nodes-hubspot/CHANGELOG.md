@@ -18,7 +18,10 @@
 - Every returned submission gets a `fields` object added — its `values`
   array flattened to `{ "<objectTypeId>__<name>": value }` (e.g.
   `"0-1__email": "a@b.com"`) via the shared `buildFormSubmissionFields()`
-  helper, same as the Trigger's Form Submitted option.
+  helper, same as the Trigger's Form Submitted option. A multi-value field
+  (e.g. a checkbox group) submits one `values` entry per checked option
+  under the same name — those are joined with `;` rather than the last one
+  silently overwriting the rest.
 
 ### HubSpot Trigger (Trigger On → new "Form Submitted" option)
 

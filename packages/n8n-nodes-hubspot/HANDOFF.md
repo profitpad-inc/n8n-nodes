@@ -335,12 +335,13 @@ Endpoints hang off `/crm/properties/2026-03/{objectType}` (Object Type is a real
   (`?properties=email&properties=firstname`, not `?properties[0]=`). Skips `undefined`, `''`,
   and `false` values.
 - `buildFormSubmissionFields(values)` — flattens a form submission's `values` array into a
-  `{ "<objectTypeId>__<name>": value }` object, used by both the Trigger's Form Submissions
-  branch and the action node's Forms → Get Form Submissions. The objectTypeId prefix matters
-  because the same field `name` isn't guaranteed unique across object types (e.g. a form with
-  both a contact `name`-scoped field and a company `name` field). A duplicate objectTypeId+name
-  (a multi-value checkbox field submitting more than one value under the same name) has the
-  last value win.
+  `{ "<objectTypeId>__<name>": value }` object, used by both the Trigger's Form Submitted mode
+  and the action node's Forms → Get Form Submissions. The objectTypeId prefix matters because
+  the same field `name` isn't guaranteed unique across object types (e.g. a form with both a
+  contact `name`-scoped field and a company `name` field). HubSpot submits a multi-value field
+  (a checkbox group) as one `values` entry per checked option, all sharing the same
+  objectTypeId + name — those are joined with `;` (matching the IN / NOT IN search filter
+  operator's existing semicolon-separated convention) rather than the last one silently winning.
 - `fetchProperties()` (private, cached) — the single source every property `loadOptions` method
   goes through: `getProperties`, `getEnumerationProperties`, `getAllProperties`,
   `getWritableProperties`, `getUniqueProperties`, `getUpsertIdProperties`,
