@@ -9,7 +9,7 @@
   `formTypes=all` via `after` until exhausted, returning every form as a
   separate output item) and **Get Form Submissions** (`GET
   form-integrations/v1/submissions/forms/{formGuid}`, the same legacy endpoint
-  used by the Trigger's Form Submissions resource).
+  used by the Trigger's Form Submitted option).
 - **Get Form Submissions** follows the same **Return All** / **Limit** /
   **Max Pages** / **Return All Mode** convention as Objects → List and Owners
   → List, since this endpoint does support real `after`-cursor pagination,
@@ -18,7 +18,7 @@
 - Every returned submission gets a `fields` object added — its `values`
   array flattened to `{ "<objectTypeId>__<name>": value }` (e.g.
   `"0-1__email": "a@b.com"`) via the shared `buildFormSubmissionFields()`
-  helper, same as the Trigger's Form Submissions branch.
+  helper, same as the Trigger's Form Submitted option.
 
 ### HubSpot Trigger (Trigger On → new "Form Submitted" option)
 
