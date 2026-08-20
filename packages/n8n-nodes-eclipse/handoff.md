@@ -154,18 +154,35 @@ if a user hits the same limit.
 ## Trigger node (`EclipseApiTrigger.node.ts`)
 
 Polls on a schedule. Two lookback modes:
-- **Rolling window** (default): looks back `pollInterval` minutes from now.
-  Persists `lastRunTime` in workflow static data (`getWorkflowStaticData('node')`)
-  so consecutive polls don't gap or duplicate; picks whichever of
-  (`now - pollInterval`) or `lastRunTime` is *earlier*, so a workflow that
-  was paused/off resumes from where it left off instead of losing data.
-  Manual executions always use `now - pollInterval` (ignore `lastRunTime`)
-  since there's no meaningful "last run" for a manual trigger.
+- **Rolling window** (default): looks back `pollInterval` minutes from now
+  only on the very first run (no `lastRunTime` in workflow static data yet,
+  `getWorkflowStaticData('node')`). Every run after that trusts `lastRunTime`
+  exactly, so consecutive polls neither gap nor overlap. Manual executions
+  always use `now - pollInterval` (ignore `lastRunTime`) since there's no
+  meaningful "last run" for a manual trigger.
 - **Custom date mode** (`useCustomDate: true`): uses a fixed
   `updatedAfter` dateTime param directly, no static-data bookkeeping.
 
 Returns `null` (not an empty array) when there are zero results, which is
 the n8n convention for "nothing happened this poll."
+
+**Bug fixed (2026-08-17)**: the rolling-window branch used to pick
+whichever of `lastRunTime` or `now - pollInterval` was *earlier*, on every
+run, not just the first. Intent (per the original comment) was to widen the
+window after downtime, but the effect in the normal steady-state case
+(trigger polling continuously, `lastRunTime` more recent than
+`now - pollInterval`) was the opposite of what's wanted: `lastRunTime` lost
+that comparison every time, so `now - pollInterval` won and every poll
+re-fetched the full `pollInterval`-minutes window from scratch. Any record
+modified inside that window got re-emitted on *every* poll until it aged
+out — e.g. with the default 5-minute Lookback Window and a 1-minute poll
+schedule, the same record could be redelivered 5 times in a row. Symptom
+reported by a user: the same sales order showing up repeatedly with what
+looked like different snapshots of its data over the course of a day. Fix:
+`lookbackTime = lastRun ?? intervalLookback` — trust `lastRunTime`
+unconditionally once it exists; `intervalLookback` is now only reachable on
+the first-ever run. Downtime catch-up still works fine under this simpler
+rule, since a stale `lastRunTime` is itself already the wider window.
 
 ## Known n8n editor quirk: "options" field value warnings
 

@@ -10,7 +10,9 @@ import {
 
 import {
 	CONTACTS_OBJECT_TYPE,
+	buildHubSpotUrl,
 	getAllProperties,
+	getForms,
 	getSearchFilterProperties,
 	getSearchOperators,
 } from './helpers';
@@ -30,6 +32,12 @@ import {
 
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const OBJECTS_BASE_PATH = '/crm/v3/objects';
+const ASSOC_BASE_PATH = '/crm/associations/2026-03';
+const FORM_SUBMISSIONS_BASE_PATH = '/form-integrations/v1/submissions/forms';
+
+// "Fetch test event" runs only need enough data to confirm the Form
+// selection is right, not a full poll-window's worth of submissions.
+const MANUAL_FETCH_SUBMISSIONS_LIMIT = 5;
 
 const BASE_HEADERS = {
 	'content-type': 'application/json',
@@ -58,6 +66,234 @@ function toIsoStringWithOffset(ms: number): string {
 	);
 }
 
+interface SubmissionsResponse {
+	results?: JsonObject[];
+	paging?: JsonObject;
+}
+
+interface FormSubmissionValue {
+	name?: string;
+	value?: string;
+	objectTypeId?: string;
+}
+
+/**
+ * Enriches a submission with the contact it belongs to plus, for every other
+ * distinct objectTypeId present among the submission's values, the IDs of
+ * that type's records associated to the resolved contact — fetched via the
+ * same batch associations endpoint the Associations resource uses, not by
+ * trusting the submitted value as a real record ID.
+ *
+ * The contact is found by searching on whichever contact-scoped
+ * (objectTypeId 0-1) fields the form actually submitted, rather than
+ * assuming an `email` field exists — plenty of forms only capture e.g.
+ * firstname/lastname. The first two distinct 0-1 fields, in submission
+ * order, are AND'd together as search filters (just the one field if that's
+ * all the form has); the first match is used. If the form submitted no
+ * contact-scoped fields at all, or the search finds no match, the
+ * submission is returned unchanged with no `contact` key — there is no
+ * contact to check associations against, so no association lookups run
+ * either.
+ */
+async function enrichSubmissionWithAssociations(
+	this: IPollFunctions,
+	submission: JsonObject,
+): Promise<JsonObject> {
+	const values = (submission.values as FormSubmissionValue[] | undefined) ?? [];
+
+	const contactFields: Array<{ name: string; value: string }> = [];
+	const seenFieldNames = new Set<string>();
+	for (const value of values) {
+		if (value.objectTypeId !== CONTACTS_OBJECT_TYPE) continue;
+		if (!value.name || value.value === undefined || seenFieldNames.has(value.name)) continue;
+
+		seenFieldNames.add(value.name);
+		contactFields.push({ name: value.name, value: value.value });
+		if (contactFields.length === 2) break;
+	}
+	if (contactFields.length === 0) return submission;
+
+	let contact: JsonObject | undefined;
+	try {
+		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+			method: 'POST',
+			url: `${HUBSPOT_BASE}${OBJECTS_BASE_PATH}/${CONTACTS_OBJECT_TYPE}/search`,
+			headers: BASE_HEADERS,
+			body: JSON.stringify({
+				filterGroups: [
+					{
+						filters: contactFields.map((field) => ({
+							propertyName: field.name,
+							operator: 'EQ',
+							value: field.value,
+						})),
+					},
+				],
+				// Request back the fields matched on, so the returned contact
+				// confirms what it was found by.
+				properties: contactFields.map((field) => field.name),
+				limit: 1,
+			}),
+		})) as { results?: JsonObject[] };
+		contact = response.results?.[0];
+	} catch (error) {
+		throw new NodeApiError(this.getNode(), error as JsonObject);
+	}
+	if (!contact) return submission;
+
+	const otherObjectTypeIds = Array.from(
+		new Set(
+			values
+				.map((value) => value.objectTypeId)
+				.filter((objectTypeId): objectTypeId is string =>
+					Boolean(objectTypeId) && objectTypeId !== CONTACTS_OBJECT_TYPE,
+				),
+		),
+	);
+
+	if (otherObjectTypeIds.length === 0) {
+		return { ...submission, contact };
+	}
+
+	const contactId = String(contact.id);
+	const associations: JsonObject = {};
+
+	try {
+		for (const toObjectType of otherObjectTypeIds) {
+			const response = (await this.helpers.httpRequestWithAuthentication.call(
+				this,
+				'hubspotApi',
+				{
+					method: 'POST',
+					url: `${HUBSPOT_BASE}${ASSOC_BASE_PATH}/${CONTACTS_OBJECT_TYPE}/${toObjectType}/batch/read`,
+					headers: BASE_HEADERS,
+					body: JSON.stringify({ inputs: [{ id: contactId }] }),
+				},
+			)) as { results?: Array<{ to?: Array<{ toObjectId: string }> }> };
+
+			associations[toObjectType] = (response.results?.[0]?.to ?? []).map(
+				(association) => association.toObjectId,
+			);
+		}
+	} catch (error) {
+		throw new NodeApiError(this.getNode(), error as JsonObject);
+	}
+
+	return { ...submission, contact, associations };
+}
+
+/**
+ * Polls a single HubSpot form for new submissions via the legacy
+ * form-integrations/v1 endpoint. Kept as a standalone `this`-bound function
+ * (rather than inline in `poll()`) since it's a self-contained resource
+ * branch with its own request shape, paging, and watermark logic — mirroring
+ * how helpers.ts already exports `.call(this, ...)`-style functions.
+ */
+async function pollFormSubmissions(
+	this: IPollFunctions,
+): Promise<INodeExecutionData[][] | null> {
+	const staticData = this.getWorkflowStaticData('node');
+	const now = Date.now();
+	const lastPollTime = staticData.lastPollTime as number | undefined;
+	const isManualMode = this.getMode() === 'manual';
+
+	const formGuid = this.getNodeParameter('formGuid') as string;
+	const returnAllMode = this.getNodeParameter('returnAllMode') as string;
+	const maxPages = Math.max(1, Math.floor(this.getNodeParameter('maxPages') as number));
+
+	if (!formGuid) {
+		throw new NodeApiError(this.getNode(), {
+			message: 'Select a Form to watch for submissions',
+		} as JsonObject);
+	}
+
+	// Fall back to the previous minute only if static data is missing.
+	const pollSince = lastPollTime ?? now - 60 * 1000;
+
+	// When n8n runs locally, log the exact request URL sent to HubSpot to aid
+	// debugging. Detected via the instance base URL so it never fires in prod.
+	let debugLocalhost = false;
+	try {
+		debugLocalhost = /\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(
+			this.getInstanceBaseUrl(),
+		);
+	} catch {
+		debugLocalhost = false;
+	}
+
+	const matched: JsonObject[] = [];
+	let after: string | undefined;
+	let pageCount = 0;
+	let reachedWatermark = false;
+
+	try {
+		do {
+			const url = buildHubSpotUrl(HUBSPOT_BASE, `${FORM_SUBMISSIONS_BASE_PATH}/${formGuid}`, {
+				limit: isManualMode ? MANUAL_FETCH_SUBMISSIONS_LIMIT : 50,
+				after,
+			});
+
+			if (debugLocalhost) {
+				this.logger.info(`[HubSpot Trigger] GET ${url}`);
+			}
+
+			const response = (await this.helpers.httpRequestWithAuthentication.call(
+				this,
+				'hubspotApi',
+				{
+					method: 'GET',
+					url,
+					headers: { accept: 'application/json' },
+				},
+			)) as SubmissionsResponse;
+
+			const results = response.results ?? [];
+			pageCount++;
+
+			// Manual "fetch test event" runs aren't bound by the poll window — just
+			// surface whatever the most recent submissions are so the setup can be
+			// validated without waiting for a live one.
+			if (isManualMode) {
+				matched.push(...results);
+			} else {
+				// HubSpot returns submissions newest-first, so once a page's oldest
+				// entry is already at or before the watermark, every later page is
+				// too — the loop can stop instead of paging all the way through.
+				for (const submission of results) {
+					if (Number(submission.submittedAt) > pollSince) {
+						matched.push(submission);
+					} else {
+						reachedWatermark = true;
+					}
+				}
+			}
+
+			const paging = response.paging as JsonObject | undefined;
+			after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
+		} while (after && pageCount < maxPages && !reachedWatermark && !isManualMode);
+	} catch (error) {
+		throw new NodeApiError(this.getNode(), error as JsonObject);
+	}
+
+	staticData.lastPollTime = now;
+
+	if (matched.length === 0) return null;
+
+	// HubSpot returns submissions newest-first; flip to chronological order.
+	matched.reverse();
+
+	const enriched: JsonObject[] = [];
+	for (const submission of matched) {
+		enriched.push(await enrichSubmissionWithAssociations.call(this, submission));
+	}
+
+	if (returnAllMode === 'allInOne') {
+		return [[{ json: { results: enriched } }]];
+	}
+
+	return [enriched.map((submission) => ({ json: submission }))];
+}
+
 export class HubspotApiTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'HubSpot Trigger',
@@ -65,9 +301,9 @@ export class HubspotApiTrigger implements INodeType {
 		icon: 'file:app-icon.svg',
 		group: ['trigger'],
 		version: 1,
-		description:
-			'Polls for new or updated HubSpot records on a schedule using search filters.',
-		subtitle: '={{$parameter["objectType"] + " – " + $parameter["triggerOn"]}}',
+		description: 'Polls HubSpot CRM records or form submissions for changes on a schedule.',
+		subtitle:
+			'={{$parameter["resource"] === "forms" ? ("Form: " + ($parameter["formGuid"] || "")) : ($parameter["objectType"] + " – " + $parameter["triggerOn"])}}',
 		defaults: {
 			name: 'HubSpot Trigger',
 		},
@@ -82,6 +318,30 @@ export class HubspotApiTrigger implements INodeType {
 			},
 		],
 		properties: [
+			// ── Resource ──────────────────────────────────────────────────────────
+			{
+				displayName: 'Resource',
+				name: 'resource',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{
+						// eslint-disable-next-line n8n-nodes-base/node-param-resource-with-plural-option
+						name: 'CRM Records',
+						value: 'objects',
+						description:
+							'Watch CRM objects — contacts, companies, deals, and more — for new or updated records',
+					},
+					{
+						name: 'Form Submissions',
+						value: 'forms',
+						description: 'Watch a HubSpot form for new submissions',
+					},
+				],
+				default: 'objects',
+				description: 'What to watch for changes',
+			},
+
 			// ── Object Type ───────────────────────────────────────────────────────
 			{
 				displayName: 'Object Type',
@@ -115,6 +375,9 @@ export class HubspotApiTrigger implements INodeType {
 				],
 				default: '0-1',
 				description: 'The HubSpot CRM object type to watch for changes',
+				displayOptions: {
+					show: { resource: ['objects'] },
+				},
 			},
 
 			// ── Trigger On ────────────────────────────────────────────────────────
@@ -147,6 +410,9 @@ export class HubspotApiTrigger implements INodeType {
 				],
 				default: 'newOrUpdatedRecords',
 				description: 'Which type of record change should fire the trigger',
+				displayOptions: {
+					show: { resource: ['objects'] },
+				},
 			},
 
 			// ── Trigger Properties (Property Changed mode) ──────────────────────────
@@ -166,6 +432,7 @@ export class HubspotApiTrigger implements INodeType {
 					'Fires when any one of these properties changes value. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
+						resource: ['objects'],
 						triggerOn: ['propertyChanged'],
 					},
 				},
@@ -175,17 +442,42 @@ export class HubspotApiTrigger implements INodeType {
 			// Hidden for Property Changed, where the equivalent fields live in
 			// Additional Options instead — see below.
 			searchFilterModeProperty(
-				{ triggerOn: ['newOrUpdatedRecords', 'newRecords', 'updatedRecords'] },
+				{
+					resource: ['objects'],
+					triggerOn: ['newOrUpdatedRecords', 'newRecords', 'updatedRecords'],
+				},
 				SEARCH_FILTER_MODE_DESCRIPTION,
 			),
 
 			filterGroupsUiProperty({
+				resource: ['objects'],
 				triggerOn: ['newOrUpdatedRecords', 'newRecords', 'updatedRecords'],
 			}),
 			filterJsonProperty(
-				{ triggerOn: ['newOrUpdatedRecords', 'newRecords', 'updatedRecords'] },
+				{
+					resource: ['objects'],
+					triggerOn: ['newOrUpdatedRecords', 'newRecords', 'updatedRecords'],
+				},
 				SEARCH_FILTER_JSON_DESCRIPTION,
 			),
+
+			// ── Form (Form Submissions resource) ────────────────────────────────────
+			{
+				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+				displayName: 'Form',
+				name: 'formGuid',
+				type: 'options',
+				required: true,
+				typeOptions: {
+					loadOptionsMethod: 'getForms',
+				},
+				default: '',
+				description:
+					'The form to watch for new submissions. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				displayOptions: {
+					show: { resource: ['forms'] },
+				},
+			},
 
 			// ── Return Mode ───────────────────────────────────────────────────────
 			{
@@ -210,7 +502,7 @@ export class HubspotApiTrigger implements INodeType {
 				],
 			},
 
-			// ── Max Pages ─────────────────────────────────────────────────────────
+			// ── Max Pages (CRM Records) ──────────────────────────────────────────────
 			{
 				displayName: 'Max Pages Per Poll',
 				name: 'maxPages',
@@ -219,18 +511,38 @@ export class HubspotApiTrigger implements INodeType {
 				default: 10,
 				description:
 					'Maximum number of search result pages to fetch per poll cycle. Each page contains up to 200 records.',
+				displayOptions: {
+					show: { resource: ['objects'] },
+				},
 			},
 
-			// ── Properties ──────────────────────────────────────────────────────────
-			propertiesProperty({}),
+			// ── Max Pages (Form Submissions) ─────────────────────────────────────────
+			{
+				displayName: 'Max Pages Per Poll',
+				name: 'maxPages',
+				type: 'number',
+				typeOptions: { minValue: 1, numberPrecision: 0 },
+				default: 20,
+				description:
+					'Maximum number of submission pages to fetch per poll cycle. Each page contains up to 50 submissions (HubSpot\'s cap for this endpoint).',
+				displayOptions: {
+					show: { resource: ['forms'] },
+				},
+			},
 
-			// ── Additional Options ────────────────────────────────────────────────
+			// ── Properties (CRM Records) ─────────────────────────────────────────────
+			propertiesProperty({ resource: ['objects'] }),
+
+			// ── Additional Options (CRM Records) ─────────────────────────────────────
 			{
 				displayName: 'Additional Options',
 				name: 'additionalOptions',
 				type: 'collection',
 				placeholder: 'Add Option',
 				default: {},
+				displayOptions: {
+					show: { resource: ['objects'] },
+				},
 				options: [
 					sortsUiOption,
 					sortsJsonOption,
@@ -329,10 +641,17 @@ export class HubspotApiTrigger implements INodeType {
 			getSearchFilterProperties,
 			getSearchOperators,
 			getAllProperties,
+			getForms,
 		},
 	};
 
 	async poll(this: IPollFunctions): Promise<INodeExecutionData[][] | null> {
+		const resource = this.getNodeParameter('resource') as string;
+
+		if (resource === 'forms') {
+			return pollFormSubmissions.call(this);
+		}
+
 		const staticData = this.getWorkflowStaticData('node');
 		const now = Date.now();
 		const lastPollTime = staticData.lastPollTime as number | undefined;

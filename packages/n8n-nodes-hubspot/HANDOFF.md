@@ -6,7 +6,8 @@ A custom n8n community node (`@profitpad-inc/n8n-nodes-hubspot`) for the HubSpot
 
 **Package path:** `packages/n8n-nodes-hubspot`
 **Nodes in n8n:** `HubSpot` (action node, internal name `hubspotApi`) and `HubSpot Trigger`
-(internal name `hubspotApiTrigger`)
+(internal name `hubspotApiTrigger`, covers both CRM record polling and form submission polling
+via its top-level **Resource** selector)
 **API docs:** https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis
 
 Every change so far is listed under a single **Unreleased** heading in `CHANGELOG.md`; the
@@ -19,7 +20,7 @@ released version in `package.json` is `0.1.43`.
 | File | What lives there |
 |---|---|
 | `nodes/HubSpot/HubspotApi.node.ts` | The action node: resource/operation routing and all `execute()` logic |
-| `nodes/HubSpot/HubspotApiTrigger.node.ts` | The polling trigger node (properties + `poll()`) |
+| `nodes/HubSpot/HubspotApiTrigger.node.ts` | The polling trigger node: **Resource** selects CRM Records or Form Submissions, each with its own properties and `poll()` branch |
 | `nodes/HubSpot/HubspotApi.credentials.ts` | Access token credential |
 | `nodes/HubSpot/helpers.ts` | Object type table, URL builder, all `loadOptions` methods, property cache, owner/user lookup helpers |
 | `nodes/HubSpot/searchFilter.ts` | Shared Fields / Custom JSON search-filter UI and its resolver |
@@ -28,6 +29,7 @@ released version in `package.json` is `0.1.43`.
 | `nodes/HubSpot/descriptions/AssociationDescription.ts` | Associations resource UI |
 | `nodes/HubSpot/descriptions/OwnerDescription.ts` | Owners resource UI (Users + Owners branches) |
 | `nodes/HubSpot/descriptions/PropertyDescription.ts` | Properties resource UI |
+| `nodes/HubSpot/descriptions/FormDescription.ts` | Forms resource UI |
 
 Base paths, all defined at the top of `HubspotApi.node.ts`:
 
@@ -65,8 +67,8 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 - Every output item carries `pairedItem: { item: i }`
 
 ### Resources
-Four resources, selected by the top-level **Resource** dropdown: **Associations**, **Objects**
-(default), **Owners**, **Properties**.
+Five resources, selected by the top-level **Resource** dropdown: **Associations**, **Forms**,
+**Objects** (default), **Owners**, **Properties**.
 
 ---
 
@@ -222,6 +224,33 @@ Top-level **Properties** multi-select; Additional Options: `propertiesWithHistor
 
 ---
 
+## Resource: Forms
+
+Not a CRM object, and not routed through `objectType` — this resource just wraps HubSpot's
+two forms endpoints (the same ones the Form Trigger uses).
+
+| Operation | Value | Method | URL |
+|---|---|---|---|
+| Get All Forms | `getAllForms` | GET | `/marketing/v3/forms?formTypes=all` |
+| Get Form Submissions | `getFormSubmissions` | GET | `/form-integrations/v1/submissions/forms/{formGuid}` |
+
+- **Get All Forms** takes no parameters. It pages through `marketing/v3/forms` via `after`
+  (100 per page) until exhausted — unlike the older `forms/v2/forms`, this endpoint does not
+  return every form in one call just because `limit` is omitted, so full pagination is required
+  to actually get "all" forms. `formTypes=all` (lowercase — this endpoint's own enum casing)
+  ensures non-`hubspot`-type forms (`captured`, `flow`, `blog_comment`) aren't silently dropped.
+  Each `results` entry (keyed by `id`, not the old `guid`) is pushed as its own output item.
+  Capped at `FORMS_LIST_MAX_PAGES` (50) as a runaway-loop safety valve.
+- **Get Form Submissions** takes a **Form** dropdown (the shared `getForms` loadOptions, also
+  used by the Trigger's Form Submissions resource) plus the same **Return All** / **Limit** /
+  **Max Pages** / **Return All Mode** convention as Objects → List and Owners → List — this
+  endpoint does support real `after`-cursor pagination, capped at 50 per page. Additional
+  Options carries `after` (manual cursor for non-Return-All calls) and the shared Milliseconds
+  Between Items. Still on the legacy `form-integrations/v1` endpoint — HubSpot has not
+  replaced it.
+
+---
+
 ## Resource: Associations
 
 Endpoints hang off `/crm/associations/2026-03/{fromObjectType}/{toObjectType}`. **From Object
@@ -349,9 +378,24 @@ inference.
 
 ## Trigger node — `HubspotApiTrigger.node.ts`
 
-Polling trigger. **Object Type** (its own inline copy of the object type list — currently
-identical to `OBJECT_TYPE_OPTIONS`, but **not** imported from helpers, so both need updating
-when a type is added) plus **Trigger On**:
+Polling trigger. A top-level **Resource** selector (`objects` default / `forms`, same value
+naming as the action node's Resource dropdown) picks between two independent branches — CRM
+Records and Form Submissions — each with its own properties and its own path through `poll()`.
+The branch split is a single `if (resource === 'forms') { return pollFormSubmissions.call(this) }`
+at the top of `poll()`; the Form Submissions logic lives in a standalone `pollFormSubmissions()`
+function (`this`-bound, called the same way helpers.ts's `.call(this, ...)` functions are) rather
+than inline, so the two branches stay self-contained instead of interleaving. **Return Mode**
+(`allInOne` / `eachResult`) is the only field shared between the two branches; everything else is
+scoped to one or the other via `displayOptions.show.resource`. Two fields are intentionally
+declared twice under the same name (`maxPages`, once per branch, each with its own default and
+per-page-size wording) — the same pattern `ObjectDescription.ts` already uses for List vs Search's
+separate **Max Pages** fields.
+
+### Resource: CRM Records
+
+**Object Type** (its own inline copy of the object type list — currently identical to
+`OBJECT_TYPE_OPTIONS`, but **not** imported from helpers, so both need updating when a type is
+added) plus **Trigger On**:
 
 - **New Records** / **Updated Records** / **New or Updated Records** — a `createdate`- or
   `lastmodifieddate`-windowed search using the same Filter Groups / Filters (JSON) / Sorts UI
@@ -382,6 +426,56 @@ when a type is added) plus **Trigger On**:
 - `staticData.lastPollTime` tracks the last successful poll, falling back to "1 minute ago".
 - When n8n runs on localhost, the exact request body sent to HubSpot is logged via the node
   logger to aid debugging.
+
+### Resource: Form Submissions
+
+Form submissions aren't a CRM object and go through an entirely different API family with no
+search/filter capability, so this branch has its own field set and its own `poll()` path
+(`pollFormSubmissions()`), independent of the CRM Records branch above.
+
+- **Form** — a dropdown sourced from `getForms` (helpers.ts), which pages through `GET
+  /marketing/v3/forms?formTypes=all` via `after` until exhausted (capped at
+  `FORMS_LIST_MAX_PAGES`), since this endpoint doesn't return every form in one call just
+  because `limit` is omitted. Archived forms are filtered out. The same loadOptions backs the
+  action node's Forms → Get All Forms / Get Form Submissions.
+- `pollFormSubmissions()` calls `GET /form-integrations/v1/submissions/forms/{formGuid}` —
+  HubSpot's legacy (and only) list-submissions endpoint. It has no since/after-a-date filter,
+  only `limit` (max 50) and an opaque `after` paging cursor, and always returns submissions
+  newest-first. Incremental polling is done client-side: page forward from the top, keep every
+  submission with `submittedAt` (epoch ms) after `staticData.lastPollTime`, and stop as soon as
+  a page's submission is at or before that watermark (everything after is guaranteed older too)
+  — or when **Max Pages Per Poll** is hit. Matches are reversed before output so they come out
+  chronological (oldest first) despite the API's newest-first order.
+  - `staticData.lastPollTime` falls back to "1 minute ago" when unset, same as CRM Records.
+  - Manual "fetch test event" runs skip the watermark check entirely and request only
+    `MANUAL_FETCH_SUBMISSIONS_LIMIT` (5) submissions — enough to confirm the Form selection is
+    right without waiting for a live submission or pulling a full page. Automatic polling still
+    returns everything that happened in the poll window, capped only by **Max Pages Per Poll**.
+- **Associated object enrichment** (`enrichSubmissionWithAssociations()`) — each matched
+  submission's `values` array carries an `objectTypeId` per field (HubSpot tags which CRM
+  object a value belongs to). For each submission:
+  1. Collect the first two *distinct* values with `objectTypeId === '0-1'` (Contacts), in
+     submission order (just the one if the form only has a single contact field) — not
+     specifically an `email` field, since plenty of forms only capture e.g.
+     firstname/lastname. If the form submitted no contact-scoped fields at all, the submission
+     is returned unchanged — no `contact` key at all.
+  2. Search for the contact (`POST /crm/v3/objects/0-1/search`) with those field(s) AND'd
+     together as `EQ` filters (`limit: 1`, requesting back the matched field names so the
+     response confirms what it was found by). No match also leaves the submission unchanged;
+     any error throws.
+  3. If found, every other distinct `objectTypeId` present among the values (e.g. `0-3` for a
+     deal-scoped field) is looked up via `POST /crm/associations/2026-03/0-1/{objectTypeId}
+     /batch/read` with the resolved contact as the single input — the same batch associations
+     endpoint the Associations resource uses. The submitted value (e.g. `f_deal_id`) is **not**
+     trusted as a real record ID; only IDs HubSpot's associations API actually returns for that
+     contact are used. Results land in `associations: { [objectTypeId]: string[] }`, keyed by
+     object type ID, omitted entirely when there are no other object types among the values.
+- **Return Mode** (`allInOne` / `eachResult`) is the shared field described above. Each
+  submission item is the raw HubSpot shape (`conversionId`, `submittedAt` epoch ms, `values`
+  array of `{ name, value, objectTypeId }`, `pageUrl`) plus the `contact` / `associations`
+  enrichment above.
+- When n8n runs on localhost, the exact submissions request URL is logged via the node logger,
+  same convention as CRM Records.
 
 ---
 
@@ -424,8 +518,9 @@ when a type is added) plus **Trigger On**:
 
 ## What's next (suggested)
 
-Objects, Associations, Owners, and Properties resources plus the polling Trigger (including
-Property Changed mode) are all implemented. Remaining ideas:
+Objects, Associations, Owners, Properties, and Forms resources, plus the polling Trigger's CRM
+Records (including Property Changed mode) and Form Submissions branches, are all implemented.
+Remaining ideas:
 
 1. **Lists resource** — HubSpot lists API.
 2. **Events resource** — HubSpot events API.

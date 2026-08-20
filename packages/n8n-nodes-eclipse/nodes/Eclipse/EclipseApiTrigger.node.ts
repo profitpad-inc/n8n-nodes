@@ -408,12 +408,15 @@ export class EclipseApiTrigger implements INodeType {
         lookbackTime = intervalLookback;
       } else {
         const lastRun = workflowStaticData.lastRunTime as string | undefined;
-        // Use whichever is earlier: the configured interval lookback, or lastRunTime.
-        // Normally these are the same (lastRunTime ≈ now - interval). If lastRunTime is
-        // more recent (e.g. from a shorter prior run), the interval wins so we always
-        // look back at least the configured window. If the workflow was off longer than
-        // the interval, lastRunTime wins so we resume from where we left off.
-        lookbackTime = lastRun && lastRun < intervalLookback ? lastRun : intervalLookback;
+        // Always trust lastRunTime once it exists — it marks exactly where the
+        // previous poll left off, so resuming from it never gaps or overlaps.
+        // Only fall back to intervalLookback on the very first run, when there's
+        // no lastRunTime yet. (Previously this compared lastRun against
+        // intervalLookback and took whichever was earlier, which meant any poll
+        // running more frequently than the configured Lookback Window would
+        // discard lastRun and re-fetch the full window every time, causing the
+        // same records to be re-emitted repeatedly until they aged out.)
+        lookbackTime = lastRun ?? intervalLookback;
       }
     }
 

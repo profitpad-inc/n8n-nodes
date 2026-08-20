@@ -10,6 +10,7 @@ import {
 } from 'n8n-workflow';
 
 import { associationDescription } from './descriptions/AssociationDescription';
+import { formDescription } from './descriptions/FormDescription';
 import { objectDescription } from './descriptions/ObjectDescription';
 import { ownerDescription } from './descriptions/OwnerDescription';
 import { propertyDescription } from './descriptions/PropertyDescription';
@@ -20,6 +21,7 @@ import {
 	getAssociationTargetObjectType,
 	getAssociationTypeIds,
 	getEnumerationProperties,
+	getForms,
 	getProperties,
 	getSearchFilterProperties,
 	getSearchOperators,
@@ -41,6 +43,9 @@ const HUBSPOT_BASE = 'https://api.hubapi.com';
 const OBJECTS_BASE_PATH = '/crm/v3/objects';
 const ASSOC_BASE_PATH = '/crm/associations/2026-03';
 const PROPERTIES_BASE_PATH = '/crm/properties/2026-03';
+const FORMS_BASE_PATH = '/marketing/v3/forms';
+const FORMS_LIST_MAX_PAGES = 50;
+const FORM_SUBMISSIONS_BASE_PATH = '/form-integrations/v1/submissions/forms';
 const USERS_OBJECT_PATH = `${OBJECTS_BASE_PATH}/users`;
 const USERS_ALWAYS_INCLUDED_PROPERTIES = [
 	'hs_internal_user_id',
@@ -68,7 +73,7 @@ export class HubspotApi implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle:
-			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
+			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : $parameter["resource"] === "forms" ? ($parameter["operation"] + ($parameter["formGuid"] ? (": " + $parameter["formGuid"]) : "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
 		description:
 			'Interact with HubSpot CRM objects. Docs: https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis',
 		usableAsTool: true,
@@ -97,6 +102,11 @@ export class HubspotApi implements INodeType {
 						description: 'Manage associations between HubSpot CRM records',
 					},
 					{
+						name: 'Forms',
+						value: 'forms',
+						description: 'Retrieve HubSpot forms and their submissions',
+					},
+					{
 						name: 'Objects',
 						value: 'objects',
 						description:
@@ -116,6 +126,7 @@ export class HubspotApi implements INodeType {
 				default: 'objects',
 			},
 			...associationDescription,
+			...formDescription,
 			...objectDescription,
 			...ownerDescription,
 			...propertyDescription,
@@ -137,6 +148,7 @@ export class HubspotApi implements INodeType {
 			getAssociationTypeIds,
 			getUserProperties,
 			getWritableUserProperties,
+			getForms,
 		},
 	};
 
@@ -273,6 +285,115 @@ export class HubspotApi implements INodeType {
 							},
 						)) as JsonObject;
 						returnData.push({ json: response, pairedItem: { item: i } });
+					}
+				}
+
+				if (resource === 'forms') {
+					// ── GET ALL FORMS ────────────────────────────────────────────────
+					if (operation === 'getAllForms') {
+						// marketing/v3/forms pages via `after` rather than returning
+						// everything when `limit` is omitted (the old forms/v2/forms
+						// behaviour), so every page is fetched to keep "get all forms".
+						let after: string | undefined;
+						let pageCount = 0;
+
+						do {
+							const url = buildHubSpotUrl(HUBSPOT_BASE, FORMS_BASE_PATH, {
+								formTypes: 'all',
+								limit: 100,
+								after,
+							});
+
+							const response = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{ method: 'GET', url, headers: BASE_HEADERS },
+							)) as JsonObject;
+
+							const results = (response.results as JsonObject[] | undefined) ?? [];
+							for (const form of results) {
+								returnData.push({ json: form, pairedItem: { item: i } });
+							}
+
+							pageCount++;
+							const paging = response.paging as JsonObject | undefined;
+							after = (paging?.next as JsonObject | undefined)?.after as
+								| string
+								| undefined;
+						} while (after && pageCount < FORMS_LIST_MAX_PAGES);
+					}
+
+					// ── GET FORM SUBMISSIONS ─────────────────────────────────────────
+					if (operation === 'getFormSubmissions') {
+						const formGuid = String(this.getNodeParameter('formGuid', i)).trim();
+						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+						const submissionsOpts = this.getNodeParameter('submissionsOptions', i) as {
+							after?: string;
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = submissionsOpts.millisecondsBetweenItems ?? 50;
+
+						const submissionsPath = `${FORM_SUBMISSIONS_BASE_PATH}/${formGuid}`;
+
+						if (returnAll) {
+							const maxPages = Math.max(
+								1,
+								Math.floor(this.getNodeParameter('maxPages', i) as number),
+							);
+							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+							let after: string | undefined;
+							let pageCount = 0;
+							const allResults: JsonObject[] = [];
+
+							do {
+								const url = buildHubSpotUrl(HUBSPOT_BASE, submissionsPath, {
+									limit: 50,
+									after,
+								});
+
+								const response = (await this.helpers.httpRequestWithAuthentication.call(
+									this,
+									'hubspotApi',
+									{ method: 'GET', url, headers: BASE_HEADERS },
+								)) as JsonObject;
+
+								const results = (response.results as JsonObject[] | undefined) ?? [];
+
+								if (returnAllMode === 'eachPage') {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								} else if (returnAllMode === 'eachResult') {
+									for (const result of results) {
+										returnData.push({ json: result, pairedItem: { item: i } });
+									}
+								} else {
+									allResults.push(...results);
+								}
+
+								pageCount++;
+								const paging = response.paging as JsonObject | undefined;
+								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
+							} while (after && pageCount < maxPages);
+
+							if (returnAllMode === 'allInOne') {
+								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+							}
+						} else {
+							const limit = this.getNodeParameter('limit', i) as number;
+
+							const url = buildHubSpotUrl(HUBSPOT_BASE, submissionsPath, {
+								limit,
+								after: submissionsOpts.after || undefined,
+							});
+
+							const response = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{ method: 'GET', url, headers: BASE_HEADERS },
+							)) as JsonObject;
+
+							returnData.push({ json: response, pairedItem: { item: i } });
+						}
 					}
 				}
 

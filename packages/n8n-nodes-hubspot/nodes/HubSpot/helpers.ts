@@ -550,6 +550,51 @@ export async function getSearchOperators(
 	return SEARCH_OPERATORS.filter((op) => allowed.includes(op.value as string));
 }
 
+interface HubSpotFormSummary {
+	id: string;
+	name: string;
+	archived?: boolean;
+}
+
+const FORMS_LIST_MAX_PAGES = 50;
+
+/**
+ * Every form in the account, for the Form Trigger's Form picker and the
+ * action node's Forms → Get Form Submissions Form picker. Uses the current
+ * `marketing/v3/forms` endpoint (the old `forms/v2/forms` returned every form
+ * in one call when `limit` was omitted; this one pages via `after`, so every
+ * page is fetched here to keep the "every form" behaviour). `formTypes: all`
+ * (lowercase — this endpoint's enum, unlike v2's `ALL`) is needed too, since
+ * it otherwise filters out non-marketing forms (captured, flow, blog_comment).
+ * Archived forms are excluded since they can't receive new submissions.
+ */
+export async function getForms(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+	const forms: HubSpotFormSummary[] = [];
+	let after: string | undefined;
+	let pageCount = 0;
+
+	do {
+		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+			method: 'GET',
+			url: buildHubSpotUrl(HUBSPOT_BASE, '/marketing/v3/forms', {
+				formTypes: 'all',
+				limit: 100,
+				after,
+			}),
+			headers: { accept: 'application/json' },
+		})) as { results?: HubSpotFormSummary[]; paging?: { next?: { after?: string } } };
+
+		forms.push(...(response.results ?? []));
+		pageCount++;
+		after = response.paging?.next?.after;
+	} while (after && pageCount < FORMS_LIST_MAX_PAGES);
+
+	return forms
+		.filter((form) => !form.archived)
+		.map((form) => ({ name: form.name, value: form.id }))
+		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 interface HubSpotOwner {
 	id: string;
 	email?: string;

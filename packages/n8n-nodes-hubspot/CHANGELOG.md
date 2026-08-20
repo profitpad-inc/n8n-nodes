@@ -2,6 +2,61 @@
 
 ## Unreleased
 
+### HubSpot (Forms → new resource)
+
+- Added a **Forms** resource to the HubSpot action node with two operations:
+  **Get All Forms** (pages through `GET marketing/v3/forms` with
+  `formTypes=all` via `after` until exhausted, returning every form as a
+  separate output item) and **Get Form Submissions** (`GET
+  form-integrations/v1/submissions/forms/{formGuid}`, the same legacy endpoint
+  used by the Trigger's Form Submissions resource).
+- **Get Form Submissions** follows the same **Return All** / **Limit** /
+  **Max Pages** / **Return All Mode** convention as Objects → List and Owners
+  → List, since this endpoint does support real `after`-cursor pagination,
+  capped at 50 results per page.
+- **Form** is the same `getForms`-backed dropdown used by the Trigger.
+
+### HubSpot Trigger (Form Submissions → new resource)
+
+- The HubSpot Trigger node gained a top-level **Resource** selector — **CRM
+  Records** (the existing behaviour, now scoped under this option) or **Form
+  Submissions**, which polls a single HubSpot form for new submissions using
+  the legacy `form-integrations/v1/submissions/forms` endpoint (HubSpot has
+  not replaced this API, and it has no built-in since/after-a-date filter).
+  This stays one node rather than a separate trigger, since the branch is a
+  single top-level `if` in `poll()` — no different from how the action node
+  already keeps several resources in one `execute()`.
+- **Form** is a dropdown sourced from `marketing/v3/forms`, paginated via
+  `after` with `formTypes=all` so every form in the account is offered, not
+  just marketing-type forms capped at a default page size (the same
+  `getForms` loadOptions used by the Forms resource on the action node).
+- Since the submissions endpoint only supports `limit` / `after` paging and
+  always returns newest-first, polling pages forward from the top and stops
+  as soon as it reaches a submission at or before the last poll time (or
+  **Max Pages Per Poll** is hit), then reverses the matches to chronological
+  order before output.
+- Manual "fetch test event" runs skip the poll-window check entirely (same
+  convention as the CRM Records branch) and only request the 5 most recent
+  submissions — enough to confirm the Form selection without pulling a full
+  page. Automatic polling is unaffected: it still returns everything that
+  happened in the poll window, capped only by **Max Pages Per Poll**.
+- Each matched submission is enriched with the contact it belongs to. Rather
+  than assuming an `email` field exists, the first two *distinct* values
+  tagged `objectTypeId: '0-1'` (Contacts) in submission order are used (just
+  the one if the form only has a single contact field) — e.g. firstname +
+  lastname for a form with no email field. Those are AND'd together as `EQ`
+  filters in a `POST /crm/v3/objects/0-1/search` call (`limit: 1`) to find
+  the contact, attached as `contact`; no contact-scoped values at all, or no
+  match, means no `contact` key. When a contact is found and the submission
+  has values tagged with any other `objectTypeId` (e.g. a deal-scoped
+  field), each of those object types' records associated to the contact are
+  looked up via the CRM batch associations endpoint (`POST
+  /crm/associations/2026-03/0-1/{objectTypeId}/batch/read`) — the submitted
+  value itself is never trusted as a real record ID — and attached as
+  `associations: { [objectTypeId]: string[] }`.
+- **Return Mode** (`allInOne` / `eachResult`) is shared with the CRM Records
+  branch and controls output shape the same way for both.
+
 ### HubSpot (Objects → Create)
 
 - Creating a **Note** without `hs_timestamp` no longer fails. When the object
