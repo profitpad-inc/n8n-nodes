@@ -147,6 +147,14 @@ export const formDescription: INodeProperties[] = [
 				description:
 					'Pagination cursor returned by a previous response, used to fetch the next page when not using Return All',
 			},
+			{
+				displayName: 'Submitted After',
+				name: 'submittedAfter',
+				type: 'dateTime',
+				default: '',
+				description:
+					'Only return submissions submitted after this date and time. HubSpot returns submissions newest-first, so as soon as a submission at or before this time is reached, it (and every one after it) is dropped, and Return All pagination stops.',
+			},
 			msOption,
 		],
 	},

@@ -18,6 +18,7 @@ import {
 	FormSubmissionValue,
 	buildFormSubmissionFields,
 	buildHubSpotUrl,
+	enrichSubmissionWithAssociations,
 	findOwnerByField,
 	getAllProperties,
 	getAssociationTargetObjectType,
@@ -331,10 +332,15 @@ export class HubspotApi implements INodeType {
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const submissionsOpts = this.getNodeParameter('submissionsOptions', i) as {
 							after?: string;
+							submittedAfter?: string;
 							millisecondsBetweenItems?: number;
 						};
 
 						delayMs = submissionsOpts.millisecondsBetweenItems ?? 50;
+
+						const submittedAfterMs = submissionsOpts.submittedAfter
+							? Date.parse(submissionsOpts.submittedAfter)
+							: undefined;
 
 						const submissionsPath = `${FORM_SUBMISSIONS_BASE_PATH}/${formGuid}`;
 
@@ -348,6 +354,7 @@ export class HubspotApi implements INodeType {
 							let pageCount = 0;
 							const allResults: JsonObject[] = [];
 							let lastPaging: JsonObject | undefined;
+							let reachedWatermark = false;
 
 							do {
 								const url = buildHubSpotUrl(HUBSPOT_BASE, submissionsPath, {
@@ -361,14 +368,33 @@ export class HubspotApi implements INodeType {
 									{ method: 'GET', url, headers: BASE_HEADERS },
 								)) as JsonObject;
 
-								const results = (
-									(response.results as JsonObject[] | undefined) ?? []
-								).map((result) => ({
-									...result,
-									fields: buildFormSubmissionFields(
-										(result.values as FormSubmissionValue[] | undefined) ?? [],
-									),
-								}));
+								let rawResults = (response.results as JsonObject[] | undefined) ?? [];
+
+								if (submittedAfterMs !== undefined) {
+									// HubSpot returns submissions newest-first, so once a page's
+									// oldest entry is at or before Submitted After, every later
+									// page is too - drop it and stop paginating.
+									const kept: JsonObject[] = [];
+									for (const rawResult of rawResults) {
+										if (Number(rawResult.submittedAt) > submittedAfterMs) {
+											kept.push(rawResult);
+										} else {
+											reachedWatermark = true;
+										}
+									}
+									rawResults = kept;
+								}
+
+								const results: JsonObject[] = [];
+								for (const rawResult of rawResults) {
+									const withFields: JsonObject = {
+										...rawResult,
+										fields: buildFormSubmissionFields(
+											(rawResult.values as FormSubmissionValue[] | undefined) ?? [],
+										),
+									};
+									results.push(await enrichSubmissionWithAssociations.call(this, withFields));
+								}
 
 								if (returnAllMode === 'eachPage') {
 									returnData.push({ json: { ...response, results }, pairedItem: { item: i } });
@@ -384,7 +410,7 @@ export class HubspotApi implements INodeType {
 								const paging = response.paging as JsonObject | undefined;
 								lastPaging = paging;
 								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
-							} while (after && pageCount < maxPages);
+							} while (after && pageCount < maxPages && !reachedWatermark);
 
 							if (returnAllMode === 'allInOne') {
 								returnData.push({
@@ -406,14 +432,24 @@ export class HubspotApi implements INodeType {
 								{ method: 'GET', url, headers: BASE_HEADERS },
 							)) as JsonObject;
 
-							const results = ((response.results as JsonObject[] | undefined) ?? []).map(
-								(result) => ({
-									...result,
+							let rawResults = (response.results as JsonObject[] | undefined) ?? [];
+
+							if (submittedAfterMs !== undefined) {
+								rawResults = rawResults.filter(
+									(rawResult) => Number(rawResult.submittedAt) > submittedAfterMs,
+								);
+							}
+
+							const results: JsonObject[] = [];
+							for (const rawResult of rawResults) {
+								const withFields: JsonObject = {
+									...rawResult,
 									fields: buildFormSubmissionFields(
-										(result.values as FormSubmissionValue[] | undefined) ?? [],
+										(rawResult.values as FormSubmissionValue[] | undefined) ?? [],
 									),
-								}),
-							);
+								};
+								results.push(await enrichSubmissionWithAssociations.call(this, withFields));
+							}
 
 							returnData.push({ json: { ...response, results }, pairedItem: { item: i } });
 						}

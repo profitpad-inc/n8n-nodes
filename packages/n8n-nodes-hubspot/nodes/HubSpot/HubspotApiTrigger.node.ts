@@ -13,6 +13,7 @@ import {
 	FormSubmissionValue,
 	buildFormSubmissionFields,
 	buildHubSpotUrl,
+	enrichSubmissionWithAssociations,
 	getAllProperties,
 	getForms,
 	getSearchFilterProperties,
@@ -34,7 +35,6 @@ import {
 
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const OBJECTS_BASE_PATH = '/crm/v3/objects';
-const ASSOC_BASE_PATH = '/crm/associations/2026-03';
 const FORM_SUBMISSIONS_BASE_PATH = '/form-integrations/v1/submissions/forms';
 
 // "Fetch test event" runs only need enough data to confirm the Form
@@ -76,111 +76,6 @@ function toIsoStringWithOffset(ms: number): string {
 interface SubmissionsResponse {
 	results?: JsonObject[];
 	paging?: JsonObject;
-}
-
-/**
- * Enriches a submission with the contact it belongs to plus, for every other
- * distinct objectTypeId present among the submission's values, the IDs of
- * that type's records associated to the resolved contact — fetched via the
- * same batch associations endpoint the Associations resource uses, not by
- * trusting the submitted value as a real record ID.
- *
- * The contact is found by searching on whichever contact-scoped
- * (objectTypeId 0-1) fields the form actually submitted, rather than
- * assuming an `email` field exists — plenty of forms only capture e.g.
- * firstname/lastname. The first two distinct 0-1 fields, in submission
- * order, are AND'd together as search filters (just the one field if that's
- * all the form has); the first match is used. If the form submitted no
- * contact-scoped fields at all, or the search finds no match, the
- * submission is returned unchanged with no `contact` key — there is no
- * contact to check associations against, so no association lookups run
- * either.
- */
-async function enrichSubmissionWithAssociations(
-	this: IPollFunctions,
-	submission: JsonObject,
-): Promise<JsonObject> {
-	const values = (submission.values as FormSubmissionValue[] | undefined) ?? [];
-
-	const contactFields: Array<{ name: string; value: string }> = [];
-	const seenFieldNames = new Set<string>();
-	for (const value of values) {
-		if (value.objectTypeId !== CONTACTS_OBJECT_TYPE) continue;
-		if (!value.name || value.value === undefined || seenFieldNames.has(value.name)) continue;
-
-		seenFieldNames.add(value.name);
-		contactFields.push({ name: value.name, value: value.value });
-		if (contactFields.length === 2) break;
-	}
-	if (contactFields.length === 0) return submission;
-
-	let contact: JsonObject | undefined;
-	try {
-		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
-			method: 'POST',
-			url: `${HUBSPOT_BASE}${OBJECTS_BASE_PATH}/${CONTACTS_OBJECT_TYPE}/search`,
-			headers: BASE_HEADERS,
-			body: JSON.stringify({
-				filterGroups: [
-					{
-						filters: contactFields.map((field) => ({
-							propertyName: field.name,
-							operator: 'EQ',
-							value: field.value,
-						})),
-					},
-				],
-				// Request back the fields matched on, so the returned contact
-				// confirms what it was found by.
-				properties: contactFields.map((field) => field.name),
-				limit: 1,
-			}),
-		})) as { results?: JsonObject[] };
-		contact = response.results?.[0];
-	} catch (error) {
-		throw new NodeApiError(this.getNode(), error as JsonObject);
-	}
-	if (!contact) return submission;
-
-	const otherObjectTypeIds = Array.from(
-		new Set(
-			values
-				.map((value) => value.objectTypeId)
-				.filter((objectTypeId): objectTypeId is string =>
-					Boolean(objectTypeId) && objectTypeId !== CONTACTS_OBJECT_TYPE,
-				),
-		),
-	);
-
-	if (otherObjectTypeIds.length === 0) {
-		return { ...submission, contact };
-	}
-
-	const contactId = String(contact.id);
-	const associations: JsonObject = {};
-
-	try {
-		for (const toObjectType of otherObjectTypeIds) {
-			const response = (await this.helpers.httpRequestWithAuthentication.call(
-				this,
-				'hubspotApi',
-				{
-					method: 'POST',
-					url: `${HUBSPOT_BASE}${ASSOC_BASE_PATH}/${CONTACTS_OBJECT_TYPE}/${toObjectType}/batch/read`,
-					headers: BASE_HEADERS,
-					body: JSON.stringify({ inputs: [{ id: contactId }] }),
-				},
-			)) as { results?: Array<{ to?: Array<{ toObjectId: string }> }> };
-
-			associations[toObjectType] = (response.results?.[0]?.to ?? []).map(
-				(association) => association.toObjectId,
-			);
-		}
-	} catch (error) {
-		throw new NodeApiError(this.getNode(), error as JsonObject);
-	}
-
-	return { ...submission, contact, associations };
 }
 
 /**

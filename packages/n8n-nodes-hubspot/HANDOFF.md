@@ -247,12 +247,26 @@ two forms endpoints (the same ones the Form Trigger uses).
   used by the Trigger's Form Submitted mode) plus the same **Return All** / **Limit** /
   **Max Pages** / **Return All Mode** convention as Objects → List and Owners → List — this
   endpoint does support real `after`-cursor pagination, capped at 50 per page. Additional
-  Options carries `after` (manual cursor for non-Return-All calls) and the shared Milliseconds
-  Between Items. Still on the legacy `form-integrations/v1` endpoint — HubSpot has not
-  replaced it. Every submission gets a `fields` object added via
+  Options carries `after` (manual cursor for non-Return-All calls), **Submitted After**, and the
+  shared Milliseconds Between Items. Still on the legacy `form-integrations/v1` endpoint —
+  HubSpot has not replaced it. Every submission gets a `fields` object added via
   `buildFormSubmissionFields()` (see Helpers below), regardless of Return All Mode — even
   `eachPage` / non-Return-All responses have it added into each entry of their `results` array
   before being pushed.
+- **Submitted After** (Additional Options, both Return All on and off) filters out any
+  submission with `submittedAt` at or before the given date/time. Since this endpoint always
+  returns submissions newest-first (same ordering the Trigger's `pollFormSubmissions()` relies
+  on), a Return All call stops paginating as soon as a page contains a submission at or before
+  the watermark — every later page would only be older. A non-Return-All call just filters the
+  single page it fetched; it doesn't fetch extra pages to backfill the requested `limit`.
+- **Contact / associations enrichment**: every submission returned by Get Form Submissions is
+  run through `enrichSubmissionWithAssociations()` (moved to `helpers.ts` so both this operation
+  and the Trigger's Form Submitted mode share one implementation — see Helpers below), adding
+  the same `contact` and `associations` keys the Trigger has always added. This runs
+  sequentially, one HTTP round-trip per kept submission (not in parallel), to avoid bursting past
+  HubSpot's rate limits — matching how the Trigger already did it. Submitted After filtering
+  happens on the raw page *before* enrichment, so filtered-out submissions never trigger an
+  enrichment lookup.
 
 ---
 
@@ -344,6 +358,15 @@ Endpoints hang off `/crm/properties/2026-03/{objectType}` (Object Type is a real
   (a checkbox group) as one `values` entry per checked option, all sharing the same
   objectTypeId + name — those are joined with `;` (matching the IN / NOT IN search filter
   operator's existing semicolon-separated convention) rather than the last one silently winning.
+- `enrichSubmissionWithAssociations(submission)` (typed `this: IExecuteFunctions |
+  IPollFunctions` since both the action node and the Trigger call it) — resolves a submission's
+  contact by searching on its contact-scoped (`0-1`) field values, then looks up every other
+  distinct `objectTypeId` present among the submission's values as an association off that
+  contact via the batch associations endpoint. Adds `contact` (and `associations`, keyed by
+  object type ID, when there are other object types to look up) to the returned submission;
+  leaves it unchanged if the form submitted no contact-scoped fields or the contact search finds
+  no match. Originally lived only in the Trigger file; moved here so the action node's Forms →
+  Get Form Submissions enriches submissions the same way instead of just adding `fields`.
 - `fetchProperties()` (private, cached) — the single source every property `loadOptions` method
   goes through: `getProperties`, `getEnumerationProperties`, `getAllProperties`,
   `getWritableProperties`, `getUniqueProperties`, `getUpsertIdProperties`,
@@ -483,9 +506,10 @@ search/filter capability, so this branch has its own field set and its own `poll
     `MANUAL_FETCH_SUBMISSIONS_LIMIT` (5) submissions — enough to confirm the Form selection is
     right without waiting for a live submission or pulling a full page. Automatic polling still
     returns everything that happened in the poll window, capped only by **Max Pages Per Poll**.
-- **Associated object enrichment** (`enrichSubmissionWithAssociations()`) — each matched
-  submission's `values` array carries an `objectTypeId` per field (HubSpot tags which CRM
-  object a value belongs to). For each submission:
+- **Associated object enrichment** (`enrichSubmissionWithAssociations()`, now shared from
+  `helpers.ts` — see Helpers above, also used by the action node's Forms → Get Form
+  Submissions) — each matched submission's `values` array carries an `objectTypeId` per field
+  (HubSpot tags which CRM object a value belongs to). For each submission:
   1. Collect the first two *distinct* values with `objectTypeId === '0-1'` (Contacts), in
      submission order (just the one if the form only has a single contact field) — not
      specifically an `email` field, since plenty of forms only capture e.g.
