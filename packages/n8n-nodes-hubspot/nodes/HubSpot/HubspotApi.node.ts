@@ -513,7 +513,7 @@ export class HubspotApi implements INodeType {
 								Math.floor(this.getNodeParameter('maxPages', i) as number),
 							);
 							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
-							let after: string | undefined;
+							let after: string | undefined = opts.after || undefined;
 							let pageCount = 0;
 							const allResults: JsonObject[] = [];
 

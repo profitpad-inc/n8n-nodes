@@ -436,7 +436,7 @@ export const objectDescription: INodeProperties[] = [
 				type: 'string',
 				default: '',
 				description:
-					'Pagination cursor returned by a previous response, used to fetch the next page when not using Return All',
+					"Pagination cursor returned by a previous response, used to fetch the next page. When Return All is enabled, this only seeds the first page fetched; subsequent pages follow HubSpot's own cursor.",
 			},
 			{
 				displayName: 'Archived',

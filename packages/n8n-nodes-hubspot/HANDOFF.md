@@ -143,7 +143,8 @@ Top-level **Properties** multi-select; Additional Options: `propertiesWithHistor
 - `returnAll: true` — paginates via `paging.next.after` up to **Max Pages** (`minValue: 1`,
   integer, also clamped with `Math.max(1, Math.floor(...))`), 100 per page, and honours
   **Return All Mode**: `allInOne` (one item, `{ results: [...] }`), `eachPage` (raw page per
-  item), `eachResult` (one item per record)
+  item), `eachResult` (one item per record). Additional Options' `after` cursor seeds the
+  **first** page of this loop (subsequent pages use HubSpot's own `paging.next.after`)
 - Additional options: `properties` (legacy), `propertiesWithHistory`, `associations`, `after`
   cursor, `archived`, `millisecondsBetweenItems`
 
