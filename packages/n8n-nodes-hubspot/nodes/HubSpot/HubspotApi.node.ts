@@ -18,7 +18,7 @@ import {
 	FormSubmissionValue,
 	buildFormSubmissionFields,
 	buildHubSpotUrl,
-	enrichSubmissionWithAssociations,
+	enrichSubmissionsWithAssociations,
 	findOwnerByField,
 	getAllProperties,
 	getAssociationTargetObjectType,
@@ -385,16 +385,13 @@ export class HubspotApi implements INodeType {
 									rawResults = kept;
 								}
 
-								const results: JsonObject[] = [];
-								for (const rawResult of rawResults) {
-									const withFields: JsonObject = {
-										...rawResult,
-										fields: buildFormSubmissionFields(
-											(rawResult.values as FormSubmissionValue[] | undefined) ?? [],
-										),
-									};
-									results.push(await enrichSubmissionWithAssociations.call(this, withFields));
-								}
+								const withFields = rawResults.map((rawResult) => ({
+									...rawResult,
+									fields: buildFormSubmissionFields(
+										(rawResult.values as FormSubmissionValue[] | undefined) ?? [],
+									),
+								}));
+								const results = await enrichSubmissionsWithAssociations.call(this, withFields);
 
 								if (returnAllMode === 'eachPage') {
 									returnData.push({ json: { ...response, results }, pairedItem: { item: i } });
@@ -440,16 +437,13 @@ export class HubspotApi implements INodeType {
 								);
 							}
 
-							const results: JsonObject[] = [];
-							for (const rawResult of rawResults) {
-								const withFields: JsonObject = {
-									...rawResult,
-									fields: buildFormSubmissionFields(
-										(rawResult.values as FormSubmissionValue[] | undefined) ?? [],
-									),
-								};
-								results.push(await enrichSubmissionWithAssociations.call(this, withFields));
-							}
+							const withFields = rawResults.map((rawResult) => ({
+								...rawResult,
+								fields: buildFormSubmissionFields(
+									(rawResult.values as FormSubmissionValue[] | undefined) ?? [],
+								),
+							}));
+							const results = await enrichSubmissionsWithAssociations.call(this, withFields);
 
 							returnData.push({ json: { ...response, results }, pairedItem: { item: i } });
 						}

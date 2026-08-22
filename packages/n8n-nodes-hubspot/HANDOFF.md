@@ -260,13 +260,16 @@ two forms endpoints (the same ones the Form Trigger uses).
   the watermark — every later page would only be older. A non-Return-All call just filters the
   single page it fetched; it doesn't fetch extra pages to backfill the requested `limit`.
 - **Contact / associations enrichment**: every submission returned by Get Form Submissions is
-  run through `enrichSubmissionWithAssociations()` (moved to `helpers.ts` so both this operation
-  and the Trigger's Form Submitted mode share one implementation — see Helpers below), adding
-  the same `contact` and `associations` keys the Trigger has always added. This runs
-  sequentially, one HTTP round-trip per kept submission (not in parallel), to avoid bursting past
-  HubSpot's rate limits — matching how the Trigger already did it. Submitted After filtering
-  happens on the raw page *before* enrichment, so filtered-out submissions never trigger an
-  enrichment lookup.
+  run through `enrichSubmissionsWithAssociations()` (`helpers.ts` — see Helpers below; shared
+  with the Trigger's Form Submitted mode so both add the same `contact` and `associations`
+  keys). It's called once per page (once for the single page on a non-Return-All call) with that
+  page's whole batch of submissions, not once per submission — batching the contact and
+  association lookups themselves, not just amortizing overhead. This replaced an earlier
+  one-HTTP-call-per-submission-per-lookup version that could burn through HubSpot's rate limit
+  in a single execution once Return All pulled in more than a page or so of submissions (a real
+  incident: a 2-page / ~100-submission Return All call started getting 429s). Submitted After
+  filtering happens on the raw page *before* enrichment, so filtered-out submissions never
+  trigger a lookup.
 
 ---
 
@@ -358,15 +361,30 @@ Endpoints hang off `/crm/properties/2026-03/{objectType}` (Object Type is a real
   (a checkbox group) as one `values` entry per checked option, all sharing the same
   objectTypeId + name — those are joined with `;` (matching the IN / NOT IN search filter
   operator's existing semicolon-separated convention) rather than the last one silently winning.
-- `enrichSubmissionWithAssociations(submission)` (typed `this: IExecuteFunctions |
-  IPollFunctions` since both the action node and the Trigger call it) — resolves a submission's
-  contact by searching on its contact-scoped (`0-1`) field values, then looks up every other
-  distinct `objectTypeId` present among the submission's values as an association off that
-  contact via the batch associations endpoint. Adds `contact` (and `associations`, keyed by
-  object type ID, when there are other object types to look up) to the returned submission;
-  leaves it unchanged if the form submitted no contact-scoped fields or the contact search finds
-  no match. Originally lived only in the Trigger file; moved here so the action node's Forms →
-  Get Form Submissions enriches submissions the same way instead of just adding `fields`.
+- `enrichSubmissionsWithAssociations(submissions)` (typed `this: IExecuteFunctions |
+  IPollFunctions` since both the action node and the Trigger call it) — takes a whole batch of
+  submissions (a page's worth, or a poll's worth) and adds `contact` (and `associations`, keyed
+  by object type ID) to each, batching the underlying HubSpot calls across the batch instead of
+  making them per submission:
+  - Any submission with an `email`-named contact-scoped (`0-1`) field is resolved via one
+    `POST /crm/v3/objects/0-1/batch/read` (`idProperty: 'email'`) per 100 distinct emails
+    (`CONTACT_BATCH_READ_CHUNK_SIZE`) in the batch, instead of a `search` call per submission.
+  - A submission with contact-scoped fields but no `email` field (plenty of forms only capture
+    e.g. firstname/lastname) falls back to `resolveContactBySearch()` — the original
+    AND-together-up-to-2-fields `search` call, one per such submission. Most forms capture
+    email, so this path is rare; it's a deliberate trade — precision over batching — for
+    submissions batch/read's single `idProperty` can't identify as reliably.
+  - Once contacts are resolved, association lookups are batched by target object type too: one
+    `POST .../batch/read` per distinct `objectTypeId` per 1000 resolved contact IDs
+    (`ASSOCIATION_BATCH_READ_CHUNK_SIZE`), instead of one call per contact per type.
+  - A submission with no contact-scoped fields at all, or whose contact can't be resolved, comes
+    back unchanged — no `contact` key, so no association lookups for it either.
+  - Replaced an earlier version that made 1 (contact) + N (association) HTTP calls per
+    submission; that version could exhaust HubSpot's rate limit within a single Return All call
+    once more than roughly a page of submissions was in play. Originally lived only in the
+    Trigger file, and only handled one submission at a time; moved to `helpers.ts` and
+    rewritten to batch when the action node's Forms → Get Form Submissions started hitting 429s
+    on Return All.
 - `fetchProperties()` (private, cached) — the single source every property `loadOptions` method
   goes through: `getProperties`, `getEnumerationProperties`, `getAllProperties`,
   `getWritableProperties`, `getUniqueProperties`, `getUpsertIdProperties`,
@@ -506,26 +524,17 @@ search/filter capability, so this branch has its own field set and its own `poll
     `MANUAL_FETCH_SUBMISSIONS_LIMIT` (5) submissions — enough to confirm the Form selection is
     right without waiting for a live submission or pulling a full page. Automatic polling still
     returns everything that happened in the poll window, capped only by **Max Pages Per Poll**.
-- **Associated object enrichment** (`enrichSubmissionWithAssociations()`, now shared from
-  `helpers.ts` — see Helpers above, also used by the action node's Forms → Get Form
-  Submissions) — each matched submission's `values` array carries an `objectTypeId` per field
-  (HubSpot tags which CRM object a value belongs to). For each submission:
-  1. Collect the first two *distinct* values with `objectTypeId === '0-1'` (Contacts), in
-     submission order (just the one if the form only has a single contact field) — not
-     specifically an `email` field, since plenty of forms only capture e.g.
-     firstname/lastname. If the form submitted no contact-scoped fields at all, the submission
-     is returned unchanged — no `contact` key at all.
-  2. Search for the contact (`POST /crm/v3/objects/0-1/search`) with those field(s) AND'd
-     together as `EQ` filters (`limit: 1`, requesting back the matched field names so the
-     response confirms what it was found by). No match also leaves the submission unchanged;
-     any error throws.
-  3. If found, every other distinct `objectTypeId` present among the values (e.g. `0-3` for a
-     deal-scoped field) is looked up via `POST /crm/associations/2026-03/0-1/{objectTypeId}
-     /batch/read` with the resolved contact as the single input — the same batch associations
-     endpoint the Associations resource uses. The submitted value (e.g. `f_deal_id`) is **not**
-     trusted as a real record ID; only IDs HubSpot's associations API actually returns for that
-     contact are used. Results land in `associations: { [objectTypeId]: string[] }`, keyed by
-     object type ID, omitted entirely when there are no other object types among the values.
+- **Associated object enrichment** (`enrichSubmissionsWithAssociations()`, shared from
+  `helpers.ts` — see Helpers above for the full batching behavior, also used by the action
+  node's Forms → Get Form Submissions) — every matched submission's `values` array carries an
+  `objectTypeId` per field (HubSpot tags which CRM object a value belongs to); the whole
+  `matched` array (post-watermark, pre-reverse) is passed through in one call, resolving each
+  submission's contact and, for every other distinct `objectTypeId` present among its values,
+  that type's records associated to the resolved contact. The submitted value itself (e.g.
+  `f_deal_id`) is **not** trusted as a real record ID; only IDs HubSpot's associations API
+  actually returns for that contact are used. Results land in `associations: { [objectTypeId]:
+  string[] }`, keyed by object type ID, omitted entirely when there are no other object types
+  among the values, same as `contact` is omitted when no contact was resolved.
 - **`fields`** — every matched submission also gets a `fields` object added via
   `buildFormSubmissionFields()` (helpers.ts): `values` flattened to `{ "<objectTypeId>__<name>":
   value }`, e.g. `"0-1__email": "a@b.com"`. Added before the contact/associations enrichment

@@ -639,29 +639,23 @@ export function buildFormSubmissionFields(values: FormSubmissionValue[]): Record
 	return fields;
 }
 
+/** HubSpot's cap for a single `batch/read` (objects) or `batch/associate` (associations) call. */
+const CONTACT_BATCH_READ_CHUNK_SIZE = 100;
+const ASSOCIATION_BATCH_READ_CHUNK_SIZE = 1000;
+
 /**
- * Enriches a submission with the contact it belongs to plus, for every other
- * distinct objectTypeId present among the submission's values, the IDs of
- * that type's records associated to the resolved contact — fetched via the
- * same batch associations endpoint the Associations resource uses, not by
- * trusting the submitted value as a real record ID.
- *
- * The contact is found by searching on whichever contact-scoped
- * (objectTypeId 0-1) fields the form actually submitted, rather than
- * assuming an `email` field exists — plenty of forms only capture e.g.
- * firstname/lastname. The first two distinct 0-1 fields, in submission
- * order, are AND'd together as search filters (just the one field if that's
- * all the form has); the first match is used. If the form submitted no
- * contact-scoped fields at all, or the search finds no match, the
- * submission is returned unchanged with no `contact` key — there is no
- * contact to check associations against, so no association lookups run
- * either. Shared by the Trigger's Form Submitted mode and the action node's
- * Forms → Get Form Submissions, so both enrich submissions the same way.
+ * Falls back to searching for a contact by whichever contact-scoped
+ * (objectTypeId 0-1) fields the form submitted, for the (rare) submission
+ * with no `email` field for `enrichSubmissionsWithAssociations` to batch on.
+ * The first two distinct 0-1 fields, in submission order, are AND'd
+ * together as search filters (just the one field if that's all the form
+ * has); the first match is used. One HTTP call per submission that reaches
+ * here, same as this package's original per-submission implementation.
  */
-export async function enrichSubmissionWithAssociations(
+async function resolveContactBySearch(
 	this: IExecuteFunctions | IPollFunctions,
 	submission: JsonObject,
-): Promise<JsonObject> {
+): Promise<JsonObject | undefined> {
 	const values = (submission.values as FormSubmissionValue[] | undefined) ?? [];
 
 	const contactFields: Array<{ name: string; value: string }> = [];
@@ -674,9 +668,8 @@ export async function enrichSubmissionWithAssociations(
 		contactFields.push({ name: value.name, value: value.value });
 		if (contactFields.length === 2) break;
 	}
-	if (contactFields.length === 0) return submission;
+	if (contactFields.length === 0) return undefined;
 
-	let contact: JsonObject | undefined;
 	try {
 		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
 			method: 'POST',
@@ -698,51 +691,173 @@ export async function enrichSubmissionWithAssociations(
 				limit: 1,
 			}),
 		})) as { results?: JsonObject[] };
-		contact = response.results?.[0];
+		return response.results?.[0];
 	} catch (error) {
 		throw new NodeApiError(this.getNode(), error as JsonObject);
 	}
-	if (!contact) return submission;
+}
 
-	const otherObjectTypeIds = Array.from(
-		new Set(
+/**
+ * Enriches a batch of submissions with the contact each belongs to plus,
+ * for every other distinct objectTypeId present among a submission's
+ * values, the IDs of that type's records associated to its resolved
+ * contact — fetched via the same batch associations endpoint the
+ * Associations resource uses, not by trusting the submitted value as a
+ * real record ID.
+ *
+ * Takes the whole array at once (rather than one submission at a time) so
+ * contact and association lookups can be batched across every submission
+ * instead of firing one HTTP request per submission per lookup — with
+ * "Return All" pulling in hundreds of submissions, the old one-call-per-
+ * submission approach could burn through HubSpot's rate limit in a single
+ * execution:
+ * 1. Any submission with an `email`-named contact-scoped (0-1) field is
+ *    resolved via one `POST .../0-1/batch/read` per 100 distinct emails
+ *    (`idProperty: 'email'`), instead of one `search` call each.
+ * 2. A submission with contact-scoped fields but no `email` field (plenty
+ *    of forms only capture e.g. firstname/lastname) falls back to
+ *    `resolveContactBySearch()` — one call per such submission, same as
+ *    before batching. Most forms capture email, so this path is rare.
+ * 3. Once contacts are resolved, association lookups are batched too: one
+ *    `POST .../batch/read` per distinct target objectTypeId per 1000
+ *    resolved contact IDs, instead of one call per contact per type.
+ * A submission with no contact-scoped fields at all, or whose contact
+ * can't be resolved, comes back unchanged — no `contact` key, and
+ * therefore no association lookups for it either.
+ *
+ * Shared by the Trigger's Form Submitted mode and the action node's
+ * Forms → Get Form Submissions, so both enrich submissions the same way.
+ */
+export async function enrichSubmissionsWithAssociations(
+	this: IExecuteFunctions | IPollFunctions,
+	submissions: JsonObject[],
+): Promise<JsonObject[]> {
+	if (submissions.length === 0) return submissions;
+
+	const emailBySubmission = new Map<JsonObject, string>();
+	const searchFallbackSubmissions: JsonObject[] = [];
+
+	for (const submission of submissions) {
+		const values = (submission.values as FormSubmissionValue[] | undefined) ?? [];
+		const emailValue = values.find(
+			(value) =>
+				value.objectTypeId === CONTACTS_OBJECT_TYPE &&
+				value.name?.toLowerCase() === 'email' &&
+				value.value !== undefined,
+		);
+
+		if (emailValue) {
+			emailBySubmission.set(submission, emailValue.value as string);
+		} else if (values.some((value) => value.objectTypeId === CONTACTS_OBJECT_TYPE)) {
+			searchFallbackSubmissions.push(submission);
+		}
+	}
+
+	const contactBySubmission = new Map<JsonObject, JsonObject>();
+
+	const distinctEmails = Array.from(new Set(emailBySubmission.values()));
+	if (distinctEmails.length > 0) {
+		const contactByEmail = new Map<string, JsonObject>();
+
+		try {
+			for (let start = 0; start < distinctEmails.length; start += CONTACT_BATCH_READ_CHUNK_SIZE) {
+				const chunk = distinctEmails.slice(start, start + CONTACT_BATCH_READ_CHUNK_SIZE);
+				const response = (await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'hubspotApi',
+					{
+						method: 'POST',
+						url: `${HUBSPOT_BASE}${OBJECTS_BASE_PATH}/${CONTACTS_OBJECT_TYPE}/batch/read`,
+						headers: BASE_HEADERS,
+						body: JSON.stringify({
+							idProperty: 'email',
+							properties: ['email'],
+							inputs: chunk.map((email) => ({ id: email })),
+						}),
+					},
+				)) as { results?: JsonObject[] };
+
+				for (const contact of response.results ?? []) {
+					const matchedEmail = (contact.properties as Record<string, string> | undefined)?.email;
+					if (matchedEmail) contactByEmail.set(matchedEmail, contact);
+				}
+			}
+		} catch (error) {
+			throw new NodeApiError(this.getNode(), error as JsonObject);
+		}
+
+		for (const [submission, email] of emailBySubmission) {
+			const contact = contactByEmail.get(email);
+			if (contact) contactBySubmission.set(submission, contact);
+		}
+	}
+
+	for (const submission of searchFallbackSubmissions) {
+		const contact = await resolveContactBySearch.call(this, submission);
+		if (contact) contactBySubmission.set(submission, contact);
+	}
+
+	if (contactBySubmission.size === 0) return submissions;
+
+	const associationTargets = new Map<string, Set<string>>();
+	for (const [submission, contact] of contactBySubmission) {
+		const values = (submission.values as FormSubmissionValue[] | undefined) ?? [];
+		const otherObjectTypeIds = new Set(
 			values
 				.map((value) => value.objectTypeId)
 				.filter((objectTypeId): objectTypeId is string =>
 					Boolean(objectTypeId) && objectTypeId !== CONTACTS_OBJECT_TYPE,
 				),
-		),
-	);
+		);
 
-	if (otherObjectTypeIds.length === 0) {
-		return { ...submission, contact };
+		for (const toObjectType of otherObjectTypeIds) {
+			let contactIds = associationTargets.get(toObjectType);
+			if (!contactIds) {
+				contactIds = new Set();
+				associationTargets.set(toObjectType, contactIds);
+			}
+			contactIds.add(String(contact.id));
+		}
 	}
 
-	const contactId = String(contact.id);
-	const associations: JsonObject = {};
+	const associationsByContactId = new Map<string, Record<string, string[]>>();
 
 	try {
-		for (const toObjectType of otherObjectTypeIds) {
-			const response = (await this.helpers.httpRequestWithAuthentication.call(
-				this,
-				'hubspotApi',
-				{
-					method: 'POST',
-					url: `${HUBSPOT_BASE}${ASSOC_BASE_PATH}/${CONTACTS_OBJECT_TYPE}/${toObjectType}/batch/read`,
-					headers: BASE_HEADERS,
-					body: JSON.stringify({ inputs: [{ id: contactId }] }),
-				},
-			)) as { results?: Array<{ to?: Array<{ toObjectId: string }> }> };
+		for (const [toObjectType, contactIdSet] of associationTargets) {
+			const contactIds = Array.from(contactIdSet);
+			for (let start = 0; start < contactIds.length; start += ASSOCIATION_BATCH_READ_CHUNK_SIZE) {
+				const chunk = contactIds.slice(start, start + ASSOCIATION_BATCH_READ_CHUNK_SIZE);
+				const response = (await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'hubspotApi',
+					{
+						method: 'POST',
+						url: `${HUBSPOT_BASE}${ASSOC_BASE_PATH}/${CONTACTS_OBJECT_TYPE}/${toObjectType}/batch/read`,
+						headers: BASE_HEADERS,
+						body: JSON.stringify({ inputs: chunk.map((id) => ({ id })) }),
+					},
+				)) as { results?: Array<{ from?: { id: string }; to?: Array<{ toObjectId: string }> }> };
 
-			associations[toObjectType] = (response.results?.[0]?.to ?? []).map(
-				(association) => association.toObjectId,
-			);
+				for (const result of response.results ?? []) {
+					const contactId = result.from?.id;
+					if (!contactId) continue;
+					const existing = associationsByContactId.get(contactId) ?? {};
+					existing[toObjectType] = (result.to ?? []).map((association) => association.toObjectId);
+					associationsByContactId.set(contactId, existing);
+				}
+			}
 		}
 	} catch (error) {
 		throw new NodeApiError(this.getNode(), error as JsonObject);
 	}
 
-	return { ...submission, contact, associations };
+	return submissions.map((submission) => {
+		const contact = contactBySubmission.get(submission);
+		if (!contact) return submission;
+
+		const associations = associationsByContactId.get(String(contact.id));
+		return associations ? { ...submission, contact, associations } : { ...submission, contact };
+	});
 }
 
 interface HubSpotOwner {

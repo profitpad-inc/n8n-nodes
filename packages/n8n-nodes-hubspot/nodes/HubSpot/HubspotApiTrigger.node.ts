@@ -13,7 +13,7 @@ import {
 	FormSubmissionValue,
 	buildFormSubmissionFields,
 	buildHubSpotUrl,
-	enrichSubmissionWithAssociations,
+	enrichSubmissionsWithAssociations,
 	getAllProperties,
 	getForms,
 	getSearchFilterProperties,
@@ -178,16 +178,11 @@ async function pollFormSubmissions(
 	// HubSpot returns submissions newest-first; flip to chronological order.
 	matched.reverse();
 
-	const enriched: JsonObject[] = [];
-	for (const submission of matched) {
-		const withFields: JsonObject = {
-			...submission,
-			fields: buildFormSubmissionFields(
-				(submission.values as FormSubmissionValue[] | undefined) ?? [],
-			),
-		};
-		enriched.push(await enrichSubmissionWithAssociations.call(this, withFields));
-	}
+	const withFields = matched.map((submission) => ({
+		...submission,
+		fields: buildFormSubmissionFields((submission.values as FormSubmissionValue[] | undefined) ?? []),
+	}));
+	const enriched = await enrichSubmissionsWithAssociations.call(this, withFields);
 
 	if (returnAllMode === 'allInOne') {
 		return [[{ json: { results: enriched } }]];
