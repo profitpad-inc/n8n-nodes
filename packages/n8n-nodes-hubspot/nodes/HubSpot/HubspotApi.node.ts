@@ -347,6 +347,7 @@ export class HubspotApi implements INodeType {
 							let after: string | undefined;
 							let pageCount = 0;
 							const allResults: JsonObject[] = [];
+							let lastPaging: JsonObject | undefined;
 
 							do {
 								const url = buildHubSpotUrl(HUBSPOT_BASE, submissionsPath, {
@@ -381,11 +382,15 @@ export class HubspotApi implements INodeType {
 
 								pageCount++;
 								const paging = response.paging as JsonObject | undefined;
+								lastPaging = paging;
 								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
 							} while (after && pageCount < maxPages);
 
 							if (returnAllMode === 'allInOne') {
-								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+								returnData.push({
+									json: { results: allResults, paging: lastPaging ?? null },
+									pairedItem: { item: i },
+								});
 							}
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
@@ -516,6 +521,7 @@ export class HubspotApi implements INodeType {
 							let after: string | undefined = opts.after || undefined;
 							let pageCount = 0;
 							const allResults: JsonObject[] = [];
+							let lastPaging: JsonObject | undefined;
 
 							do {
 								const url = buildHubSpotUrl(HUBSPOT_BASE, objectsPath, {
@@ -551,11 +557,15 @@ export class HubspotApi implements INodeType {
 
 								pageCount++;
 								const paging = response.paging as JsonObject | undefined;
+								lastPaging = paging;
 								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
 							} while (after && pageCount < maxPages);
 
 							if (returnAllMode === 'allInOne') {
-								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+								returnData.push({
+									json: { results: allResults, paging: lastPaging ?? null },
+									pairedItem: { item: i },
+								});
 							}
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
@@ -907,6 +917,7 @@ export class HubspotApi implements INodeType {
 							let pageCount = 0;
 							let after: string | undefined;
 							const allResults: JsonObject[] = [];
+							let lastPaging: JsonObject | undefined;
 
 							do {
 								const pageBody: JsonObject = {
@@ -940,11 +951,15 @@ export class HubspotApi implements INodeType {
 
 								pageCount++;
 								const paging = response.paging as JsonObject | undefined;
+								lastPaging = paging;
 								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
 							} while (after && pageCount < maxPages);
 
 							if (returnAllMode === 'allInOne') {
-								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+								returnData.push({
+									json: { results: allResults, paging: lastPaging ?? null },
+									pairedItem: { item: i },
+								});
 							}
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
@@ -1526,6 +1541,7 @@ export class HubspotApi implements INodeType {
 							let after: string | undefined;
 							let pageCount = 0;
 							const allResults: JsonObject[] = [];
+							let lastPaging: JsonObject | undefined;
 
 							do {
 								const url = buildHubSpotUrl(HUBSPOT_BASE, basePath, {
@@ -1556,11 +1572,15 @@ export class HubspotApi implements INodeType {
 
 								pageCount++;
 								const paging = response.paging as JsonObject | undefined;
+								lastPaging = paging;
 								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
 							} while (after && pageCount < maxPages);
 
 							if (returnAllMode === 'allInOne') {
-								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+								returnData.push({
+									json: { results: allResults, paging: lastPaging ?? null },
+									pairedItem: { item: i },
+								});
 							}
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
@@ -1621,6 +1641,7 @@ export class HubspotApi implements INodeType {
 							let pageCount = 0;
 							let after: string | undefined;
 							const allResults: JsonObject[] = [];
+							let lastPaging: JsonObject | undefined;
 
 							do {
 								const pageBody: JsonObject = {
@@ -1655,11 +1676,15 @@ export class HubspotApi implements INodeType {
 
 								pageCount++;
 								const paging = response.paging as JsonObject | undefined;
+								lastPaging = paging;
 								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
 							} while (after && pageCount < maxPages);
 
 							if (returnAllMode === 'allInOne') {
-								returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+								returnData.push({
+									json: { results: allResults, paging: lastPaging ?? null },
+									pairedItem: { item: i },
+								});
 							}
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;

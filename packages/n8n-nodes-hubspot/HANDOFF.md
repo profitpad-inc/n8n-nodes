@@ -142,9 +142,10 @@ Top-level **Properties** multi-select; Additional Options: `propertiesWithHistor
   HubSpot response as one item
 - `returnAll: true` — paginates via `paging.next.after` up to **Max Pages** (`minValue: 1`,
   integer, also clamped with `Math.max(1, Math.floor(...))`), 100 per page, and honours
-  **Return All Mode**: `allInOne` (one item, `{ results: [...] }`), `eachPage` (raw page per
-  item), `eachResult` (one item per record). Additional Options' `after` cursor seeds the
-  **first** page of this loop (subsequent pages use HubSpot's own `paging.next.after`)
+  **Return All Mode**: `allInOne` (one item, `{ results: [...], paging: lastPaging ?? null }`),
+  `eachPage` (raw page per item), `eachResult` (one item per record). Additional Options'
+  `after` cursor seeds the **first** page of this loop (subsequent pages use HubSpot's own
+  `paging.next.after`)
 - Additional options: `properties` (legacy), `propertiesWithHistory`, `associations`, `after`
   cursor, `archived`, `millisecondsBetweenItems`
 
@@ -548,6 +549,11 @@ search/filter capability, so this branch has its own field set and its own `poll
   Get/List; `batchReadReturnAllMode` kept as Batch Read's Output Mode parameter name). Keep
   them. The shared `returnAllMode` parameter is used by Objects → List, Objects → Search, and
   both Owners list/search branches.
+- **`allInOne` includes the last page's `paging` object**: every `returnAllMode === 'allInOne'`
+  branch (Objects → List/Search, Owners/Users → List/Search, Form Submissions) pushes
+  `{ results: allResults, paging: lastPaging ?? null }`, not just `{ results: [...] }`. This
+  lets a workflow tell whether more pages exist beyond Max Pages (`paging.next.after` still
+  set) without switching to `eachPage` mode. Keep this shape in sync across all five branches.
 
 ---
 
