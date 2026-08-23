@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### HubSpot (Associations → all operations moved to `/crm/v4/associations`)
+
+- Batch Read, Batch Create Default, Batch Create Labeled, and Batch Delete now call
+  `/crm/v4/associations/{fromObjectType}/{toObjectType}/...` instead of the dated
+  `/crm/associations/2026-03/...` base path, matching the switch already made for Read Labels.
+  Keeps the whole resource on the endpoint family confirmed to behave correctly rather than
+  carving out Read Labels as a one-off exception.
+
 ### HubSpot (Associations → Read Labels null type IDs fix + reverse labels)
 
 - Associations → Read Labels now calls `/crm/v4/associations/{fromObjectType}/{toObjectType}/labels`

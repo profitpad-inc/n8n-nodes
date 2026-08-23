@@ -37,7 +37,7 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 |---|---|
 | `HUBSPOT_BASE` | `https://api.hubapi.com` |
 | `OBJECTS_BASE_PATH` | `/crm/v3/objects` |
-| `ASSOC_BASE_PATH` | `/crm/associations/2026-03` |
+| `ASSOC_BASE_PATH` | `/crm/v4/associations` |
 | `PROPERTIES_BASE_PATH` | `/crm/properties/2026-03` |
 | `USERS_OBJECT_PATH` | `/crm/v3/objects/users` |
 | `OWNERS_BASE_PATH` (helpers) | `/crm/v3/owners` |
@@ -278,7 +278,7 @@ two forms endpoints (the same ones the Form Trigger uses).
 
 ## Resource: Associations
 
-Endpoints hang off `/crm/associations/2026-03/{fromObjectType}/{toObjectType}`. **From Object
+Endpoints hang off `/crm/v4/associations/{fromObjectType}/{toObjectType}`. **From Object
 Type** and **To Object Type** use `ASSOCIATION_OBJECT_TYPE_OPTIONS` (no Users).
 
 | Operation | Value | Method | URL suffix |
@@ -296,12 +296,13 @@ Type** and **To Object Type** use `ASSOCIATION_OBJECT_TYPE_OPTIONS` (no Users).
   `{ status: 'COMPLETE', results: [], numErrors: 0 }` instead of calling HubSpot.
 - The other operations take a raw JSON **Body**. Batch Delete returns `{ success: true }`.
 - The node subtitle shows `operation: fromObjectType → toObjectType` for this resource.
-- **Read Labels uses `/crm/v4/associations/...` instead of the shared dated `assocBase`**: the
-  dated `/crm/associations/2026-03/{from}/{to}/labels` endpoint returns `fromObjectTypeId` /
-  `toObjectTypeId` as `null` — confirmed by comparing against a direct call to the stable
-  `/crm/v4/associations/{from}/{to}/labels` endpoint for the same pairing, which returns the real
-  IDs. Every other Associations operation still uses the dated `2026-03` base path since only
-  Read Labels was confirmed affected.
+- **All Associations operations use the stable `/crm/v4/associations` base path**, not the dated
+  `/crm/associations/2026-03` one. The dated endpoint's `/labels` call returned
+  `fromObjectTypeId` / `toObjectTypeId` as `null` — confirmed by comparing against a direct call
+  to the stable `/crm/v4/associations/{from}/{to}/labels` endpoint for the same pairing, which
+  returns the real IDs. The whole resource (Batch Read/Create/Delete included) was moved to v4
+  to stay on the endpoint family actually confirmed to behave correctly, rather than keeping
+  Read Labels as a one-off exception.
 - **Read Labels → Include Reverse Labels** (boolean, default off): when on, a second GET fires
   against the same `/labels` endpoint with **From**/**To Object Type** swapped, and each forward
   result is enriched with `reverseTypeId` / `reverseLabel`. HubSpot always issues a label pair's

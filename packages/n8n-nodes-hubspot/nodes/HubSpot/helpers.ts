@@ -13,10 +13,10 @@ import { ASSOCIATION_TYPES } from './associationTypes';
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const PROPERTIES_BASE_PATH = '/crm/properties/2026-03';
 const OBJECTS_BASE_PATH = '/crm/v3/objects';
-const ASSOC_BASE_PATH = '/crm/associations/2026-03';
+const ASSOC_BASE_PATH = '/crm/v4/associations';
 const BASE_HEADERS = {
 	'content-type': 'application/json',
-	accept: 'application/json',
+	'accept': 'application/json',
 };
 export const OWNERS_BASE_PATH = '/crm/v3/owners';
 

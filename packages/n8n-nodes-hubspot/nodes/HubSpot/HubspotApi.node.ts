@@ -44,7 +44,7 @@ import { resolveSearchInput, toStringList, UiFilterGroups, UiSorts } from './sea
 
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const OBJECTS_BASE_PATH = '/crm/v3/objects';
-const ASSOC_BASE_PATH = '/crm/associations/2026-03';
+const ASSOC_BASE_PATH = '/crm/v4/associations';
 const PROPERTIES_BASE_PATH = '/crm/properties/2026-03';
 const FORMS_BASE_PATH = '/marketing/v3/forms';
 const FORMS_LIST_MAX_PAGES = 50;
@@ -283,17 +283,12 @@ export class HubspotApi implements INodeType {
 							i,
 						) as boolean;
 
-						// The dated /crm/associations/2026-03 endpoint returns
-						// fromObjectTypeId/toObjectTypeId as null on this specific call; the
-						// stable /crm/v4/associations endpoint returns the real values for the
-						// same pairing, so labels uses v4 while every other assoc operation
-						// keeps the dated base path.
 						const response = (await this.helpers.httpRequestWithAuthentication.call(
 							this,
 							'hubspotApi',
 							{
 								method: 'GET',
-								url: `${HUBSPOT_BASE}/crm/v4/associations/${fromObjectType}/${toObjectType}/labels`,
+								url: `${assocBase}/labels`,
 								headers: BASE_HEADERS,
 							},
 						)) as JsonObject;
@@ -304,7 +299,7 @@ export class HubspotApi implements INodeType {
 								'hubspotApi',
 								{
 									method: 'GET',
-									url: `${HUBSPOT_BASE}/crm/v4/associations/${toObjectType}/${fromObjectType}/labels`,
+									url: `${HUBSPOT_BASE}${ASSOC_BASE_PATH}/${toObjectType}/${fromObjectType}/labels`,
 									headers: BASE_HEADERS,
 								},
 							)) as JsonObject;
