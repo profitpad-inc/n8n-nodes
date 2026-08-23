@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### HubSpot (Associations → Batch Read Output Mode)
+
+- Added an **Output Mode** dropdown to Associations → Batch Read: **All Results as 1 Item**,
+  **Each Page as 1 Item**, or **Each Result as 1 Item** — same convention as Objects → Batch
+  Read. Defaults to **Each Page as 1 Item**, matching the operation's original (and only)
+  behavior, so existing workflows are unaffected. **All Results as 1 Item** concatenates
+  `results` / `errors` and sums `numErrors` across chunks, taking `status` / `completedAt` from
+  the last chunk and `startedAt` from the first.
+
 ### HubSpot (Associations → all operations moved to `/crm/v4/associations`)
 
 - Batch Read, Batch Create Default, Batch Create Labeled, and Batch Delete now call

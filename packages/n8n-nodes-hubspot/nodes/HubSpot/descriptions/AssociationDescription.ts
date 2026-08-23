@@ -116,6 +116,38 @@ export const associationDescription: INodeProperties[] = [
 			},
 		},
 	},
+	{
+		displayName: 'Output Mode',
+		name: 'assocBatchReadReturnAllMode',
+		type: 'options',
+		noDataExpression: true,
+		default: 'eachPage',
+		description: 'How to output the fetched association results',
+		displayOptions: {
+			show: {
+				resource: ['associations'],
+				operation: ['assocBatchRead'],
+			},
+		},
+		options: [
+			{
+				name: 'All Results as 1 Item',
+				value: 'allInOne',
+				description:
+					'Aggregate all batches and return every result combined in a single output item',
+			},
+			{
+				name: 'Each Page as 1 Item',
+				value: 'eachPage',
+				description: 'Return each batch response (up to 1000 From IDs) as a separate output item',
+			},
+			{
+				name: 'Each Result as 1 Item',
+				value: 'eachResult',
+				description: 'Return each individual From record\'s association result as a separate output item',
+			},
+		],
+	},
 
 	// ── BATCH DELETE ───────────────────────────────────────────────────────────
 	{

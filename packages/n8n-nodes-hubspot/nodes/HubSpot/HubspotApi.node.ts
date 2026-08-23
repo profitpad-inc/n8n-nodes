@@ -211,6 +211,17 @@ export class HubspotApi implements INodeType {
 								pairedItem: { item: i },
 							});
 						} else {
+							const outputMode = this.getNodeParameter(
+								'assocBatchReadReturnAllMode',
+								i,
+							) as string;
+							const allResults: JsonObject[] = [];
+							const allErrors: JsonObject[] = [];
+							let numErrors = 0;
+							let firstStartedAt: string | undefined;
+							let lastCompletedAt: string | undefined;
+							let lastStatus: string | undefined;
+
 							for (let j = 0; j < fromIds.length; j += 1000) {
 								const batch = fromIds.slice(j, j + 1000);
 								const response = (await this.helpers.httpRequestWithAuthentication.call(
@@ -223,7 +234,39 @@ export class HubspotApi implements INodeType {
 										body: JSON.stringify({ inputs: batch.map((id) => ({ id })) }),
 									},
 								)) as JsonObject;
-								returnData.push({ json: response, pairedItem: { item: i } });
+
+								const results = (response.results as JsonObject[] | undefined) ?? [];
+
+								if (outputMode === 'eachResult') {
+									for (const result of results) {
+										returnData.push({ json: result, pairedItem: { item: i } });
+									}
+								} else if (outputMode === 'allInOne') {
+									allResults.push(...results);
+									allErrors.push(...((response.errors as JsonObject[] | undefined) ?? []));
+									numErrors += (response.numErrors as number | undefined) ?? 0;
+									if (firstStartedAt === undefined) {
+										firstStartedAt = response.startedAt as string | undefined;
+									}
+									lastCompletedAt = response.completedAt as string | undefined;
+									lastStatus = response.status as string | undefined;
+								} else {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								}
+							}
+
+							if (outputMode === 'allInOne') {
+								returnData.push({
+									json: {
+										completedAt: lastCompletedAt,
+										status: lastStatus,
+										startedAt: firstStartedAt,
+										results: allResults,
+										errors: allErrors,
+										numErrors,
+									},
+									pairedItem: { item: i },
+								});
 							}
 						}
 					}

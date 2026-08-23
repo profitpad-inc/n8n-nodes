@@ -293,7 +293,19 @@ Type** and **To Object Type** use `ASSOCIATION_OBJECT_TYPE_OPTIONS` (no Users).
   optional **From ID Property**. With an ID property set, values are resolved to record IDs via
   `POST /crm/v3/objects/{fromObjectType}/batch/read` in chunks of 100; the association reads
   themselves are chunked at 1000. An empty ID list short-circuits to
-  `{ status: 'COMPLETE', results: [], numErrors: 0 }` instead of calling HubSpot.
+  `{ status: 'COMPLETE', results: [], numErrors: 0 }` instead of calling HubSpot, regardless of
+  **Output Mode**.
+- **Batch Read → Output Mode** (`assocBatchReadReturnAllMode`), same three-way convention as
+  Objects → Batch Read: **Each Page as 1 Item** (`eachPage`, default — one output item per
+  1000-From-ID chunk, the original unconditional behavior before this option existed), **Each
+  Result as 1 Item** (`eachResult` — one item per `from` record's association result), and **All
+  Results as 1 Item** (`allInOne`), which merges every chunk's response into one item:
+  `results` and `errors` are concatenated across chunks, `numErrors` is summed, `status` /
+  `completedAt` are taken from the **last** chunk, and `startedAt` from the **first** — a status
+  of `COMPLETE` on an intermediate chunk shouldn't win over a later chunk's actual outcome, and
+  the first chunk's start time is the closest thing to when the whole operation began. Defaults
+  to `eachPage` rather than `eachResult` (Objects → Batch Read's default) so existing
+  Associations → Batch Read workflows keep their current output shape unchanged.
 - The other operations take a raw JSON **Body**. Batch Delete returns `{ success: true }`.
 - The node subtitle shows `operation: fromObjectType → toObjectType` for this resource.
 - **All Associations operations use the stable `/crm/v4/associations` base path**, not the dated
