@@ -252,7 +252,10 @@ two forms endpoints (the same ones the Form Trigger uses).
   HubSpot has not replaced it. Every submission gets a `fields` object added via
   `buildFormSubmissionFields()` (see Helpers below), regardless of Return All Mode — even
   `eachPage` / non-Return-All responses have it added into each entry of their `results` array
-  before being pushed.
+  before being pushed. Every submission also gets `formId`, set to the selected **Form**'s value
+  — read straight from the already-known `formGuid` parameter (the same value used to build the
+  request URL), not a second API call — since this endpoint's own submission payloads don't
+  otherwise say which form they came from.
 - **Submitted After** (Additional Options, both Return All on and off) filters out any
   submission with `submittedAt` at or before the given date/time. Since this endpoint always
   returns submissions newest-first (same ordering the Trigger's `pollFormSubmissions()` relies
@@ -293,6 +296,21 @@ Type** and **To Object Type** use `ASSOCIATION_OBJECT_TYPE_OPTIONS` (no Users).
   `{ status: 'COMPLETE', results: [], numErrors: 0 }` instead of calling HubSpot.
 - The other operations take a raw JSON **Body**. Batch Delete returns `{ success: true }`.
 - The node subtitle shows `operation: fromObjectType → toObjectType` for this resource.
+- **Read Labels uses `/crm/v4/associations/...` instead of the shared dated `assocBase`**: the
+  dated `/crm/associations/2026-03/{from}/{to}/labels` endpoint returns `fromObjectTypeId` /
+  `toObjectTypeId` as `null` — confirmed by comparing against a direct call to the stable
+  `/crm/v4/associations/{from}/{to}/labels` endpoint for the same pairing, which returns the real
+  IDs. Every other Associations operation still uses the dated `2026-03` base path since only
+  Read Labels was confirmed affected.
+- **Read Labels → Include Reverse Labels** (boolean, default off): when on, a second GET fires
+  against the same `/labels` endpoint with **From**/**To Object Type** swapped, and each forward
+  result is enriched with `reverseTypeId` / `reverseLabel`. HubSpot always issues a label pair's
+  two directions as adjacent type IDs one apart, even numbered forward, odd reverse (or vice
+  versa) — so `reverseTypeId` is computed as `typeId - 1` (even) or `typeId + 1` (odd), then that
+  ID is looked up in the reverse call's results and matched against the *same* `category`
+  (`USER_DEFINED` vs `HUBSPOT_DEFINED`) before trusting `reverseLabel`, since two unrelated types
+  could otherwise coincidentally land on adjacent IDs. No match → `reverseLabel: null` while
+  `reverseTypeId` is still populated (it's a computed value, not confirmed by the API).
 
 ---
 
@@ -587,6 +605,17 @@ search/filter capability, so this branch has its own field set and its own `poll
   `{ results: allResults, paging: lastPaging ?? null }`, not just `{ results: [...] }`. This
   lets a workflow tell whether more pages exist beyond Max Pages (`paging.next.after` still
   set) without switching to `eachPage` mode. Keep this shape in sync across all five branches.
+- **`allInOne` on search endpoints also leads with `total`**: HubSpot's Search API (unlike plain
+  List) returns a top-level `total` count of all matching records, not just the current page.
+  Objects → Search, and both CRM-Records branches of the Trigger's `allInOne` mode (the direct
+  search branch for New/Updated/New or Updated Records, and Property Changed's underlying search
+  step before its batch/read confirmation pass), capture that `total` from the **last** page
+  fetched and put it as the **first** key: `{ total, results, paging? }`. Plain List/Owners
+  endpoints and the Form Submissions endpoints don't get a `total` key — HubSpot's List and
+  legacy form-submissions APIs don't return one, so there's nothing to report. For Property
+  Changed specifically, `total` reflects the broader "anything changed" search match count, not
+  the count after the property-changed/change-source filtering — HubSpot's search API has no way
+  to know about that filter, which only happens after retrieving each record's property history.
 
 ---
 

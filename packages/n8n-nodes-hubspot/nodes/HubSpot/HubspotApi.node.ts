@@ -278,15 +278,67 @@ export class HubspotApi implements INodeType {
 
 					// ── ASSOC READ LABELS ─────────────────────────────────────────────
 					if (operation === 'assocReadLabels') {
+						const includeReverseLabels = this.getNodeParameter(
+							'assocIncludeReverseLabels',
+							i,
+						) as boolean;
+
+						// The dated /crm/associations/2026-03 endpoint returns
+						// fromObjectTypeId/toObjectTypeId as null on this specific call; the
+						// stable /crm/v4/associations endpoint returns the real values for the
+						// same pairing, so labels uses v4 while every other assoc operation
+						// keeps the dated base path.
 						const response = (await this.helpers.httpRequestWithAuthentication.call(
 							this,
 							'hubspotApi',
 							{
 								method: 'GET',
-								url: `${assocBase}/labels`,
+								url: `${HUBSPOT_BASE}/crm/v4/associations/${fromObjectType}/${toObjectType}/labels`,
 								headers: BASE_HEADERS,
 							},
 						)) as JsonObject;
+
+						if (includeReverseLabels) {
+							const reverseResponse = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{
+									method: 'GET',
+									url: `${HUBSPOT_BASE}/crm/v4/associations/${toObjectType}/${fromObjectType}/labels`,
+									headers: BASE_HEADERS,
+								},
+							)) as JsonObject;
+
+							const forwardResults = (response.results as JsonObject[] | undefined) ?? [];
+							const reverseResults =
+								(reverseResponse.results as JsonObject[] | undefined) ?? [];
+
+							// HubSpot pairs each direction of a label under adjacent type IDs
+							// (even/odd), one ID apart — the forward and reverse entries always
+							// share a category, so that pairing (not just the ID) confirms a match.
+							response.results = forwardResults.map((entry) => {
+								const typeId = entry.typeId as number;
+								const reverseTypeId = typeId % 2 === 0 ? typeId - 1 : typeId + 1;
+								const match = reverseResults.find(
+									(r) => r.typeId === reverseTypeId && r.category === entry.category,
+								);
+
+								const { category, label, fromObjectTypeId, toObjectTypeId, ...rest } =
+									entry;
+								delete rest.typeId;
+								return {
+									category,
+									typeId,
+									label,
+									reverseTypeId,
+									reverseLabel: match ? (match.label ?? null) : null,
+									fromObjectTypeId,
+									toObjectTypeId,
+									...rest,
+								};
+							});
+						}
+
 						returnData.push({ json: response, pairedItem: { item: i } });
 					}
 				}
@@ -387,6 +439,7 @@ export class HubspotApi implements INodeType {
 
 								const withFields = rawResults.map((rawResult) => ({
 									...rawResult,
+									formId: formGuid,
 									fields: buildFormSubmissionFields(
 										(rawResult.values as FormSubmissionValue[] | undefined) ?? [],
 									),
@@ -439,6 +492,7 @@ export class HubspotApi implements INodeType {
 
 							const withFields = rawResults.map((rawResult) => ({
 								...rawResult,
+								formId: formGuid,
 								fields: buildFormSubmissionFields(
 									(rawResult.values as FormSubmissionValue[] | undefined) ?? [],
 								),
@@ -948,6 +1002,7 @@ export class HubspotApi implements INodeType {
 							let after: string | undefined;
 							const allResults: JsonObject[] = [];
 							let lastPaging: JsonObject | undefined;
+							let lastTotal: number | undefined;
 
 							do {
 								const pageBody: JsonObject = {
@@ -982,12 +1037,13 @@ export class HubspotApi implements INodeType {
 								pageCount++;
 								const paging = response.paging as JsonObject | undefined;
 								lastPaging = paging;
+								lastTotal = response.total as number | undefined;
 								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
 							} while (after && pageCount < maxPages);
 
 							if (returnAllMode === 'allInOne') {
 								returnData.push({
-									json: { results: allResults, paging: lastPaging ?? null },
+									json: { total: lastTotal ?? null, results: allResults, paging: lastPaging ?? null },
 									pairedItem: { item: i },
 								});
 							}

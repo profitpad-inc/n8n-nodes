@@ -198,4 +198,20 @@ export const associationDescription: INodeProperties[] = [
 			},
 		},
 	},
+
+	// ── READ LABELS ────────────────────────────────────────────────────────────
+	{
+		displayName: 'Include Reverse Labels',
+		name: 'assocIncludeReverseLabels',
+		type: 'boolean',
+		default: false,
+		description:
+			'Whether to also fetch labels for the opposite direction (To Object Type → From Object Type) and merge each label with its reverse counterpart\'s type ID and text as <code>reverseTypeId</code> / <code>reverseLabel</code>',
+		displayOptions: {
+			show: {
+				resource: ['associations'],
+				operation: ['assocReadLabels'],
+			},
+		},
+	},
 ];

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### HubSpot (Associations → Read Labels null type IDs fix + reverse labels)
+
+- Associations → Read Labels now calls `/crm/v4/associations/{fromObjectType}/{toObjectType}/labels`
+  instead of the dated `/crm/associations/2026-03/.../labels` endpoint. The dated endpoint returns
+  `fromObjectTypeId` / `toObjectTypeId` as `null` for this specific call; the stable v4 endpoint
+  returns the real values for the same object pairing. Every other Associations operation is
+  unaffected and still uses the dated base path.
+- Added an **Include Reverse Labels** toggle to Read Labels. When on, a second call fetches labels
+  for the opposite direction (To → From) and each result gains `reverseTypeId` / `reverseLabel`,
+  matched via HubSpot's even/odd adjacent-type-ID pairing convention and confirmed by category.
+
+### HubSpot / HubSpot Trigger (Search allInOne → `total`)
+
+- Objects → Search, and the Trigger's CRM-Records search-backed **Trigger On**
+  options (New Records, Updated Records, New or Updated Records, and Property
+  Changed), now include a `total` count as the first key when **Return All**
+  is on and **Return All Mode** is **All Results as 1 Item**: `{ total,
+  results, paging? }`. `total` comes from HubSpot's search response on the
+  last page fetched. Plain List/Owners endpoints and Form Submissions don't
+  get this, since their underlying HubSpot endpoints don't return a `total`.
+
 ### HubSpot (Forms → new resource)
 
 - Added a **Forms** resource to the HubSpot action node with two operations:

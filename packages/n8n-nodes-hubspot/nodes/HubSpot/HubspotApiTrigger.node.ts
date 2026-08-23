@@ -701,6 +701,7 @@ export class HubspotApiTrigger implements INodeType {
 		const allResults: JsonObject[] = [];
 		let after: string | undefined;
 		let pageCount = 0;
+		let lastTotal: number | undefined;
 
 		try {
 			do {
@@ -728,6 +729,7 @@ export class HubspotApiTrigger implements INodeType {
 
 				pageCount++;
 				const paging = response.paging as JsonObject | undefined;
+				lastTotal = response.total as number | undefined;
 				after = (paging?.next as JsonObject | undefined)?.after as
 					| string
 					| undefined;
@@ -742,7 +744,9 @@ export class HubspotApiTrigger implements INodeType {
 
 		if (!isPropertyChangedMode) {
 			if (returnAllMode === 'allInOne') {
-				const outputItem: INodeExecutionData = { json: { results: allResults } };
+				const outputItem: INodeExecutionData = {
+					json: { total: lastTotal ?? null, results: allResults },
+				};
 				return [[outputItem]];
 			}
 
@@ -852,7 +856,7 @@ export class HubspotApiTrigger implements INodeType {
 		if (matchedResults.length === 0) return null;
 
 		if (returnAllMode === 'allInOne') {
-			return [[{ json: { results: matchedResults } }]];
+			return [[{ json: { total: lastTotal ?? null, results: matchedResults } }]];
 		}
 
 		return [matchedResults.map((result) => ({ json: result }))];
