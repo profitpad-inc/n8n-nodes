@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### HubSpot (Marketing Events → new resource)
+
+- Added a **Marketing Events** resource, wrapping HubSpot's Marketing Events v3 API
+  (`/marketing/v3/marketing-events`). Read-only for now:
+  - **Get** (`GET .../marketing-events/{objectId}`) — a required **HubSpot Event ID** field, no
+    additional options.
+  - **List** (`GET .../marketing-events`) — the usual **Return All** / **Limit** (default 100) /
+    **Max Pages** / **Return All Mode** convention, with `after` and Milliseconds Between Items
+    under Additional Options.
+  - **Get Participations Counts** / **Get Participations Breakdown**
+    (`GET .../participations/{objectId}` or `.../participations/{externalAccountId}/{externalEventId}`,
+    the latter with `/breakdown` appended) — an **Event Identifier Mode** toggle picks between a
+    **HubSpot Event ID** field and an **External Account ID** / **External Event ID** pair.
+    Counts is a single request; Breakdown shares List's Return All convention, with **State**
+    (Registered/Cancelled/Attended/No Show) and **Contact Identifier** filters under Additional
+    Options.
+  - **HubSpot Event ID** and **External Event ID** are `resourceLocator` fields ("From List" /
+    "ID"), backed by two new `listSearch` methods (`searchMarketingEvents`,
+    `searchMarketingEventExternalEventIds` in `helpers.ts`) that page through the List endpoint,
+    cache the result per credential (2-minute TTL, same convention as the existing property
+    cache), and sort by `startDateTime` descending (events with no parseable start time sort
+    last). They're `resourceLocator`s rather than this codebase's usual plain `options` dropdown
+    specifically so that order survives to the UI — a plain `options` field gets re-sorted
+    alphabetically by name for display no matter what order `loadOptions` returns, which silently
+    undid the date sort; a resourceLocator's "From List" mode shows `listSearch` results as-is.
+    Both search methods also support the resourceLocator's live search box (case-insensitive
+    match on event name or ID). **External Account ID** is a plain text field, not a dropdown —
+    HubSpot's event objects don't expose that field anywhere in the API, so there's no way to
+    list the values that would go in it.
+- This was originally going to be an **Events** object type nested inside a broader **Marketing**
+  resource alongside Forms (mirroring Owners' `users`/`owners` split), but n8n's node-creator
+  actions panel only ever discovers the *first* `operation` property it finds for a given
+  resource — it doesn't look at any further `displayOptions` conditions, and doesn't merge a
+  second `operation` property for the same resource. Objects and Owners get away with an
+  identical two-`operation`-properties-per-resource pattern because their two option lists
+  overlap almost completely; Forms and Events shared zero operation values, so Events'
+  4 operations were entirely invisible in the actions panel (while still working fine once
+  manually configured). Splitting Marketing Events out into its own top-level resource — leaving
+  **Forms** as a standalone resource again, unchanged from before — sidesteps the limitation.
+
 ### HubSpot (Associations → Batch Read Output Mode)
 
 - Added an **Output Mode** dropdown to Associations → Batch Read: **All Results as 1 Item**,

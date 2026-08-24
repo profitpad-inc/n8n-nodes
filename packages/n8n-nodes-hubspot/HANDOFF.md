@@ -30,6 +30,7 @@ released version in `package.json` is `0.1.43`.
 | `nodes/HubSpot/descriptions/OwnerDescription.ts` | Owners resource UI (Users + Owners branches) |
 | `nodes/HubSpot/descriptions/PropertyDescription.ts` | Properties resource UI |
 | `nodes/HubSpot/descriptions/FormDescription.ts` | Forms resource UI |
+| `nodes/HubSpot/descriptions/MarketingEventDescription.ts` | Marketing Events resource UI |
 
 Base paths, all defined at the top of `HubspotApi.node.ts`:
 
@@ -41,6 +42,7 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 | `PROPERTIES_BASE_PATH` | `/crm/properties/2026-03` |
 | `USERS_OBJECT_PATH` | `/crm/v3/objects/users` |
 | `OWNERS_BASE_PATH` (helpers) | `/crm/v3/owners` |
+| `MARKETING_EVENTS_BASE_PATH` | `/marketing/v3/marketing-events` |
 
 ---
 
@@ -67,8 +69,8 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 - Every output item carries `pairedItem: { item: i }`
 
 ### Resources
-Five resources, selected by the top-level **Resource** dropdown: **Associations**, **Forms**,
-**Objects** (default), **Owners**, **Properties**.
+Six resources, selected by the top-level **Resource** dropdown: **Associations**, **Forms**,
+**Marketing Events**, **Objects** (default), **Owners**, **Properties**.
 
 ---
 
@@ -276,6 +278,78 @@ two forms endpoints (the same ones the Form Trigger uses).
 
 ---
 
+## Resource: Marketing Events
+
+Read-only. Wraps HubSpot's Marketing Events v3 API (`MARKETING_EVENTS_BASE_PATH`,
+`/marketing/v3/marketing-events`). An event's HubSpot-native ID is `objectId`; events created by
+an integration (Zoom, Eventbrite, etc.) also carry an `externalEventId`, but **not** an
+`externalAccountId` — that field isn't part of the event object HubSpot returns anywhere, so
+there's no endpoint to enumerate it (confirmed against HubSpot's docs; see below).
+
+This was originally an "Events" object type nested (via an `objectType` dropdown) inside a single
+"Marketing" resource alongside Forms, mirroring the Owners resource's `users`/`owners` split. It
+was split into its own top-level resource instead: n8n's node-creator "actions" panel picks the
+*first* property named `operation` whose `displayOptions.show.resource` includes the current
+resource value — it does **not** look at any other `show` key (like `objectType`), and does not
+merge multiple `operation` properties for the same resource. With two `operation` properties both
+scoped to `resource: ['marketing']` (Forms' and Events'), only the first (Forms, 2 operations) was
+ever found; Events' 4 operations were completely invisible in the actions panel, even though they
+worked fine once manually configured in the canvas. Objects and Owners get away with the same
+"two `operation` properties, one resource" pattern only because their two lists overlap almost
+entirely (Objects: merge-eligible types' list is a superset of the other, only adding `Merge`;
+Owners: `users`/`owners` share the exact same `get`/`list` values) — Forms and Events share zero
+operation values, so the gap was total instead of one missing action. Splitting into separate
+resources sidesteps the picker limitation entirely, at the cost of one extra top-level Resource
+entry.
+
+| Operation | Value | Method | URL |
+|---|---|---|---|
+| Get | `get` | GET | `/marketing/v3/marketing-events/{objectId}` |
+| List | `list` | GET | `/marketing/v3/marketing-events` |
+| Get Participations Counts | `participationsCounts` | GET | `/marketing/v3/marketing-events/participations/{objectId}` or `/participations/{externalAccountId}/{externalEventId}` |
+| Get Participations Breakdown | `participationsBreakdown` | GET | as above + `/breakdown` |
+
+- **Get** takes a required **HubSpot Event ID** field — a `resourceLocator` ("From List" /
+  "ID"), backed by the `searchMarketingEvents` `listSearch` method in `helpers.ts` — no
+  additional options.
+- **List** follows the usual **Return All** / **Limit** (default 100) / **Max Pages** / **Return
+  All Mode** convention, paginating on `paging.next.after` the same way every other v3 list
+  endpoint in this node does (HubSpot's own docs don't spell out the list endpoint's query params
+  or paging shape, so this assumes the standard v3 convention rather than one confirmed against a
+  live account). Additional Options carries `after` and Milliseconds Between Items.
+- **Get Participations Counts** and **Get Participations Breakdown** share an **Event Identifier
+  Mode** dropdown (default **HubSpot Event ID**):
+  - **HubSpot Event ID** mode shows the same `searchMarketingEvents`-backed resourceLocator as
+    Get, and calls `.../participations/{objectId}` (or `.../{objectId}/breakdown`).
+  - **External ID** mode shows an **External Account ID** plain text field (see below) and an
+    **External Event ID** resourceLocator (`searchMarketingEventExternalEventIds` `listSearch` —
+    every distinct, non-null `externalEventId` found across the account's events, **not**
+    filtered by the chosen External Account ID, since that field isn't available to
+    cross-reference against), and calls `.../participations/{externalAccountId}/{externalEventId}`.
+  - Counts is a single GET with no pagination, returning HubSpot's `{ attended, registered,
+    cancelled, noShows }` shape as-is.
+  - Breakdown shares List's **Return All** / **Limit** / **Max Pages** / **Return All Mode**
+    parameters. Its own Additional Options carries `after`, **State** (`REGISTERED` /
+    `CANCELLED` / `ATTENDED` / `NO_SHOW`, defaults to `REGISTERED` only because the field's
+    static default has to be one of its listed options per this project's lint rules — it has no
+    effect unless the user actually adds the option), **Contact Identifier** (a HubSpot contact
+    ID or email), and Milliseconds Between Items.
+- **External Account ID has no dropdown, on purpose**: HubSpot's Marketing Events `Get`/`List`
+  response (confirmed via HubSpot's own docs and a real response example) includes `objectId`,
+  `externalEventId`, `eventName`, `appInfo` (`{ id, name }`), etc., but never `externalAccountId`
+  — there is no endpoint that returns or enumerates it. The field is a plain string input with a
+  description explaining this, rather than a dropdown that would always come back empty.
+- **HubSpot Event ID and External Event ID are `resourceLocator` fields, not this codebase's usual
+  `options`/`loadOptionsMethod` dropdowns.** A plain `options` field's list gets re-ordered
+  alphabetically by name for display regardless of the order `loadOptions` returns (confirmed by
+  testing — sorting by `startDateTime` in the loadOptions method had no visible effect); a
+  `resourceLocator`'s "From List" mode renders its `listSearch` method's results as-is, which is
+  the only way to keep the startDateTime-descending order visible in the UI. Both search methods
+  (`searchMarketingEvents`, `searchMarketingEventExternalEventIds` in `helpers.ts`) also support
+  the resourceLocator's live search box, filtering case-insensitively on event name or ID.
+
+---
+
 ## Resource: Associations
 
 Endpoints hang off `/crm/v4/associations/{fromObjectType}/{toObjectType}`. **From Object
@@ -433,6 +507,23 @@ Endpoints hang off `/crm/properties/2026-03/{objectType}` (Object Type is a real
   object type from an association label ("Note to contact" → `0-1`) so the To Object Type never
   has to be asked for twice. Returns `''` for target kinds with no dropdown entry (e.g.
   Appointments), which just means the ID Property lookup isn't offered there.
+- `fetchMarketingEvents()` (private, cached) — pages through `/marketing/v3/marketing-events` the
+  same way `getForms` pages through `/marketing/v3/forms`, capped at
+  `MARKETING_EVENTS_LIST_MAX_PAGES` (50), then sorts the combined list by `startDateTime`
+  descending (events with no parseable `startDateTime` sort last). Cached per credential (keyed
+  by credential ID only — there's no per-object-type split here), same `PROPERTIES_CACHE_TTL_MS`
+  (2 minutes) and evict-on-failure behavior as the property cache above, so opening the "HubSpot
+  Event ID" / "External Event ID" search box repeatedly doesn't re-page through the whole account
+  every time. Backs `searchMarketingEvents` (objectId → "HubSpot Event ID" resourceLocator, used
+  by Marketing Events' Get and Participations Counts/Breakdown) and
+  `searchMarketingEventExternalEventIds` (every distinct non-null `externalEventId` found →
+  "External Event ID" resourceLocator, used by Participations Counts/Breakdown in External ID
+  mode; the dedupe keeps whichever event sorted first for a given externalEventId, so ties keep
+  the most-recently-started one). Both are `methods.listSearch` entries, not `loadOptions` — see
+  Resource: Marketing Events above for why — and both filter case-insensitively on the
+  resourceLocator's search text against event name or ID, in addition to inheriting the
+  startDateTime-descending order as-is. There's no equivalent lookup for External Account ID —
+  see Resource: Marketing Events above for why.
 - `resolveUserIdFromOwnerId`, `findOwnerByField`, `resolveUsersLookup` — the Owners/Users
   lookup helpers described above.
 - Exported constants: `CONTACTS_OBJECT_TYPE` (`'0-1'`), `USERS_OBJECT_TYPE` (`'0-115'`),
@@ -634,12 +725,13 @@ search/filter capability, so this branch has its own field set and its own `poll
 
 ## What's next (suggested)
 
-Objects, Associations, Owners, Properties, and Forms resources, plus the polling Trigger's CRM
-Records (including Property Changed mode) and Form Submitted Trigger On options, are all
-implemented. Remaining ideas:
+Objects, Associations, Owners, Properties, Forms, and Marketing Events resources, plus the
+polling Trigger's CRM Records (including Property Changed mode) and Form Submitted Trigger On
+options, are all implemented. Remaining ideas:
 
 1. **Lists resource** — HubSpot lists API.
-2. **Events resource** — HubSpot events API.
+2. **Marketing Events write operations** — Create/Update/Cancel/Complete/attendance
+   subscriber-state endpoints. Currently read-only (Get/List/Participations Counts/Breakdown).
 3. Import the Trigger's object type list from `OBJECT_TYPE_OPTIONS` instead of duplicating it.
 
 ---

@@ -1,6 +1,7 @@
 import {
 	IExecuteFunctions,
 	ILoadOptionsFunctions,
+	INodeListSearchResult,
 	INodePropertyOptions,
 	IPollFunctions,
 	JsonObject,
@@ -602,6 +603,153 @@ export async function getForms(this: ILoadOptionsFunctions): Promise<INodeProper
 		.filter((form) => !form.archived)
 		.map((form) => ({ name: form.name, value: form.id }))
 		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+interface HubSpotMarketingEventSummary {
+	objectId: string;
+	eventName?: string;
+	externalEventId?: string | null;
+	startDateTime?: string | null;
+}
+
+const MARKETING_EVENTS_BASE_PATH = '/marketing/v3/marketing-events';
+const MARKETING_EVENTS_LIST_MAX_PAGES = 50;
+
+// Same rationale as the property cache above: re-fetching and re-sorting
+// every marketing event in the account on every keystroke of the "HubSpot
+// Event ID" / "External Event ID" search fields would be wasteful and slow.
+// Keyed by credential only (there's no per-object-type split here, unlike
+// the property cache), same TTL and evict-on-failure behavior.
+const marketingEventsCache = new Map<
+	string,
+	{ promise: Promise<HubSpotMarketingEventSummary[]>; expiresAt: number }
+>();
+
+/**
+ * Every marketing event in the account, paginated the same way getForms()
+ * pages through /marketing/v3/forms, sorted by startDateTime descending
+ * (events with no parseable startDateTime sort last). Shared by the
+ * "HubSpot Event ID" and "External Event ID" resourceLocator search methods
+ * below — externalAccountId isn't a field HubSpot returns on the event
+ * object itself, so there's no way to build an "External Account ID" search
+ * the same way; that field is a plain text input instead (see
+ * MarketingEventDescription.ts).
+ *
+ * These two fields use `type: 'resourceLocator'` / `methods.listSearch`
+ * rather than this codebase's usual `type: 'options'` / `methods.loadOptions`
+ * specifically so this sort order survives to the UI: a plain options
+ * dropdown's list gets re-ordered alphabetically by name before display,
+ * discarding whatever order loadOptions returned; a resourceLocator's list
+ * mode renders `listSearch` results as-is.
+ */
+async function fetchMarketingEvents(
+	this: ILoadOptionsFunctions,
+): Promise<HubSpotMarketingEventSummary[]> {
+	const credentialId = this.getNode().credentials?.hubspotApi?.id ?? 'unknown';
+
+	const cached = marketingEventsCache.get(credentialId);
+	if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+	const promise = (async () => {
+		const events: HubSpotMarketingEventSummary[] = [];
+		let after: string | undefined;
+		let pageCount = 0;
+
+		do {
+			const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+				method: 'GET',
+				url: buildHubSpotUrl(HUBSPOT_BASE, MARKETING_EVENTS_BASE_PATH, { limit: 100, after }),
+				headers: { accept: 'application/json' },
+			})) as { results?: HubSpotMarketingEventSummary[]; paging?: { next?: { after?: string } } };
+
+			events.push(...(response.results ?? []));
+			pageCount++;
+			after = response.paging?.next?.after;
+		} while (after && pageCount < MARKETING_EVENTS_LIST_MAX_PAGES);
+
+		events.sort((a, b) => {
+			const aTime = a.startDateTime ? Date.parse(a.startDateTime) : NaN;
+			const bTime = b.startDateTime ? Date.parse(b.startDateTime) : NaN;
+			const aValid = !Number.isNaN(aTime);
+			const bValid = !Number.isNaN(bTime);
+			if (aValid && bValid) return bTime - aTime;
+			if (aValid) return -1;
+			if (bValid) return 1;
+			return 0;
+		});
+
+		return events;
+	})();
+
+	marketingEventsCache.set(credentialId, { promise, expiresAt: Date.now() + PROPERTIES_CACHE_TTL_MS });
+	promise.catch(() => marketingEventsCache.delete(credentialId));
+
+	return promise;
+}
+
+/**
+ * "HubSpot Event ID" resourceLocator search for the Marketing Events resource
+ * (Get, and Participations Counts/Breakdown in HubSpot ID mode), ordered by
+ * startDateTime descending. `filter` (the resourceLocator's search box text)
+ * matches case-insensitively against the event name or ID.
+ */
+export async function searchMarketingEvents(
+	this: ILoadOptionsFunctions,
+	filter?: string,
+): Promise<INodeListSearchResult> {
+	const events = await fetchMarketingEvents.call(this);
+	const filterLower = filter?.trim().toLowerCase();
+
+	const results = events
+		.filter((event) => {
+			if (!filterLower) return true;
+			const name = (event.eventName ?? '').toLowerCase();
+			return name.includes(filterLower) || event.objectId.includes(filterLower);
+		})
+		.map((event) => ({
+			name: `${event.eventName ?? event.objectId} (${event.objectId})`,
+			value: event.objectId,
+		}));
+
+	return { results };
+}
+
+/**
+ * "External Event ID" resourceLocator search for the Marketing Events
+ * resource's Participations Counts/Breakdown in External ID mode — every
+ * distinct, non-null externalEventId found among the account's marketing
+ * events, ordered by startDateTime descending (via fetchMarketingEvents; the
+ * first occurrence of a given externalEventId wins the dedupe, so ties keep
+ * whichever event sorted first). Not scoped to the chosen External Account
+ * ID, since that field isn't part of the event object HubSpot returns and so
+ * can't be cross-referenced. `filter` matches case-insensitively against the
+ * event name or external event ID.
+ */
+export async function searchMarketingEventExternalEventIds(
+	this: ILoadOptionsFunctions,
+	filter?: string,
+): Promise<INodeListSearchResult> {
+	const events = await fetchMarketingEvents.call(this);
+	const filterLower = filter?.trim().toLowerCase();
+	const seen = new Set<string>();
+	const results: INodeListSearchResult['results'] = [];
+
+	for (const event of events) {
+		if (!event.externalEventId || seen.has(event.externalEventId)) continue;
+		if (filterLower) {
+			const name = (event.eventName ?? '').toLowerCase();
+			const matches =
+				name.includes(filterLower) || event.externalEventId.toLowerCase().includes(filterLower);
+			if (!matches) continue;
+		}
+		seen.add(event.externalEventId);
+		results.push({
+			name: `${event.eventName ?? event.externalEventId} (${event.externalEventId})`,
+			value: event.externalEventId,
+		});
+	}
+
+	return { results };
 }
 
 export interface FormSubmissionValue {
