@@ -311,6 +311,14 @@ export const marketingEventDescription: INodeProperties[] = [
 					"Filter the breakdown down to a single contact, identified by either their HubSpot contact ID or their email address",
 			},
 			{
+				displayName: 'Created After',
+				name: 'createdAfter',
+				type: 'dateTime',
+				default: '',
+				description:
+					'Only return participation records created after this date and time. This endpoint returns records newest-first (by createdAt), so as soon as a record at or before this time is reached, it (and every one after it) is dropped, and Return All pagination stops.',
+			},
+			{
 				displayName: 'State',
 				name: 'state',
 				type: 'options',

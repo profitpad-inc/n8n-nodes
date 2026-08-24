@@ -15,9 +15,9 @@ import {
 	buildHubSpotUrl,
 	enrichSubmissionsWithAssociations,
 	getAllProperties,
-	getForms,
 	getSearchFilterProperties,
 	getSearchOperators,
+	searchForms,
 } from './helpers';
 import {
 	FilterGroup,
@@ -93,7 +93,7 @@ async function pollFormSubmissions(
 	const lastPollTime = staticData.lastPollTime as number | undefined;
 	const isManualMode = this.getMode() === 'manual';
 
-	const formGuid = this.getNodeParameter('formGuid') as string;
+	const formGuid = this.getNodeParameter('formGuid', undefined, { extractValue: true }) as string;
 	const returnAllMode = this.getNodeParameter('returnAllMode') as string;
 	const maxPages = Math.max(1, Math.floor(this.getNodeParameter('maxPages') as number));
 
@@ -200,7 +200,7 @@ export class HubspotApiTrigger implements INodeType {
 		version: 1,
 		description: 'Polls HubSpot CRM records or form submissions for changes on a schedule.',
 		subtitle:
-			'={{$parameter["triggerOn"] === "formSubmitted" ? ("Form: " + ($parameter["formGuid"] || "")) : ($parameter["objectType"] + " – " + $parameter["triggerOn"])}}',
+			'={{$parameter["triggerOn"] === "formSubmitted" ? ("Form: " + (($parameter["formGuid"] && $parameter["formGuid"].value) || "")) : ($parameter["objectType"] + " – " + $parameter["triggerOn"])}}',
 		defaults: {
 			name: 'HubSpot Trigger',
 		},
@@ -342,17 +342,28 @@ export class HubspotApiTrigger implements INodeType {
 
 			// ── Form (Form Submitted) ────────────────────────────────────────────────
 			{
-				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
 				displayName: 'Form',
 				name: 'formGuid',
-				type: 'options',
+				type: 'resourceLocator',
+				default: { mode: 'list', value: '' },
 				required: true,
-				typeOptions: {
-					loadOptionsMethod: 'getForms',
-				},
-				default: '',
-				description:
-					'The form to watch for new submissions. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				description: 'The form to watch for new submissions',
+				modes: [
+					{
+						displayName: 'From List',
+						name: 'list',
+						type: 'list',
+						typeOptions: {
+							searchListMethod: 'searchForms',
+							searchable: true,
+						},
+					},
+					{
+						displayName: 'ID',
+						name: 'id',
+						type: 'string',
+					},
+				],
 				displayOptions: {
 					show: { triggerOn: ['formSubmitted'] },
 				},
@@ -520,7 +531,9 @@ export class HubspotApiTrigger implements INodeType {
 			getSearchFilterProperties,
 			getSearchOperators,
 			getAllProperties,
-			getForms,
+		},
+		listSearch: {
+			searchForms,
 		},
 	};
 

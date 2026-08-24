@@ -43,17 +43,28 @@ export const formDescription: INodeProperties[] = [
 
 	// ── GET FORM SUBMISSIONS ──────────────────────────────────────────────────────
 	{
-		// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
 		displayName: 'Form',
 		name: 'formGuid',
-		type: 'options',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
 		required: true,
-		typeOptions: {
-			loadOptionsMethod: 'getForms',
-		},
-		default: '',
-		description:
-			'The form to retrieve submissions for. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+		description: 'The form to retrieve submissions for',
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				typeOptions: {
+					searchListMethod: 'searchForms',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'ID',
+				name: 'id',
+				type: 'string',
+			},
+		],
 		displayOptions: {
 			show: FORM_SUBMISSIONS_SHOW,
 		},

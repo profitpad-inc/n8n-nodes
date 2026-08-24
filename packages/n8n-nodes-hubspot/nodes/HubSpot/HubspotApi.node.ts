@@ -25,7 +25,6 @@ import {
 	getAssociationTargetObjectType,
 	getAssociationTypeIds,
 	getEnumerationProperties,
-	getForms,
 	getProperties,
 	getSearchFilterProperties,
 	getSearchOperators,
@@ -39,6 +38,7 @@ import {
 	isNotesObjectType,
 	OWNERS_BASE_PATH,
 	resolveUsersLookup,
+	searchForms,
 	searchMarketingEventExternalEventIds,
 	searchMarketingEvents,
 	UsersLookup,
@@ -80,7 +80,7 @@ export class HubspotApi implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle:
-			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : $parameter["resource"] === "forms" ? ($parameter["operation"] + ($parameter["formGuid"] ? (": " + $parameter["formGuid"]) : "")) : $parameter["resource"] === "marketingEvents" ? ($parameter["operation"] + (($parameter["marketingEventId"] && $parameter["marketingEventId"].value) ? (": " + $parameter["marketingEventId"].value) : "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
+			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : $parameter["resource"] === "forms" ? ($parameter["operation"] + (($parameter["formGuid"] && $parameter["formGuid"].value) ? (": " + $parameter["formGuid"].value) : "")) : $parameter["resource"] === "marketingEvents" ? ($parameter["operation"] + (($parameter["marketingEventId"] && $parameter["marketingEventId"].value) ? (": " + $parameter["marketingEventId"].value) : "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
 		description:
 			'Interact with HubSpot CRM objects. Docs: https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis',
 		usableAsTool: true,
@@ -161,9 +161,9 @@ export class HubspotApi implements INodeType {
 			getAssociationTypeIds,
 			getUserProperties,
 			getWritableUserProperties,
-			getForms,
 		},
 		listSearch: {
+			searchForms,
 			searchMarketingEvents,
 			searchMarketingEventExternalEventIds,
 		},
@@ -432,7 +432,9 @@ export class HubspotApi implements INodeType {
 
 					// ── GET FORM SUBMISSIONS ─────────────────────────────────────────
 					if (operation === 'getFormSubmissions') {
-						const formGuid = String(this.getNodeParameter('formGuid', i)).trim();
+						const formGuid = String(
+							this.getNodeParameter('formGuid', i, undefined, { extractValue: true }),
+						).trim();
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const submissionsOpts = this.getNodeParameter('submissionsOptions', i) as {
 							after?: string;
@@ -692,10 +694,15 @@ export class HubspotApi implements INodeType {
 								after?: string;
 								state?: string;
 								contactIdentifier?: string;
+								createdAfter?: string;
 								millisecondsBetweenItems?: number;
 							};
 
 							delayMs = opts.millisecondsBetweenItems ?? 50;
+
+							const createdAfterMs = opts.createdAfter
+								? Date.parse(opts.createdAfter)
+								: undefined;
 
 							if (returnAll) {
 								const maxPages = Math.max(
@@ -707,6 +714,7 @@ export class HubspotApi implements INodeType {
 								let pageCount = 0;
 								const allResults: JsonObject[] = [];
 								let lastPaging: JsonObject | undefined;
+								let reachedWatermark = false;
 
 								do {
 									const url = buildHubSpotUrl(HUBSPOT_BASE, breakdownPath, {
@@ -722,10 +730,24 @@ export class HubspotApi implements INodeType {
 										{ method: 'GET', url, headers: BASE_HEADERS },
 									)) as JsonObject;
 
-									const results = (response.results as JsonObject[] | undefined) ?? [];
+									let results = (response.results as JsonObject[] | undefined) ?? [];
+									if (createdAfterMs !== undefined) {
+										// Confirmed newest-first (createdAt descending), same as Forms'
+										// submissions, so once a page's entry is at or before Created
+										// After, every later page is too - drop it and stop paginating.
+										const kept: JsonObject[] = [];
+										for (const result of results) {
+											if (Date.parse(String(result.createdAt)) > createdAfterMs) {
+												kept.push(result);
+											} else {
+												reachedWatermark = true;
+											}
+										}
+										results = kept;
+									}
 
 									if (returnAllMode === 'eachPage') {
-										returnData.push({ json: response, pairedItem: { item: i } });
+										returnData.push({ json: { ...response, results }, pairedItem: { item: i } });
 									} else if (returnAllMode === 'eachResult') {
 										for (const result of results) {
 											returnData.push({ json: result, pairedItem: { item: i } });
@@ -740,7 +762,7 @@ export class HubspotApi implements INodeType {
 									after = (paging?.next as JsonObject | undefined)?.after as
 										| string
 										| undefined;
-								} while (after && pageCount < maxPages);
+								} while (after && pageCount < maxPages && !reachedWatermark);
 
 								if (returnAllMode === 'allInOne') {
 									returnData.push({
@@ -764,7 +786,14 @@ export class HubspotApi implements INodeType {
 									{ method: 'GET', url, headers: BASE_HEADERS },
 								)) as JsonObject;
 
-								returnData.push({ json: response, pairedItem: { item: i } });
+								let results = (response.results as JsonObject[] | undefined) ?? [];
+								if (createdAfterMs !== undefined) {
+									results = results.filter(
+										(result) => Date.parse(String(result.createdAt)) > createdAfterMs,
+									);
+								}
+
+								returnData.push({ json: { ...response, results }, pairedItem: { item: i } });
 							}
 						}
 					}

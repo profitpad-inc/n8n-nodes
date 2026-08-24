@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### HubSpot / HubSpot Trigger (Forms → Form field is now a resourceLocator)
+
+- **Form** (action node's Get Form Submissions, and the Trigger's Form Submitted mode) is now a
+  `resourceLocator` field ("From List" / "ID") instead of a plain `options` dropdown, backed by a
+  new `searchForms` `listSearch` method (`helpers.ts`) shared by both. The underlying form list
+  is cached per credential (2-minute TTL, same convention as the property cache) and sorted by
+  `updatedAt` descending, same reasoning as Marketing Events' HubSpot Event ID/External Event ID
+  fields: a plain `options` dropdown gets re-sorted alphabetically by name for display no matter
+  what order `loadOptions` returns, so sorting by `updatedAt` in the old `getForms` loadOptions
+  method had no visible effect. `searchForms` also supports the resourceLocator's live search box
+  (case-insensitive match on form name or ID).
+- **Breaking change**: this changes the stored parameter's shape from a plain string GUID to
+  `{ mode, value }`. Any workflow that already had a Form selected on either the action node or
+  the Trigger needs it re-picked once after upgrading.
+
+### HubSpot (Marketing Events → Get Participations Breakdown → Created After)
+
+- Added a **Created After** filter to Get Participations Breakdown's Additional Options, dropping
+  any result whose `createdAt` is at or before the given date/time — same behavior as Forms → Get
+  Form Submissions' **Submitted After**. This endpoint returns results newest-first by `createdAt`
+  (confirmed against a live account), so a Return All call stops paginating as soon as a page
+  contains a result at or before the watermark instead of fetching every page up to Max Pages.
+
 ### HubSpot (Marketing Events → new resource)
 
 - Added a **Marketing Events** resource, wrapping HubSpot's Marketing Events v3 API

@@ -564,45 +564,106 @@ interface HubSpotFormSummary {
 	id: string;
 	name: string;
 	archived?: boolean;
+	updatedAt?: string | null;
 }
 
 const FORMS_LIST_MAX_PAGES = 50;
 
+// Same rationale as the marketing events cache below: re-fetching and
+// re-sorting every form in the account on every keystroke of the "Form"
+// search field would be wasteful and slow.
+const formsCache = new Map<string, { promise: Promise<HubSpotFormSummary[]>; expiresAt: number }>();
+
 /**
  * Every form in the account, for the Form Trigger's Form picker and the
- * action node's Forms → Get Form Submissions Form picker. Uses the current
- * `marketing/v3/forms` endpoint (the old `forms/v2/forms` returned every form
- * in one call when `limit` was omitted; this one pages via `after`, so every
- * page is fetched here to keep the "every form" behaviour). `formTypes: all`
- * (lowercase — this endpoint's enum, unlike v2's `ALL`) is needed too, since
- * it otherwise filters out non-marketing forms (captured, flow, blog_comment).
- * Archived forms are excluded since they can't receive new submissions.
+ * action node's Forms → Get Form Submissions Form picker, sorted by
+ * `updatedAt` descending (forms with no parseable `updatedAt` sort last).
+ * Uses the current `marketing/v3/forms` endpoint (the old `forms/v2/forms`
+ * returned every form in one call when `limit` was omitted; this one pages
+ * via `after`, so every page is fetched here to keep the "every form"
+ * behaviour). `formTypes: all` (lowercase — this endpoint's enum, unlike
+ * v2's `ALL`) is needed too, since it otherwise filters out non-marketing
+ * forms (captured, flow, blog_comment). Archived forms are excluded since
+ * they can't receive new submissions.
+ *
+ * Both the Form Trigger and the action node use `type: 'resourceLocator'` /
+ * `methods.listSearch` for their "Form" field rather than this codebase's
+ * usual `type: 'options'` / `methods.loadOptions`, for the same reason as
+ * the marketing events search below: a plain options dropdown's list gets
+ * re-ordered alphabetically by name before display, discarding whatever
+ * order loadOptions returned; a resourceLocator's list mode renders
+ * `listSearch` results as-is.
  */
-export async function getForms(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-	const forms: HubSpotFormSummary[] = [];
-	let after: string | undefined;
-	let pageCount = 0;
+async function fetchForms(this: ILoadOptionsFunctions): Promise<HubSpotFormSummary[]> {
+	const credentialId = this.getNode().credentials?.hubspotApi?.id ?? 'unknown';
 
-	do {
-		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
-			method: 'GET',
-			url: buildHubSpotUrl(HUBSPOT_BASE, '/marketing/v3/forms', {
-				formTypes: 'all',
-				limit: 100,
-				after,
-			}),
-			headers: { accept: 'application/json' },
-		})) as { results?: HubSpotFormSummary[]; paging?: { next?: { after?: string } } };
+	const cached = formsCache.get(credentialId);
+	if (cached && cached.expiresAt > Date.now()) return cached.promise;
 
-		forms.push(...(response.results ?? []));
-		pageCount++;
-		after = response.paging?.next?.after;
-	} while (after && pageCount < FORMS_LIST_MAX_PAGES);
+	const promise = (async () => {
+		const forms: HubSpotFormSummary[] = [];
+		let after: string | undefined;
+		let pageCount = 0;
 
-	return forms
-		.filter((form) => !form.archived)
-		.map((form) => ({ name: form.name, value: form.id }))
-		.sort((a, b) => a.name.localeCompare(b.name));
+		do {
+			const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+				method: 'GET',
+				url: buildHubSpotUrl(HUBSPOT_BASE, '/marketing/v3/forms', {
+					formTypes: 'all',
+					limit: 100,
+					after,
+				}),
+				headers: { accept: 'application/json' },
+			})) as { results?: HubSpotFormSummary[]; paging?: { next?: { after?: string } } };
+
+			forms.push(...(response.results ?? []));
+			pageCount++;
+			after = response.paging?.next?.after;
+		} while (after && pageCount < FORMS_LIST_MAX_PAGES);
+
+		const activeForms = forms.filter((form) => !form.archived);
+
+		activeForms.sort((a, b) => {
+			const aTime = a.updatedAt ? Date.parse(a.updatedAt) : NaN;
+			const bTime = b.updatedAt ? Date.parse(b.updatedAt) : NaN;
+			const aValid = !Number.isNaN(aTime);
+			const bValid = !Number.isNaN(bTime);
+			if (aValid && bValid) return bTime - aTime;
+			if (aValid) return -1;
+			if (bValid) return 1;
+			return 0;
+		});
+
+		return activeForms;
+	})();
+
+	formsCache.set(credentialId, { promise, expiresAt: Date.now() + PROPERTIES_CACHE_TTL_MS });
+	promise.catch(() => formsCache.delete(credentialId));
+
+	return promise;
+}
+
+/**
+ * "Form" resourceLocator search for the Form Trigger's Form Submitted mode
+ * and the action node's Forms → Get Form Submissions, ordered by `updatedAt`
+ * descending. `filter` (the resourceLocator's search box text) matches
+ * case-insensitively against the form name or ID.
+ */
+export async function searchForms(
+	this: ILoadOptionsFunctions,
+	filter?: string,
+): Promise<INodeListSearchResult> {
+	const forms = await fetchForms.call(this);
+	const filterLower = filter?.trim().toLowerCase();
+
+	const results = forms
+		.filter((form) => {
+			if (!filterLower) return true;
+			return form.name.toLowerCase().includes(filterLower) || form.id.includes(filterLower);
+		})
+		.map((form) => ({ name: form.name, value: form.id }));
+
+	return { results };
 }
 
 interface HubSpotMarketingEventSummary {
@@ -626,7 +687,7 @@ const marketingEventsCache = new Map<
 >();
 
 /**
- * Every marketing event in the account, paginated the same way getForms()
+ * Every marketing event in the account, paginated the same way fetchForms()
  * pages through /marketing/v3/forms, sorted by startDateTime descending
  * (events with no parseable startDateTime sort last). Shared by the
  * "HubSpot Event ID" and "External Event ID" resourceLocator search methods

@@ -245,8 +245,8 @@ two forms endpoints (the same ones the Form Trigger uses).
   ensures non-`hubspot`-type forms (`captured`, `flow`, `blog_comment`) aren't silently dropped.
   Each `results` entry (keyed by `id`, not the old `guid`) is pushed as its own output item.
   Capped at `FORMS_LIST_MAX_PAGES` (50) as a runaway-loop safety valve.
-- **Get Form Submissions** takes a **Form** dropdown (the shared `getForms` loadOptions, also
-  used by the Trigger's Form Submitted mode) plus the same **Return All** / **Limit** /
+- **Get Form Submissions** takes a **Form** field (the shared `searchForms` `listSearch` method,
+  also used by the Trigger's Form Submitted mode) plus the same **Return All** / **Limit** /
   **Max Pages** / **Return All Mode** convention as Objects → List and Owners → List — this
   endpoint does support real `after`-cursor pagination, capped at 50 per page. Additional
   Options carries `after` (manual cursor for non-Return-All calls), **Submitted After**, and the
@@ -275,6 +275,15 @@ two forms endpoints (the same ones the Form Trigger uses).
   incident: a 2-page / ~100-submission Return All call started getting 429s). Submitted After
   filtering happens on the raw page *before* enrichment, so filtered-out submissions never
   trigger a lookup.
+- **Form is a `resourceLocator`, not a plain `options` dropdown** — same reasoning as Marketing
+  Events' HubSpot Event ID/External Event ID fields below: a plain `options` dropdown gets
+  re-sorted alphabetically by name for display no matter what order `loadOptions` returns, so
+  sorting by `updatedAt` in the loadOptions method itself had no visible effect. A
+  `resourceLocator`'s "From List" mode shows its `listSearch` method's results as-is. This
+  changed the stored parameter shape from a plain string GUID to `{ mode, value }` on both the
+  action node's Get Form Submissions and the Trigger's Form Submitted mode (the same
+  `searchForms` method backs both) — a **breaking change** for any workflow that already had a
+  Form selected before this change; those need the Form re-picked once after upgrading.
 
 ---
 
@@ -333,7 +342,15 @@ entry.
     `CANCELLED` / `ATTENDED` / `NO_SHOW`, defaults to `REGISTERED` only because the field's
     static default has to be one of its listed options per this project's lint rules — it has no
     effect unless the user actually adds the option), **Contact Identifier** (a HubSpot contact
-    ID or email), and Milliseconds Between Items.
+    ID or email), **Created After**, and Milliseconds Between Items.
+  - **Created After** filters out any result whose `createdAt` is at or before the given
+    date/time — same idea and same implementation as Forms → Get Form Submissions' Submitted
+    After. This endpoint returns results newest-first by `createdAt` (confirmed against a live
+    account, not documented by HubSpot), so a Return All call stops paginating as soon as a page
+    contains a result at or before the watermark — every later page would only be older. A
+    non-Return-All call just filters the single page it fetched; it doesn't fetch extra pages to
+    backfill the requested limit. Applies to all three Return All Modes (even `eachPage` reflects
+    the filtered `results` array, not the raw page).
 - **External Account ID has no dropdown, on purpose**: HubSpot's Marketing Events `Get`/`List`
   response (confirmed via HubSpot's own docs and a real response example) includes `objectId`,
   `externalEventId`, `eventName`, `appInfo` (`{ id, name }`), etc., but never `externalAccountId`
@@ -507,8 +524,15 @@ Endpoints hang off `/crm/properties/2026-03/{objectType}` (Object Type is a real
   object type from an association label ("Note to contact" → `0-1`) so the To Object Type never
   has to be asked for twice. Returns `''` for target kinds with no dropdown entry (e.g.
   Appointments), which just means the ID Property lookup isn't offered there.
+- `fetchForms()` (private, cached) — pages through `/marketing/v3/forms?formTypes=all` via `after`
+  until exhausted (capped at `FORMS_LIST_MAX_PAGES`), filters out archived forms, then sorts by
+  `updatedAt` descending (forms with no parseable `updatedAt` sort last). Cached per credential,
+  same `PROPERTIES_CACHE_TTL_MS` (2 minutes) and evict-on-failure behavior as the property cache
+  above. Backs `searchForms` (id → "Form" resourceLocator, shared by the action node's Forms →
+  Get Form Submissions and the Trigger's Form Submitted mode), which also filters
+  case-insensitively on the resourceLocator's search text against form name or ID.
 - `fetchMarketingEvents()` (private, cached) — pages through `/marketing/v3/marketing-events` the
-  same way `getForms` pages through `/marketing/v3/forms`, capped at
+  same way `fetchForms()` pages through `/marketing/v3/forms`, capped at
   `MARKETING_EVENTS_LIST_MAX_PAGES` (50), then sorts the combined list by `startDateTime`
   descending (events with no parseable `startDateTime` sort last). Cached per credential (keyed
   by credential ID only — there's no per-object-type split here), same `PROPERTIES_CACHE_TTL_MS`
@@ -628,11 +652,13 @@ Form submissions aren't a CRM object and go through an entirely different API fa
 search/filter capability, so this branch has its own field set and its own `poll()` path
 (`pollFormSubmissions()`), independent of the CRM Records branch above.
 
-- **Form** — a dropdown sourced from `getForms` (helpers.ts), which pages through `GET
-  /marketing/v3/forms?formTypes=all` via `after` until exhausted (capped at
-  `FORMS_LIST_MAX_PAGES`), since this endpoint doesn't return every form in one call just
-  because `limit` is omitted. Archived forms are filtered out. The same loadOptions backs the
-  action node's Forms → Get All Forms / Get Form Submissions.
+- **Form** — a `resourceLocator` field ("From List" / "ID") backed by `searchForms` (helpers.ts,
+  `methods.listSearch`), which pages through `GET /marketing/v3/forms?formTypes=all` via `after`
+  until exhausted (capped at `FORMS_LIST_MAX_PAGES`), since this endpoint doesn't return every
+  form in one call just because `limit` is omitted. Archived forms are filtered out; the result
+  is cached per credential and sorted by `updatedAt` descending — see Resource: Forms and the
+  Helpers section below for why it's a resourceLocator rather than a plain dropdown. The same
+  `searchForms` method backs the action node's Forms → Get Form Submissions.
 - `pollFormSubmissions()` calls `GET /form-integrations/v1/submissions/forms/{formGuid}` —
   HubSpot's legacy (and only) list-submissions endpoint. It has no since/after-a-date filter,
   only `limit` (max 50) and an opaque `after` paging cursor, and always returns submissions
