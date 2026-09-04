@@ -622,6 +622,18 @@ export const salesOrderDescription: INodeProperties[] = [
         default: '',
       },
       {
+        displayName: 'Order Type',
+        name: 'orderType',
+        type: 'options',
+        options: [
+          { name: 'Eclipse API', value: 'API' },
+          { name: 'Mobile Order Entry', value: 'MOE' },
+          { name: 'None', value: '' },
+        ],
+        default: '',
+        description: 'The origin/type of the sales order',
+      },
+      {
         displayName: 'Outside Salesperson',
         name: 'outsideSalesPerson',
         type: 'string',

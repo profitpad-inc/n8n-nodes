@@ -901,6 +901,7 @@ export class EclipseApi implements INodeType {
                 internalNotes?: string;
                 shippingInstructions?: string;
                 termsCode?: string;
+                orderType?: string;
               };
               const lines = parseJsonParameter<JsonObject[]>(this.getNodeParameter('salesOrderLines', i));
 
@@ -955,6 +956,7 @@ export class EclipseApi implements INodeType {
               if (options.internalNotes?.trim()) body.internalNotes = options.internalNotes.trim();
               if (options.shippingInstructions?.trim()) body.shippingInstructions = options.shippingInstructions.trim();
               if (options.termsCode?.trim()) body.termsCode = options.termsCode.trim();
+              if (options.orderType) body.orderType = options.orderType;
 
               if (lines) body.lines = lines;
             }
