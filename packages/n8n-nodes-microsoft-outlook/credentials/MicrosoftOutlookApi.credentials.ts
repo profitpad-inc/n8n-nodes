@@ -9,7 +9,7 @@ import type {
 export class MicrosoftOutlookApi implements ICredentialType {
 	name = 'microsoftOutlookApi';
 	displayName = 'Microsoft Outlook API';
-	icon = { light: 'file:../nodes/MicrosoftOutlook/microsoftOutlookIcon.svg', dark: 'file:../nodes/MicrosoftOutlook/microsoftOutlook.dark.svg' } as const;
+	icon = 'file:microsoftEntraIcon.png' as const;
 	documentationUrl = 'https://learn.microsoft.com/en-us/graph/auth-v2-service';
 
 	properties: INodeProperties[] = [

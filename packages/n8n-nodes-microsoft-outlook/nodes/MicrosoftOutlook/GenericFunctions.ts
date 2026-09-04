@@ -28,6 +28,9 @@ async function delay(ms: number): Promise<void> {
 /**
  * Performs a single Microsoft Graph request, transparently retrying on 429 by
  * honouring the `Retry-After` header (falls back to 5s when it's missing).
+ * `body` is only relevant for write methods (POST/PATCH/...) — Graph actions
+ * like `sendMail` return `202 Accepted` with no response body at all, which
+ * is normalized to `{}` rather than returned as-is.
  */
 export async function microsoftGraphApiRequest(
 	this: IExecuteFunctions,
@@ -35,19 +38,21 @@ export async function microsoftGraphApiRequest(
 	url: string,
 	qs: IDataObject = {},
 	itemIndex = 0,
+	body?: IDataObject,
 ): Promise<IDataObject> {
 	for (let attempt = 0; attempt < MAX_RATE_LIMIT_RETRIES; attempt++) {
 		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'microsoftOutlookApi', {
 			method,
 			url,
 			qs,
+			...(body !== undefined ? { body } : {}),
 			json: true,
 			returnFullResponse: true,
 			ignoreHttpStatusErrors: true,
 		})) as { statusCode: number; headers: IDataObject; body: IDataObject };
 
 		if (response.statusCode >= 200 && response.statusCode < 300) {
-			return response.body;
+			return response.body && typeof response.body === 'object' ? response.body : {};
 		}
 
 		if (response.statusCode === 429) {
@@ -77,10 +82,11 @@ export interface PaginationOptions {
 }
 
 /**
- * Runs a Graph `.../messages` GET, following `@odata.nextLink` when `returnAll`
- * is set. Always waits `PAGE_DELAY_MS` between page fetches.
+ * Runs a Graph collection GET (messages, attachments, ...), following
+ * `@odata.nextLink` when `returnAll` is set. Always waits `PAGE_DELAY_MS`
+ * between page fetches.
  */
-export async function paginatedMessagesRequest(
+export async function paginatedGraphRequest(
 	this: IExecuteFunctions,
 	url: string,
 	qs: IDataObject,
@@ -117,4 +123,23 @@ export async function paginatedMessagesRequest(
 	}
 
 	return pages;
+}
+
+/**
+ * Fetches every page of a Graph collection (no user-facing limit — attachment
+ * lists are small in practice) and flattens their `value` arrays into one.
+ */
+export async function fetchAllGraphResults(
+	this: IExecuteFunctions,
+	url: string,
+	itemIndex: number,
+): Promise<IDataObject[]> {
+	const pages = await paginatedGraphRequest.call(
+		this,
+		url,
+		{},
+		{ returnAll: true, returnAllMode: 'allInOne', maxResults: 0 },
+		itemIndex,
+	);
+	return pages.flatMap((page) => (page.value as IDataObject[]) ?? []);
 }
