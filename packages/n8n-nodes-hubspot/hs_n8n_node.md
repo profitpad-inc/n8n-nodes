@@ -59,7 +59,7 @@ Manages associations between two CRM object types. Requires `fromObjectType` and
 | **Batch Delete** (`assocBatchDelete`) | Delete associations in bulk (max 1000 inputs) | `assocBatchDeleteBody`: JSON — `{ inputs: [{ from: {id}, to: [{id}] }] }` |
 | **Batch Create Default** (`assocBatchCreateDefault`) | Create default (unlabeled) associations in bulk (max 2000 inputs) | `assocBatchCreateDefaultBody`: JSON — `{ inputs: [{ from: {id}, to: {id} }] }` |
 | **Batch Create Labeled** (`assocBatchCreateLabeled`) | Create labeled associations in bulk (max 2000 inputs) | `assocBatchCreateLabeledBody`: JSON — `{ inputs: [{ from: {id}, to: {id}, types: [{associationCategory, associationTypeId}] }] }` |
-| **Read Labels** (`assocReadLabels`) | Retrieve all association labels/type IDs between the two object types | none beyond `fromObjectType`/`toObjectType` |
+| **List Labels** (`assocReadLabels`) | Retrieve all association labels/type IDs between the two object types | none beyond `fromObjectType`/`toObjectType` |
 
 ### 3.2 Resource: Objects
 

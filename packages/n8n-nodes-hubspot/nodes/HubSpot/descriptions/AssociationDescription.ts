@@ -40,10 +40,10 @@ export const associationDescription: INodeProperties[] = [
 				action: 'Batch read associations',
 			},
 			{
-				name: 'Read Labels',
+				name: 'List Labels',
 				value: 'assocReadLabels',
 				description: 'Retrieve all association labels between two object types',
-				action: 'Read association labels',
+				action: 'List association labels',
 			},
 		],
 		default: 'assocBatchRead',

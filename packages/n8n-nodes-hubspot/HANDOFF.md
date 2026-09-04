@@ -378,7 +378,7 @@ Type** and **To Object Type** use `ASSOCIATION_OBJECT_TYPE_OPTIONS` (no Users).
 | Batch Create Default | `assocBatchCreateDefault` | POST | `/batch/associate/default` |
 | Batch Create Labeled | `assocBatchCreateLabeled` | POST | `/batch/create` |
 | Batch Delete | `assocBatchDelete` | POST | `/batch/archive` |
-| Read Labels | `assocReadLabels` | GET | `/labels` |
+| List Labels | `assocReadLabels` | GET | `/labels` |
 
 - **Batch Read** is the only one with a Fields-style input: comma-separated **From IDs** plus an
   optional **From ID Property**. With an ID property set, values are resolved to record IDs via
@@ -405,8 +405,8 @@ Type** and **To Object Type** use `ASSOCIATION_OBJECT_TYPE_OPTIONS` (no Users).
   to the stable `/crm/v4/associations/{from}/{to}/labels` endpoint for the same pairing, which
   returns the real IDs. The whole resource (Batch Read/Create/Delete included) was moved to v4
   to stay on the endpoint family actually confirmed to behave correctly, rather than keeping
-  Read Labels as a one-off exception.
-- **Read Labels → Include Reverse Labels** (boolean, default off): when on, a second GET fires
+  List Labels as a one-off exception.
+- **List Labels → Include Reverse Labels** (boolean, default off): when on, a second GET fires
   against the same `/labels` endpoint with **From**/**To Object Type** swapped, and each forward
   result is enriched with `reverseTypeId` / `reverseLabel`. HubSpot always issues a label pair's
   two directions as adjacent type IDs one apart, even numbered forward, odd reverse (or vice
@@ -555,6 +555,9 @@ Endpoints hang off `/crm/properties/2026-03/{objectType}` (Object Type is a real
   `ASSOCIATION_OBJECT_TYPE_OPTIONS`, `OWNERS_BASE_PATH`, `SEARCH_OPERATORS`.
 - `getSearchOperators` narrows the operator list to the selected property's type
   (`operatorsForPropertyType`), falling back to the full list when the type can't be resolved.
+  Association pseudo-properties (`associations.0-<id>`) get `EQ` / `NEQ` / `IN` / `NOT_IN` plus
+  `HAS_PROPERTY` / `NOT_HAS_PROPERTY`, for filtering on whether any association of that type
+  exists at all.
 
 ### Shared search filter UI — `searchFilter.ts`
 Used by both Objects → Search and the Trigger so their filter/sort UX stays in lockstep:
@@ -629,6 +632,18 @@ added) plus **Trigger On**:
   records where a watched property's most recent history entry falls inside the poll window.
   Each emitted record gets
   `changedProperties: [{ propertyName, value, timestamp, sourceType, sourceId }]`.
+- **Search-index-lag retry window**: HubSpot's Search API can lag behind very recent writes
+  (a record created and modified within the same few seconds is the worst case), so a poll
+  can miss a qualifying change if the index hasn't caught up yet — and since the window
+  boundary only ever moves forward, a record missed once was previously gone for good. Property
+  Changed now widens the window it searches/re-checks to `PROPERTY_CHANGED_LOOKBACK_MS` (120
+  seconds), independent of poll cadence and never narrower than the normal incremental
+  `pollSince` boundary, so a record can be re-examined on a later poll instead of being dropped.
+  The resulting overlap is deduped via `staticData.propertyChangedEmitted`, keyed by record ID +
+  property name + the change's own history timestamp, pruned each poll to entries still inside
+  the current window. Every other trigger mode (New/Updated/New or Updated Records) keeps the
+  plain, non-widened `pollSince` boundary — they don't re-check individual property history the
+  way Property Changed does, so there's no natural per-change key to dedupe against.
 - **Filter Change Sources** (Additional Options, Property Changed only) — another single-instance
   `fixedCollection`, with a **Mode** (`Include Sources` / `Exclude Sources`) and a comma-separated
   **Sources** text field. Each term is matched case-insensitively as a substring against both

@@ -530,8 +530,9 @@ function operatorsForPropertyType(type: string | undefined): string[] {
 /**
  * Operator options for a search filter, filtered to those valid for the
  * property selected in the same filter row. Association pseudo-properties
- * support equality and list membership. If the sibling property cannot be
- * resolved (older n8n versions may not pass it), the full list is returned.
+ * support equality, list membership, and Has Property / Not Has Property. If
+ * the sibling property cannot be resolved (older n8n versions may not pass
+ * it), the full list is returned.
  */
 export async function getSearchOperators(
 	this: ILoadOptionsFunctions,
@@ -546,10 +547,11 @@ export async function getSearchOperators(
 	// No property chosen yet — offer everything.
 	if (!propertyName) return SEARCH_OPERATORS;
 
-	// Has Property / Not Has Property are invalid for association
-	// pseudo-properties — HubSpot rejects the request.
+	// Association pseudo-properties support equality, list membership, and
+	// Has Property / Not Has Property (to filter on whether any association of
+	// that type exists at all).
 	if (propertyName.startsWith('associations.')) {
-		const allowed = ['EQ', 'NEQ', ...LIST_OPERATORS];
+		const allowed = ['EQ', 'NEQ', ...LIST_OPERATORS, 'HAS_PROPERTY', 'NOT_HAS_PROPERTY'];
 		return SEARCH_OPERATORS.filter((op) => allowed.includes(op.value as string));
 	}
 

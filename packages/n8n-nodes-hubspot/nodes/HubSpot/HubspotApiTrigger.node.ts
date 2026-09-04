@@ -41,6 +41,13 @@ const FORM_SUBMISSIONS_BASE_PATH = '/form-integrations/v1/submissions/forms';
 // selection is right, not a full poll-window's worth of submissions.
 const MANUAL_FETCH_SUBMISSIONS_LIMIT = 5;
 
+// Property Changed widens the window it searches/re-checks to at least this
+// much, independent of the poll interval, so a record HubSpot's search index
+// hadn't caught up on by the last poll gets a second chance on a later one
+// instead of being missed for good. Matched changes are deduped (see
+// emittedChanges in poll()) so the resulting overlap doesn't fire twice.
+const PROPERTY_CHANGED_LOOKBACK_MS = 120 * 1000;
+
 const BASE_HEADERS = {
 	'content-type': 'application/json',
 	accept: 'application/json',
@@ -640,6 +647,16 @@ export class HubspotApiTrigger implements INodeType {
 		// Fall back to the previous minute only if static data is missing.
 		const pollSince = lastPollTime ?? now - 60 * 1000;
 
+		// Property Changed re-checks a window at least PROPERTY_CHANGED_LOOKBACK_MS
+		// wide, regardless of poll cadence, so a record HubSpot's search index
+		// hadn't indexed yet at the last poll is re-examined on a later one
+		// instead of being silently dropped. Never narrower than pollSince, so a
+		// slower poll interval doesn't lose the normal incremental coverage.
+		// Every other trigger mode keeps the plain pollSince boundary.
+		const windowStart = isPropertyChangedMode
+			? Math.min(pollSince, now - PROPERTY_CHANGED_LOOKBACK_MS)
+			: pollSince;
+
 		// The incremental time filter narrows each poll to records changed since
 		// the last run. It is only applied during automatic (production) polling.
 		// In manual mode ("fetch test event") we skip it entirely so the test
@@ -652,7 +669,7 @@ export class HubspotApiTrigger implements INodeType {
 			const timeFilter: JsonObject = {
 				propertyName: timeProperty,
 				operator: 'GTE',
-				value: toIsoStringWithOffset(pollSince),
+				value: toIsoStringWithOffset(windowStart),
 			};
 
 			// Merge user filter groups with the time filter.
@@ -807,6 +824,17 @@ export class HubspotApiTrigger implements INodeType {
 			return changeSourceMode === 'exclude' ? !matchesAnyTerm : matchesAnyTerm;
 		};
 
+		// Dedupe store for changes already emitted from a prior poll's overlap
+		// window (see windowStart above) — keyed by record + property + the
+		// change's own history timestamp, so a genuinely new change to the same
+		// property on the same record still fires. Entries outside the current
+		// window are pruned since they can never be re-matched again.
+		const emittedChanges = (staticData.propertyChangedEmitted ?? {}) as Record<string, number>;
+		staticData.propertyChangedEmitted = emittedChanges;
+		for (const key of Object.keys(emittedChanges)) {
+			if (emittedChanges[key] < windowStart) delete emittedChanges[key];
+		}
+
 		const matchedResults: JsonObject[] = [];
 
 		try {
@@ -849,9 +877,19 @@ export class HubspotApiTrigger implements INodeType {
 						// In manual mode there is no poll window to compare against — any
 						// prior change is enough to validate the property selection.
 						.filter(
-							(change) => isManualMode || new Date(change.timestamp).getTime() >= pollSince,
+							(change) => isManualMode || new Date(change.timestamp).getTime() >= windowStart,
 						)
-						.filter(passesChangeSourceFilter);
+						.filter(passesChangeSourceFilter)
+						// windowStart intentionally overlaps the previous poll so a record
+						// missed to search-index lag gets a second chance; dedupe stops
+						// that overlap from firing an already-emitted change twice.
+						.filter((change) => {
+							if (isManualMode) return true;
+							const key = `${record.id}:${change.propertyName}:${change.timestamp}`;
+							if (emittedChanges[key] !== undefined) return false;
+							emittedChanges[key] = new Date(change.timestamp).getTime();
+							return true;
+						});
 
 					if (changedProperties.length === 0) continue;
 
