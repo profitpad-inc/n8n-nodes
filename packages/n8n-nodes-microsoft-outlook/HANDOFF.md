@@ -158,10 +158,42 @@ empty `binary: {}`.
 | **Return All** | Boolean, off by default. |
 | **Max Results** (shown when Return All is on) | Stops pagination once this many results have been collected across all pages. `0` = no explicit cap, but see the hard safety valve below. |
 | **Return All Mode** (shown when Return All is on) | `allInOne` / `eachPage` / `eachResult`, same three-way convention as the HubSpot node in this repo. Default `eachResult`. |
-| **Additional Options** → **Top** | `$top`, default `100`, clamped 1–1000 in the UI (Microsoft's own documented range for this endpoint). |
-| **Additional Options** → **Skip** | `$skip`, default `0`; only added to the request when `> 0`. |
-| **Additional Options** → **Order By** | `$orderby`, blank by default (omitted when unset). Options: `receivedDateTime`, `subject`, `importance`, each asc/desc. **Deliberately limited to these three** — confirmed against Microsoft's docs and a Microsoft Q&A answer that these are the only properties Graph actually supports in `$orderby` for the messages list endpoint; not a guess. See Sources below. |
 | **Additional Options** → **Mailbox Folder** | `options` dropdown: All Mail (default) / Archive / Deleted Items / Drafts / Inbox / Junk Email / Sent Items. Not `noDataExpression`, so it can be switched to an expression to target a custom well-known folder name or a real folder ID that isn't in the preset list — this satisfies "make sure expression is there so they can do a custom one if need be" without needing a separate `resourceLocator`. |
+| **Additional Options** → **Order By** | `$orderby`, blank by default (omitted when unset). Options: `receivedDateTime`, `subject`, `importance`, each asc/desc. **Deliberately limited to these three** — confirmed against Microsoft's docs and a Microsoft Q&A answer that these are the only properties Graph actually supports in `$orderby` for the messages list endpoint; not a guess. See Sources below. |
+| **Additional Options** → **Page Size** | `$top`, default `100`, clamped 1–1000 in the UI (Microsoft's own documented range for this endpoint). Internal parameter name is still `top` (and the description still talks about `$top`) — only the on-screen label was renamed to "Page Size" on request. |
+| **Additional Options** → **Search** | `$search`, blank by default (omitted when unset) — added because `$filter` has no real substring/"contains" support for messages (confirmed against Microsoft's docs: `$filter` on messages only documents `eq`/`ne`/`startswith()`; a true keyword/substring match needs the separate `$search` query parameter with KQL-style `property:text` clauses, e.g. `subject:invoice`). Originally a top-level field; moved into Additional Options on request, alongside the other query-parameter fields it keeps company with (Order By, Page Size, Skip). See "The Search field" below for the auto-quoting behavior and its interaction with Order By. |
+| **Additional Options** → **Skip** | `$skip`, default `0`; only added to the request when `> 0`. |
+
+#### The Search field ($search)
+
+Added specifically because `$filter` can't do substring matching on messages —
+confirmed against Microsoft's own `$filter` reference (only `eq`/`ne`/`startswith()` are
+documented there for string properties; `contains()`'s documented examples are for other
+resources, not messages) and the `$search` reference (which spells out KQL-style
+`property:text` clauses — `subject:`, `from:`, `body:`, `participants:`, etc. — as the
+supported way to search message text).
+
+- **Auto-quoting**: Graph requires every `$search` clause to be wrapped in double quotes
+  (`$search="subject:invoice"`). Typing just `subject:invoice` in the field is enough —
+  `searchMessages()` wraps it in quotes automatically. A value that **already starts with
+  a quote** is passed through untouched instead, so a power user can still write a full
+  multi-clause expression themselves (Graph's own `AND`/`OR` syntax needs each clause
+  individually quoted, e.g. `"subject:invoice" OR "subject:receipt"` — auto-wrapping the
+  whole thing would double-quote and break it).
+- **Interacts with Order By**: Microsoft's docs state search results are always sorted by
+  sent date/time — the Additional Options → Order By field has no effect while Search is
+  set. This isn't enforced in code (the UI field stays visible and whatever value it has
+  is still sent as `$orderby`); it's just documented here since it'll otherwise look like
+  a bug when Order By is silently ignored.
+- **Combinable with Filter**: both are just separate query parameters sent in the same
+  request when both fields are non-empty — Microsoft's general `$search` docs show
+  `$filter` and `$search` combined (for a different resource, groups, but the mechanism
+  is the same: both params are ANDed together by Graph). Not specially wired together in
+  this node's code beyond both being added to the same `qs` object.
+- **No Return All caveat needed**: `$search` on messages still returns a normal paged
+  response with `@odata.nextLink` (capped at 1,000 total results per Microsoft's docs),
+  so it flows through the exact same `paginatedGraphRequest()` loop as a `$filter`-only
+  or unfiltered search — no special-casing needed for pagination.
 
 ### Send Mail fields
 
@@ -401,6 +433,14 @@ once requested:
   credential follows) and `MicrosoftAzureMonitorOAuth2Api.credentials.js` (confirms the
   `{{$self["tenantId"]}}`-style tenant-specific token URL pattern, for context — not
   actually used here since this credential doesn't extend `oAuth2Api`).
+- [Use the $filter query parameter — Microsoft Graph](https://learn.microsoft.com/en-us/graph/filter-query-parameter)
+  — the full list of operators/functions Graph supports anywhere, and the note that
+  support varies per resource; used to confirm `contains()` isn't documented for
+  messages, only `eq`/`ne`/`startswith()`.
+- [Use $search Query Parameter in Microsoft Graph APIs](https://learn.microsoft.com/en-us/graph/search-query-parameter)
+  — the source for the **Search** field: the `property:text` KQL clause syntax, the
+  required double-quoting, the "results sorted by sent date/time" behavior, the
+  1,000-result cap, and that `$filter` + `$search` can be combined in one request.
 
 ---
 

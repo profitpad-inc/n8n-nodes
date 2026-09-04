@@ -294,35 +294,6 @@ export const messageFields: INodeProperties[] = [
 		},
 		options: [
 			{
-				displayName: 'Top',
-				name: 'top',
-				type: 'number',
-				default: 100,
-				typeOptions: {
-					minValue: 1,
-					maxValue: 1000,
-				},
-				description: 'The $top query parameter — number of results per page (1-1000)',
-			},
-			{
-				displayName: 'Skip',
-				name: 'skip',
-				type: 'number',
-				default: 0,
-				typeOptions: {
-					minValue: 0,
-				},
-				description: 'The $skip query parameter — number of results to skip. Left out of the request when 0.',
-			},
-			{
-				displayName: 'Order By',
-				name: 'orderBy',
-				type: 'options',
-				default: '',
-				options: [{ name: '- Not Set -', value: '' }, ...ORDER_BY_OPTIONS],
-				description: 'The $orderby query parameter. Left out of the request when not set.',
-			},
-			{
 				displayName: 'Mailbox Folder',
 				name: 'mailboxFolder',
 				type: 'options',
@@ -338,6 +309,44 @@ export const messageFields: INodeProperties[] = [
 				],
 				description:
 					'The mail folder to search. Switch this field to an expression to search a custom well-known folder name or folder ID instead of one of the presets.',
+			},
+			{
+				displayName: 'Order By',
+				name: 'orderBy',
+				type: 'options',
+				default: '',
+				options: [{ name: '- Not Set -', value: '' }, ...ORDER_BY_OPTIONS],
+				description: 'The $orderby query parameter. Left out of the request when not set.',
+			},
+			{
+				displayName: 'Page Size',
+				name: 'top',
+				type: 'number',
+				default: 100,
+				typeOptions: {
+					minValue: 1,
+					maxValue: 1000,
+				},
+				description: 'The $top query parameter — number of results per page (1-1000)',
+			},
+			{
+				displayName: 'Search',
+				name: 'search',
+				type: 'string',
+				default: '',
+				placeholder: 'subject:invoice',
+				description:
+					'The $search query parameter — a property:text clause (e.g. subject:invoice, from:jane, participants:jane) for true substring/keyword matching, which $filter\'s startswith() can\'t do. Automatically wrapped in double quotes unless you\'ve already quoted it yourself (needed to combine multiple clauses with AND/OR, e.g. "subject:invoice" OR "subject:receipt"). Leave empty to not use $search. Note: Graph sorts $search results by sent date/time, so Order By has no effect while this is set.',
+			},
+			{
+				displayName: 'Skip',
+				name: 'skip',
+				type: 'number',
+				default: 0,
+				typeOptions: {
+					minValue: 0,
+				},
+				description: 'The $skip query parameter — number of results to skip. Left out of the request when 0.',
 			},
 		],
 	},

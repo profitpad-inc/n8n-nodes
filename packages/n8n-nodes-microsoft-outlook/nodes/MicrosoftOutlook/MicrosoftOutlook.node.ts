@@ -113,10 +113,14 @@ async function searchMessages(
 	const skip = (additionalOptions.skip as number) ?? 0;
 	const orderBy = (additionalOptions.orderBy as string) ?? '';
 	const mailboxFolder = (additionalOptions.mailboxFolder as string) ?? 'all';
+	const search = (additionalOptions.search as string) ?? '';
 
 	const qs: IDataObject = { $top: top };
 	if (select.length) qs.$select = select.join(',');
 	if (filter) qs.$filter = filter;
+	// Graph's $search clauses must be quoted; auto-wrap a bare "property:text" entry, but
+	// leave an already-quoted value (multi-clause AND/OR queries) untouched.
+	if (search) qs.$search = search.startsWith('"') ? search : `"${search}"`;
 	if (skip > 0) qs.$skip = skip;
 	if (orderBy) qs.$orderby = orderBy;
 

@@ -26,8 +26,9 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
   Attachments** option (Do Not Include / Include In JSON / Include As File / Include In
   Both) that fetches the message's attachments as JSON, as n8n binary files, or both.
 - **Search Messages** — list/search a mailbox's messages, with `$select`, `$filter`,
-  `$top`, `$skip`, `$orderby`, a mail folder picker (Inbox, Sent Items, Drafts, Archive,
-  Deleted Items, Junk Email, or all mail), and Return All pagination.
+  `$search` (for real keyword/substring matching, e.g. `subject:invoice`), `$top`,
+  `$skip`, `$orderby`, a mail folder picker (Inbox, Sent Items, Drafts, Archive, Deleted
+  Items, Junk Email, or all mail), and Return All pagination.
 - **Send Mail** — send an HTML email from a mailbox, with To/CC/BCC recipients (as
   name/email fields or raw JSON), attachments (pasted base64, a dynamic JSON array
   mixing base64 or URL entries, n8n binary data on the input item, or a fixed list of
