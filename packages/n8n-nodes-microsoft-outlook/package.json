@@ -1,7 +1,7 @@
 {
     "name": "n8n-nodes-microsoft-outlook",
     "version": "0.1.0",
-    "description": "",
+    "description": "n8n community node for the Microsoft Outlook / Microsoft Graph API",
     "license": "MIT",
     "homepage": "",
     "keywords": [
@@ -13,7 +13,8 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/<...>/n8n-nodes-<...>.git"
+        "url": "https://github.com/profitpad-inc/n8n-nodes.git",
+        "directory": "packages/n8n-nodes-microsoft-outlook"
     },
    "scripts": {
 		"build": "n8n-node build",
@@ -30,9 +31,11 @@
     "n8n": {
         "n8nNodesApiVersion": 1,
         "strict": true,
-        "credentials": [],
+        "credentials": [
+            "dist/credentials/MicrosoftOutlookApi.credentials.js"
+        ],
         "nodes": [
-            "dist/nodes/Example/Example.node.js"
+            "dist/nodes/MicrosoftOutlook/MicrosoftOutlook.node.js"
         ]
     },
     "devDependencies": {
