@@ -10,6 +10,7 @@ import {
 } from 'n8n-workflow';
 
 import { associationDescription } from './descriptions/AssociationDescription';
+import { customEventDescription } from './descriptions/CustomEventDescription';
 import { formDescription } from './descriptions/FormDescription';
 import { marketingEventDescription } from './descriptions/MarketingEventDescription';
 import { objectDescription } from './descriptions/ObjectDescription';
@@ -24,10 +25,13 @@ import {
 	getAllProperties,
 	getAssociationTargetObjectType,
 	getAssociationTypeIds,
+	getCustomEventProperties,
+	getCustomEventTypes,
 	getEnumerationProperties,
 	getProperties,
 	getSearchFilterProperties,
 	getSearchOperators,
+	getSendableCustomEventTypes,
 	getUniqueProperties,
 	getUniquePropertiesForAssociationFrom,
 	getUniquePropertiesForAssociationTo,
@@ -54,6 +58,8 @@ const FORMS_BASE_PATH = '/marketing/v3/forms';
 const FORMS_LIST_MAX_PAGES = 50;
 const FORM_SUBMISSIONS_BASE_PATH = '/form-integrations/v1/submissions/forms';
 const MARKETING_EVENTS_BASE_PATH = '/marketing/v3/marketing-events';
+const EVENTS_BASE_PATH = '/events/2026-09';
+const EVENT_OCCURRENCES_BASE_PATH = '/events/event-occurrences/2026-09';
 const USERS_OBJECT_PATH = `${OBJECTS_BASE_PATH}/users`;
 const USERS_ALWAYS_INCLUDED_PROPERTIES = [
 	'hs_internal_user_id',
@@ -81,7 +87,7 @@ export class HubspotApi implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle:
-			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : $parameter["resource"] === "forms" ? ($parameter["operation"] + (($parameter["formGuid"] && $parameter["formGuid"].value) ? (": " + $parameter["formGuid"].value) : "")) : $parameter["resource"] === "marketingEvents" ? ($parameter["operation"] + (($parameter["marketingEventId"] && $parameter["marketingEventId"].value) ? (": " + $parameter["marketingEventId"].value) : "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
+			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : $parameter["resource"] === "forms" ? ($parameter["operation"] + (($parameter["formGuid"] && $parameter["formGuid"].value) ? (": " + $parameter["formGuid"].value) : "")) : $parameter["resource"] === "marketingEvents" ? ($parameter["operation"] + (($parameter["marketingEventId"] && $parameter["marketingEventId"].value) ? (": " + $parameter["marketingEventId"].value) : "")) : $parameter["resource"] === "customEvents" ? ($parameter["operation"] + (($parameter["operation"] === "sendEventOccurrence" && $parameter["eventName"]) ? (": " + $parameter["eventName"]) : "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
 		description:
 			'Interact with HubSpot CRM objects. Docs: https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis',
 		usableAsTool: true,
@@ -108,6 +114,11 @@ export class HubspotApi implements INodeType {
 						name: 'Associations',
 						value: 'associations',
 						description: 'Manage associations between HubSpot CRM records',
+					},
+					{
+						name: 'Custom Events',
+						value: 'customEvents',
+						description: 'Retrieve and send HubSpot custom behavioral event data',
 					},
 					{
 						name: 'Forms',
@@ -139,6 +150,7 @@ export class HubspotApi implements INodeType {
 				default: 'objects',
 			},
 			...associationDescription,
+			...customEventDescription,
 			...formDescription,
 			...marketingEventDescription,
 			...objectDescription,
@@ -160,6 +172,9 @@ export class HubspotApi implements INodeType {
 			getUniquePropertiesForAssociationTo,
 			getUpsertIdProperties,
 			getAssociationTypeIds,
+			getCustomEventProperties,
+			getCustomEventTypes,
+			getSendableCustomEventTypes,
 			getUserProperties,
 			getUserSearchOperators,
 			getWritableUserProperties,
@@ -557,6 +572,280 @@ export class HubspotApi implements INodeType {
 
 							returnData.push({ json: { ...response, results }, pairedItem: { item: i } });
 						}
+					}
+				}
+
+				if (resource === 'customEvents') {
+					// ── LIST EVENT DEFINITIONS ────────────────────────────────────────────
+					if (operation === 'getEventDefinitions') {
+						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+						const opts = this.getNodeParameter('eventDefinitionsOptions', i) as {
+							includeProperties?: boolean;
+							searchString?: string;
+							sortOrder?: string;
+							after?: string;
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = opts.millisecondsBetweenItems ?? 50;
+
+						const baseParams = {
+							includeProperties: opts.includeProperties,
+							searchString: opts.searchString || undefined,
+							sortOrder: opts.sortOrder || undefined,
+						};
+
+						const eventDefinitionsPath = `${EVENTS_BASE_PATH}/event-definitions`;
+
+						if (returnAll) {
+							const maxPages = Math.max(
+								1,
+								Math.floor(this.getNodeParameter('maxPages', i) as number),
+							);
+							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+							let after: string | undefined = opts.after || undefined;
+							let pageCount = 0;
+							const allResults: JsonObject[] = [];
+							let lastPaging: JsonObject | undefined;
+							let lastTotal: number | undefined;
+
+							do {
+								const url = buildHubSpotUrl(HUBSPOT_BASE, eventDefinitionsPath, {
+									...baseParams,
+									limit: 100,
+									after,
+								});
+
+								const response = (await this.helpers.httpRequestWithAuthentication.call(
+									this,
+									'hubspotApi',
+									{ method: 'GET', url, headers: BASE_HEADERS },
+								)) as JsonObject;
+
+								const results = (response.results as JsonObject[] | undefined) ?? [];
+
+								if (returnAllMode === 'eachPage') {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								} else if (returnAllMode === 'eachResult') {
+									for (const result of results) {
+										returnData.push({ json: result, pairedItem: { item: i } });
+									}
+								} else {
+									allResults.push(...results);
+								}
+
+								pageCount++;
+								const paging = response.paging as JsonObject | undefined;
+								lastPaging = paging;
+								lastTotal = response.total as number | undefined;
+								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
+							} while (after && pageCount < maxPages);
+
+							if (returnAllMode === 'allInOne') {
+								returnData.push({
+									json: {
+										total: lastTotal ?? null,
+										results: allResults,
+										paging: lastPaging ?? null,
+									},
+									pairedItem: { item: i },
+								});
+							}
+						} else {
+							const limit = this.getNodeParameter('limit', i) as number;
+
+							const url = buildHubSpotUrl(HUBSPOT_BASE, eventDefinitionsPath, {
+								...baseParams,
+								limit,
+								after: opts.after || undefined,
+							});
+
+							const response = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{ method: 'GET', url, headers: BASE_HEADERS },
+							)) as JsonObject;
+
+							returnData.push({ json: response, pairedItem: { item: i } });
+						}
+					}
+
+					// ── SEARCH EVENT OCCURRENCES ────────────────────────────────────────
+					if (operation === 'getEvents') {
+						const eventType = String(this.getNodeParameter('eventType', i)).trim();
+						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+						const opts = this.getNodeParameter('getEventsOptions', i) as {
+							objectType?: string;
+							objectId?: string;
+							ids?: string;
+							occurredAfter?: string;
+							occurredBefore?: string;
+							properties?: string;
+							sort?: string;
+							objectPropertyFilters?: { filterValues?: Array<{ name: string; value: string }> };
+							eventPropertyFilters?: { filterValues?: Array<{ name: string; value: string }> };
+							after?: string;
+							before?: string;
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = opts.millisecondsBetweenItems ?? 50;
+
+						const dynamicFilterParams: Record<string, string> = {};
+						for (const filter of opts.objectPropertyFilters?.filterValues ?? []) {
+							if (filter.name) dynamicFilterParams[`objectProperty.${filter.name}`] = filter.value;
+						}
+						for (const filter of opts.eventPropertyFilters?.filterValues ?? []) {
+							if (filter.name) dynamicFilterParams[`property.${filter.name}`] = filter.value;
+						}
+
+						const baseParams: Record<string, string | string[] | number | boolean | undefined> = {
+							eventType,
+							objectType: opts.objectType || undefined,
+							objectId: opts.objectId || undefined,
+							id: toStringList(opts.ids),
+							occurredAfter: opts.occurredAfter || undefined,
+							occurredBefore: opts.occurredBefore || undefined,
+							properties: toStringList(opts.properties),
+							sort: toStringList(opts.sort),
+							before: opts.before || undefined,
+							...dynamicFilterParams,
+						};
+
+						if (returnAll) {
+							const maxPages = Math.max(
+								1,
+								Math.floor(this.getNodeParameter('maxPages', i) as number),
+							);
+							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+							let after: string | undefined = opts.after || undefined;
+							let pageCount = 0;
+							const allResults: JsonObject[] = [];
+							let lastPaging: JsonObject | undefined;
+
+							do {
+								const url = buildHubSpotUrl(HUBSPOT_BASE, EVENT_OCCURRENCES_BASE_PATH, {
+									...baseParams,
+									limit: 100,
+									after,
+								});
+
+								const response = (await this.helpers.httpRequestWithAuthentication.call(
+									this,
+									'hubspotApi',
+									{ method: 'GET', url, headers: BASE_HEADERS },
+								)) as JsonObject;
+
+								const results = (response.results as JsonObject[] | undefined) ?? [];
+
+								if (returnAllMode === 'eachPage') {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								} else if (returnAllMode === 'eachResult') {
+									for (const result of results) {
+										returnData.push({ json: result, pairedItem: { item: i } });
+									}
+								} else {
+									allResults.push(...results);
+								}
+
+								pageCount++;
+								const paging = response.paging as JsonObject | undefined;
+								lastPaging = paging;
+								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
+							} while (after && pageCount < maxPages);
+
+							if (returnAllMode === 'allInOne') {
+								returnData.push({
+									json: { results: allResults, paging: lastPaging ?? null },
+									pairedItem: { item: i },
+								});
+							}
+						} else {
+							const limit = this.getNodeParameter('limit', i) as number;
+
+							const url = buildHubSpotUrl(HUBSPOT_BASE, EVENT_OCCURRENCES_BASE_PATH, {
+								...baseParams,
+								limit,
+								after: opts.after || undefined,
+							});
+
+							const response = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'hubspotApi',
+								{ method: 'GET', url, headers: BASE_HEADERS },
+							)) as JsonObject;
+
+							returnData.push({ json: response, pairedItem: { item: i } });
+						}
+					}
+
+					// ── SEND EVENT OCCURRENCE ────────────────────────────────────────────
+					if (operation === 'sendEventOccurrence') {
+						const eventName = String(this.getNodeParameter('eventName', i)).trim();
+						const identifyBy = this.getNodeParameter('identifyBy', i) as string;
+						const propertiesInputMode = this.getNodeParameter(
+							'eventPropertiesInputMode',
+							i,
+						) as string;
+						const sendOpts = this.getNodeParameter('sendEventOptions', i) as {
+							uuid?: string;
+							utk?: string;
+							occurredAt?: string;
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = sendOpts.millisecondsBetweenItems ?? 50;
+
+						let eventProperties: Record<string, unknown>;
+						if (propertiesInputMode === 'json') {
+							eventProperties = parseJsonParam(
+								this.getNodeParameter('eventPropertiesJson', i),
+							) as Record<string, unknown>;
+						} else {
+							const propsParam = this.getNodeParameter('eventProperties', i) as {
+								propertyValues?: Array<{ name: string; value: string }>;
+							};
+							eventProperties = Object.fromEntries(
+								(propsParam.propertyValues ?? []).map(({ name, value }) => [name, value]),
+							);
+						}
+
+						const body: JsonObject = { eventName, properties: eventProperties as JsonObject };
+
+						if (identifyBy === 'objectId') {
+							body.objectId = String(this.getNodeParameter('objectId', i)).trim();
+						} else if (identifyBy === 'email') {
+							body.email = String(this.getNodeParameter('email', i)).trim();
+						}
+
+						if (sendOpts.uuid) body.uuid = sendOpts.uuid;
+						if (sendOpts.utk) body.utk = sendOpts.utk;
+						if (sendOpts.occurredAt) body.occurredAt = sendOpts.occurredAt;
+
+						await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+							method: 'POST',
+							url: `${HUBSPOT_BASE}${EVENTS_BASE_PATH}/send`,
+							headers: BASE_HEADERS,
+							body: JSON.stringify(body),
+						});
+
+						returnData.push({ json: { success: true, ...body }, pairedItem: { item: i } });
+					}
+
+					// ── BATCH SEND EVENT OCCURRENCES ─────────────────────────────────────
+					if (operation === 'batchSendEventOccurrences') {
+						const body = parseJsonParam(
+							this.getNodeParameter('batchSendEventOccurrencesBody', i),
+						);
+
+						await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+							method: 'POST',
+							url: `${HUBSPOT_BASE}${EVENTS_BASE_PATH}/send/batch`,
+							headers: BASE_HEADERS,
+							body: JSON.stringify(body),
+						});
+
+						returnData.push({ json: { success: true }, pairedItem: { item: i } });
 					}
 				}
 

@@ -1214,3 +1214,209 @@ export async function resolveUsersLookup(
 
 	return { realId: objectId, idPropertyParam: idProperty };
 }
+
+const EVENTS_BASE_PATH = '/events/2026-09';
+const EVENT_DEFINITIONS_LIST_MAX_PAGES = 50;
+
+interface HubSpotEventDefinitionSummary {
+	id: string;
+	name?: string;
+	fullyQualifiedName: string;
+	labels?: { singular?: string; plural?: string };
+	archived?: boolean;
+}
+
+// Same rationale as the property/forms/marketing-events caches above: this
+// backs the Custom Events resource's "Event Name" dropdown (Send Event
+// Occurrence) and its "Event Type" filter (Get Events), so it shouldn't
+// re-fetch and re-page through the account's whole event definition list on
+// every keystroke or every time either field is opened.
+const eventDefinitionsCache = new Map<
+	string,
+	{ promise: Promise<HubSpotEventDefinitionSummary[]>; expiresAt: number }
+>();
+
+async function fetchEventDefinitions(
+	this: ILoadOptionsFunctions,
+): Promise<HubSpotEventDefinitionSummary[]> {
+	const credentialId = this.getNode().credentials?.hubspotApi?.id ?? 'unknown';
+
+	const cached = eventDefinitionsCache.get(credentialId);
+	if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+	const promise = (async () => {
+		const definitions: HubSpotEventDefinitionSummary[] = [];
+		let after: string | undefined;
+		let pageCount = 0;
+
+		do {
+			const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+				method: 'GET',
+				url: buildHubSpotUrl(HUBSPOT_BASE, `${EVENTS_BASE_PATH}/event-definitions`, {
+					limit: 100,
+					after,
+				}),
+				headers: { accept: 'application/json' },
+			})) as {
+				results?: HubSpotEventDefinitionSummary[];
+				paging?: { next?: { after?: string } };
+			};
+
+			definitions.push(...(response.results ?? []));
+			pageCount++;
+			after = response.paging?.next?.after;
+		} while (after && pageCount < EVENT_DEFINITIONS_LIST_MAX_PAGES);
+
+		return definitions.filter((definition) => !definition.archived);
+	})();
+
+	eventDefinitionsCache.set(credentialId, {
+		promise,
+		expiresAt: Date.now() + PROPERTIES_CACHE_TTL_MS,
+	});
+	promise.catch(() => eventDefinitionsCache.delete(credentialId));
+
+	return promise;
+}
+
+function eventDefinitionsToOptions(
+	definitions: HubSpotEventDefinitionSummary[],
+): INodePropertyOptions[] {
+	return definitions
+		.map((definition) => ({
+			name: definition.labels?.singular ?? definition.name ?? definition.fullyQualifiedName,
+			value: definition.fullyQualifiedName,
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** "Event Type Name or ID" filter for Search Event Occurrences. */
+export async function getCustomEventTypes(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	return eventDefinitionsToOptions(await fetchEventDefinitions.call(this));
+}
+
+/**
+ * "Event Name" dropdown for Send/Batch Send Event Occurrence. Only custom
+ * behavioral events — whose fully qualified name is always formatted
+ * `pe{HubID}_{name}` — can actually be sent through the Send Custom Event
+ * APIs, unlike Search Event Occurrences' broader Event Type filter, which can
+ * search occurrences of any event type definition the account has. Filtering
+ * here keeps non-`pe` definitions (e.g. HubSpot's own built-in event types)
+ * out of a list where picking one would just fail at send time.
+ */
+export async function getSendableCustomEventTypes(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const definitions = await fetchEventDefinitions.call(this);
+
+	return eventDefinitionsToOptions(
+		definitions.filter((definition) => definition.fullyQualifiedName.startsWith('pe')),
+	);
+}
+
+interface HubSpotEventPropertyDefinition {
+	name: string;
+	label?: string;
+	groupName?: string;
+}
+
+// HubSpot includes every associated object's historical properties (e.g.
+// hs_historical_company_hubspot_owner_id) in an event definition's
+// `properties` array alongside the event's own custom properties. Those are
+// read-only, auto-populated values, not something a Send Event Occurrence
+// call can set, so they're excluded from the picker.
+const HISTORICAL_OBJECT_PROPERTIES_GROUP = 'historical_object_properties';
+
+interface HubSpotEventDefinitionDetail {
+	properties?: HubSpotEventPropertyDefinition[];
+}
+
+// Unlike the list endpoint above, GET .../event-definitions/{eventName}
+// returns one definition's full `properties` array without needing an
+// `includeProperties` flag — used to populate Send Event Occurrence's
+// "Property Name" dropdown for whichever event is currently selected. Cached
+// per credential + event name, same TTL/evict-on-failure convention as the
+// caches above, so switching back and forth between recently-picked events
+// doesn't re-fetch every time.
+const eventDefinitionDetailCache = new Map<
+	string,
+	{ promise: Promise<HubSpotEventDefinitionDetail | undefined>; expiresAt: number }
+>();
+
+async function fetchEventDefinitionDetail(
+	this: ILoadOptionsFunctions,
+	eventName: string,
+): Promise<HubSpotEventDefinitionDetail | undefined> {
+	const credentialId = this.getNode().credentials?.hubspotApi?.id ?? 'unknown';
+	const cacheKey = `${credentialId}:${eventName}`;
+
+	const cached = eventDefinitionDetailCache.get(cacheKey);
+	if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+	const promise = (async () => {
+		try {
+			return (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+				method: 'GET',
+				url: `${HUBSPOT_BASE}${EVENTS_BASE_PATH}/event-definitions/${encodeURIComponent(eventName)}`,
+				headers: { accept: 'application/json' },
+			})) as HubSpotEventDefinitionDetail;
+		} catch {
+			// An unrecognized or not-yet-selected event name shouldn't blow up the
+			// dropdown — just offer no properties until a valid one is chosen.
+			return undefined;
+		}
+	})();
+
+	eventDefinitionDetailCache.set(cacheKey, {
+		promise,
+		expiresAt: Date.now() + PROPERTIES_CACHE_TTL_MS,
+	});
+	promise.catch(() => eventDefinitionDetailCache.delete(cacheKey));
+
+	return promise;
+}
+
+/**
+ * "Property Name" dropdown inside Send Event Occurrence's Properties
+ * fixedCollection, scoped to whichever event the top-level "Event Name"
+ * field currently holds (via `loadOptionsDependsOn`), same pattern as
+ * Objects → Create/Update's Property field depending on Object Type.
+ * Excludes the `historical_object_properties`-grouped entries HubSpot mixes
+ * into an event definition's `properties` (see
+ * `HISTORICAL_OBJECT_PROPERTIES_GROUP` above), and properties already picked
+ * in another row, same as `getWritableProperties` does for Objects →
+ * Create/Update via `getSelectedPropertyNames`.
+ */
+export async function getCustomEventProperties(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	let eventName = '';
+	try {
+		eventName = (this.getCurrentNodeParameter('eventName') as string) ?? '';
+	} catch {
+		eventName = '';
+	}
+	if (!eventName) return [];
+
+	const definition = await fetchEventDefinitionDetail.call(this, eventName);
+
+	let currentValue = '';
+	try {
+		currentValue = (this.getCurrentNodeParameter('&name') as string) ?? '';
+	} catch {
+		currentValue = '';
+	}
+	const usedElsewhere = new Set(getSelectedPropertyNames.call(this, 'eventProperties'));
+	usedElsewhere.delete(currentValue);
+
+	return (definition?.properties ?? [])
+		.filter((property) => property.groupName !== HISTORICAL_OBJECT_PROPERTIES_GROUP)
+		.filter((property) => !usedElsewhere.has(property.name))
+		.map((property) => ({
+			name: property.label ? `${property.label} (${property.name})` : property.name,
+			value: property.name,
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
+}

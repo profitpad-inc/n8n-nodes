@@ -27,6 +27,7 @@ released version in `package.json` is `0.1.43`.
 | `nodes/HubSpot/associationTypes.ts` | `ASSOCIATION_TYPES` — per-object-type `[associationTypeId, label]` table |
 | `nodes/HubSpot/descriptions/ObjectDescription.ts` | Objects resource UI (largest file) |
 | `nodes/HubSpot/descriptions/AssociationDescription.ts` | Associations resource UI |
+| `nodes/HubSpot/descriptions/CustomEventDescription.ts` | Custom Events resource UI |
 | `nodes/HubSpot/descriptions/OwnerDescription.ts` | Owners resource UI (Users + Owners branches) |
 | `nodes/HubSpot/descriptions/PropertyDescription.ts` | Properties resource UI |
 | `nodes/HubSpot/descriptions/FormDescription.ts` | Forms resource UI |
@@ -43,6 +44,8 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 | `USERS_OBJECT_PATH` | `/crm/v3/objects/users` |
 | `OWNERS_BASE_PATH` (helpers) | `/crm/v3/owners` |
 | `MARKETING_EVENTS_BASE_PATH` | `/marketing/v3/marketing-events` |
+| `EVENTS_BASE_PATH` | `/events/2026-09` |
+| `EVENT_OCCURRENCES_BASE_PATH` | `/events/event-occurrences/2026-09` |
 
 ---
 
@@ -69,8 +72,9 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 - Every output item carries `pairedItem: { item: i }`
 
 ### Resources
-Six resources, selected by the top-level **Resource** dropdown: **Associations**, **Forms**,
-**Marketing Events**, **Objects** (default), **Owners**, **Properties**.
+Seven resources, selected by the top-level **Resource** dropdown: **Associations**,
+**Custom Events**, **Forms**, **Marketing Events**, **Objects** (default), **Owners**,
+**Properties**.
 
 ---
 
@@ -225,6 +229,127 @@ Top-level **Properties** multi-select; Additional Options: `propertiesWithHistor
 #### Batch Create / Batch Update / Batch Upsert
 - Raw JSON body (pre-filled with a relevant example), no Additional Options, no inter-item
   delay
+
+---
+
+## Resource: Custom Events
+
+Wraps HubSpot's Custom Behavioral Events API — not a CRM object, no `objectType` dropdown.
+Two base paths: `EVENTS_BASE_PATH` (`/events/2026-09`, sending occurrences and reading event
+definitions) and `EVENT_OCCURRENCES_BASE_PATH` (`/events/event-occurrences/2026-09`, reading
+event occurrences). Both are dated versions, same convention as `PROPERTIES_BASE_PATH`
+(`/crm/properties/2026-03`) — confirmed against HubSpot's own OpenAPI spec embedded in their docs
+pages, not assumed.
+
+| Operation | Value | Method | URL |
+|---|---|---|---|
+| List Event Definitions | `getEventDefinitions` | GET | `/events/2026-09/event-definitions` |
+| Search Event Occurrences | `getEvents` | GET | `/events/event-occurrences/2026-09` |
+| Send Event Occurrence | `sendEventOccurrence` | POST | `/events/2026-09/send` |
+| Batch Send Event Occurrences | `batchSendEventOccurrences` | POST | `/events/2026-09/send/batch` |
+
+#### List Event Definitions
+- Standard **Return All** / **Limit** (1–100, default 100) / **Max Pages** / **Return All Mode**
+  convention, shared with Search Event Occurrences via a combined `displayOptions.show.operation:
+  ['getEvents', 'getEventDefinitions']` (the `LIST_SHOW` constant) — same pattern Marketing
+  Events uses to share List's Return All controls with Participations Breakdown. HubSpot's
+  response here does carry a `total` count, so `allInOne` output leads with it:
+  `{ total, results, paging }`, same convention as Objects → Search.
+- Additional Options: **Include Properties** (adds each event type's custom property
+  definitions to the response), **Search String** (HubSpot's `searchString` filter), **Sort
+  Order** (passed through as-is to HubSpot's `sortOrder` param — the docs don't spell out its
+  accepted values), **After (Cursor)**, and Milliseconds Between Items.
+- Was originally **List Event Types**, a parameterless call to the (undocumented-for-filtering)
+  `GET /events/event-occurrences/2026-09/event-types` endpoint returning a flat `{ eventTypes:
+  string[] }`. Replaced with this richer, paginated `event-definitions` endpoint — a deliberate
+  **breaking change**: the operation's value changed from `getEventTypes` to
+  `getEventDefinitions`, so any saved workflow using the old operation needs it re-selected, and
+  the output shape changed from one `{ eventType: "..." }` item per name to HubSpot's full
+  `ExternalBehavioralEventTypeDefinition` objects (`id`, `name`, `fullyQualifiedName`,
+  `labels`, `properties`, etc., depending on Include Properties).
+- Backs `getCustomEventTypes` (a `loadOptions` method, `helpers.ts`), the dropdown behind Search
+  Event Occurrences' required **Event Type Name or ID** field — the dropdown shows each
+  definition's `labels.singular` (falling back to `name`, then `fullyQualifiedName`) but stores
+  `fullyQualifiedName` as the value. Backed by `fetchEventDefinitions()`, which pages through
+  `event-definitions` via `after` (capped at `EVENT_DEFINITIONS_LIST_MAX_PAGES`, 50) and drops
+  archived definitions. Cached per credential via `eventDefinitionsCache`, same 2-minute TTL and
+  evict-on-failure convention as the property/forms/marketing-events caches. Send Event
+  Occurrence's **Event Name** dropdown uses a separate, filtered loadOptions method — see below.
+
+#### Search Event Occurrences
+- **Event Type Name or ID** is a required top-level field (dropdown via `getCustomEventTypes`,
+  same list as List Event Definitions — every event type definition in the account, not just
+  `pe`-prefixed custom behavioral ones, since occurrences of any event type can be searched).
+- Shares the Return All / Limit / Max Pages / Return All Mode controls described above. Unlike
+  List Event Definitions, HubSpot's response here has no `total` key, so `allInOne` output is
+  `{ results, paging }` only, same as plain Object/Owner List.
+- Additional Options covers every other query parameter HubSpot documents: **Object Type**,
+  **Object ID**, **Event IDs** (comma separated → `id` repeated param), **Occurred After** /
+  **Occurred Before**, **Properties** (comma separated, which fields to return), **Sort**, and
+  **After (Cursor)** / **Before (Cursor)**.
+- **Object Property Filters** / **Event Property Filters** are guided `fixedCollection` builders
+  (name/value pairs) for HubSpot's dynamic `objectProperty.<name>` / `property.<name>` query
+  parameters — these can't be modeled as static dropdown fields since the property names are
+  account-specific, so they're built into the URL's params object as computed keys at execute
+  time rather than through `buildHubSpotUrl`'s normal fixed-key params.
+- Was originally named **Get Events**; renamed since it's a filtered search (Event Type is now
+  required) rather than an unconditional list. Kept the `getEvents` operation value, so this
+  rename alone isn't a breaking change for saved workflows.
+
+#### Send Event Occurrence
+- **Event Name** is a dropdown backed by a dedicated `getSendableCustomEventTypes` loadOptions
+  method (`helpers.ts`), not the plain `getCustomEventTypes` List Event Definitions/Search Event
+  Occurrences use — it filters `fetchEventDefinitions()`'s results down to definitions whose
+  `fullyQualifiedName` starts with `pe`. Only custom behavioral events (always named
+  `pe{HubID}_{name}`) can actually be sent through the Send Custom Event APIs; other event type
+  definitions the account may have (e.g. HubSpot's own built-in event types) would just fail at
+  send time, so they're excluded from this list rather than Search's broader one. Also has
+  `typeOptions.noValidation: true` (same reasoning as Objects' Object Type field) so an
+  expression or a hand-typed `pe{HubID}_{name}` value not yet in the loaded list still reaches
+  `execute()`.
+- **Batch Send Event Occurrences** has no equivalent dropdown to filter — it's a raw JSON body
+  (see below) — but its pre-filled example already uses a `pe`-prefixed event name.
+- **Identify Record By** picks which of HubSpot's three documented ways to associate the
+  occurrence with a CRM record is used: **Object ID** (top-level **Object ID** field →
+  `objectId`), **Custom Matching Property** (no extra field — the matching property is just one
+  of the Properties below, HubSpot matches on it directly), or **Email (Contacts Only)**
+  (top-level **Email** field → `email`).
+- **Properties Input Mode** toggles between **Fields** (a `fixedCollection` of name/value pairs,
+  same UI pattern as Objects → Create's property editor) and **Custom JSON**, both feeding the
+  request's required `properties` object.
+- In Fields mode, **Property Name** is a dropdown backed by a new `getCustomEventProperties`
+  loadOptions method (`helpers.ts`), scoped to whichever event the top-level **Event Name** field
+  currently holds via `typeOptions.loadOptionsDependsOn: ['eventName']` — same dependency pattern
+  as Objects → Create/Update's Property field depending on Object Type. It calls `GET
+  /events/2026-09/event-definitions/{eventName}` (`fetchEventDefinitionDetail()`, cached per
+  credential + event name, same TTL/evict-on-failure convention as the caches above) — the
+  single-definition endpoint, not the List Event Definitions one, since it returns that one
+  event's full `properties` array without needing List's `includeProperties` flag. Also has
+  `noValidation: true` so a property not yet reflected in a stale cache (or the Custom Matching
+  Property mode's matching property, which may not always be declared as a formal event property)
+  can still be typed by hand or by expression. Also excludes properties already picked in another
+  row of the same fixedCollection, via the existing `getSelectedPropertyNames('eventProperties')`
+  — same exclude-what's-chosen-elsewhere behavior `getWritableProperties` already applies to
+  Objects → Create/Update's Property field.
+- **`historical_object_properties` exclusion**: HubSpot mixes an associated object's historical
+  properties (e.g. `hs_historical_company_hubspot_owner_id`) into an event definition's
+  `properties` array alongside the event's own custom properties, all under `groupName:
+  "historical_object_properties"`. Those are read-only/auto-populated, not something Send Event
+  Occurrence can actually set, so `getCustomEventProperties` filters them out
+  (`HISTORICAL_OBJECT_PROPERTIES_GROUP` in `helpers.ts`) before the exclude-already-picked filter
+  above runs.
+- **Occurred At** (Additional Options) is a plain `type: 'string'` field, not `dateTime` — its
+  default is the literal expression `={{ $now }}`, which pre-selects Expression mode in the
+  parameter editor rather than a fixed value. UUID and UTK are also Additional Options, both
+  optional passthrough fields.
+- HubSpot returns `204 No Content` on success; the output item is `{ success: true, ...body }` —
+  the constructed request body plus a success flag — rather than an empty object, so the record
+  identifier and properties sent are still visible downstream.
+
+#### Batch Send Event Occurrences
+- Raw JSON **Body** field (pre-filled with a HubSpot-shaped `{ inputs: [...] }` example), no
+  Additional Options, no inter-item delay — same convention as Objects → Batch Create/Update/
+  Upsert. Also returns `204 No Content`; output is `{ success: true }`.
 
 ---
 
@@ -567,6 +692,36 @@ Endpoints hang off `/crm/properties/2026-03/{objectType}` (Object Type is a real
   see Resource: Marketing Events above for why.
 - `resolveUserIdFromOwnerId`, `findOwnerByField`, `resolveUsersLookup` — the Owners/Users
   lookup helpers described above.
+- `fetchEventDefinitions()` (private, cached) — pages through `GET /events/2026-09/event-definitions`
+  via `after` (capped at `EVENT_DEFINITIONS_LIST_MAX_PAGES`, 50), same pagination shape as
+  `fetchForms()` / `fetchMarketingEvents()`, then drops archived definitions. Cached per
+  credential via `eventDefinitionsCache`, same `PROPERTIES_CACHE_TTL_MS` (2 minutes) and
+  evict-on-failure behavior as the caches above. Backs two `loadOptions` methods (not
+  `listSearch` — there's no meaningful display order to preserve here, unlike the
+  forms/marketing-events resourceLocators above, which need `listSearch` specifically to avoid a
+  plain `options` dropdown's alphabetical re-sort undoing their date-based ordering), both via a
+  shared `eventDefinitionsToOptions()` mapper (`{ name: labels.singular ?? name ??
+  fullyQualifiedName, value: fullyQualifiedName }` — `fullyQualifiedName` is stored since that's
+  the exact string HubSpot's `eventName` field expects):
+  - `getCustomEventTypes` — every non-archived definition. Backs List Event Definitions'
+    dropdowns and Search Event Occurrences' required **Event Type Name or ID**.
+  - `getSendableCustomEventTypes` — the same list filtered to `fullyQualifiedName.startsWith('pe')`.
+    Backs Send Event Occurrence's **Event Name**, since only custom behavioral events (always
+    `pe{HubID}_{name}`) can be sent through the Send Custom Event APIs; other definitions the
+    account may have would just fail at send time.
+- `fetchEventDefinitionDetail()` (private, cached per credential + event name) — a single `GET
+  /events/2026-09/event-definitions/{eventName}` call, which (unlike the list endpoint above)
+  returns that one event's full `properties` array without needing a query flag. Swallows a
+  failed lookup (e.g. no event selected yet) into `undefined` rather than throwing. Backs
+  `getCustomEventProperties`, the loadOptions method for Send Event Occurrence's **Property
+  Name** field — reads the sibling top-level `eventName` parameter via
+  `this.getCurrentNodeParameter('eventName')` (same pattern `fetchPropertiesForParam` uses for
+  `objectType`), so the list re-fetches whenever a different event is selected. Also calls the
+  existing `getSelectedPropertyNames()` (scoped to the `eventProperties` fixedCollection) to
+  exclude properties already picked in another row, same convention as `getWritableProperties`,
+  and drops any property whose `groupName` is `historical_object_properties` — HubSpot mixes an
+  associated object's historical properties (e.g. `hs_historical_company_hubspot_owner_id`) into
+  the same `properties` array, and those are read-only/auto-populated, not sendable.
 - Exported constants: `CONTACTS_OBJECT_TYPE` (`'0-1'`), `USERS_OBJECT_TYPE` (`'0-115'`),
   `NOTES_OBJECT_TYPE` (`'0-46'`) + `isNotesObjectType()`, `OBJECT_TYPE_OPTIONS`,
   `ASSOCIATION_OBJECT_TYPE_OPTIONS`, `OWNERS_BASE_PATH`, `SEARCH_OPERATORS`.
@@ -783,9 +938,9 @@ search/filter capability, so this branch has its own field set and its own `poll
 
 ## What's next (suggested)
 
-Objects, Associations, Owners, Properties, Forms, and Marketing Events resources, plus the
-polling Trigger's CRM Records (including Property Changed mode) and Form Submitted Trigger On
-options, are all implemented. Remaining ideas:
+Objects, Associations, Owners, Properties, Forms, Marketing Events, and Custom Events resources,
+plus the polling Trigger's CRM Records (including Property Changed mode) and Form Submitted
+Trigger On options, are all implemented. Remaining ideas:
 
 1. **Lists resource** — HubSpot lists API.
 2. **Marketing Events write operations** — Create/Update/Cancel/Complete/attendance

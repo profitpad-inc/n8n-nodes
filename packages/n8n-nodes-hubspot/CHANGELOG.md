@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+### HubSpot (New resource: Custom Events)
+
+- Added a **Custom Events** resource wrapping HubSpot's Custom Behavioral Events API
+  (`/events/2026-09` and `/events/event-occurrences/2026-09`), with four operations:
+  - **List Event Definitions** (`GET /events/2026-09/event-definitions`) — lists the account's
+    custom event type definitions, with the same **Return All** / **Limit** / **Max Pages** /
+    **Return All Mode** convention as every other list operation in this node (shared with Search
+    Event Occurrences), plus Additional Options for **Include Properties**, **Search String**,
+    **Sort Order**, and **After (Cursor)**. Backs a new `getCustomEventTypes` loadOptions method
+    (`helpers.ts`), cached per credential (2-minute TTL, same convention as the
+    property/forms/marketing-events caches).
+  - **Search Event Occurrences** (named **Get Events** until now) — retrieves event occurrences.
+    **Event Type Name or ID** is a required top-level dropdown (via `getCustomEventTypes`);
+    everything else stays under Additional Options as before: HubSpot's documented filters
+    (object type/ID, event IDs, occurred after/before, properties, sort, cursors) plus guided
+    **Object Property Filters** / **Event Property Filters** builders for the `objectProperty.*` /
+    `property.*` query parameters.
+  - **Send Event Occurrence** — sends a single event. **Event Name** is a dropdown sourced from a
+    new `getSendableCustomEventTypes` loadOptions method — the same event definitions list as
+    above, filtered to only `fullyQualifiedName`s starting with `pe` (the format of an actual
+    custom behavioral event), since other event type definitions the account may have would just
+    fail at send time (`noValidation` so hand-typed/expression values still work). An **Identify
+    Record By** toggle switches between **Object ID**, **Custom Matching Property** (relies purely
+    on the properties sent), and **Email (Contacts Only)**, matching HubSpot's three documented
+    matching modes. UUID, UTK, and Occurred At (a plain string field defaulting to the expression
+    `={{ $now }}`, not a `dateTime` picker) live under Additional Options. In Fields mode, each
+    Property's **Property Name** is a dropdown scoped to the selected Event Name (a new
+    `getCustomEventProperties` loadOptions method calling HubSpot's single-event-definition
+    endpoint, `GET /events/2026-09/event-definitions/{eventName}`, for that event's declared
+    properties), rather than free text — excludes properties already picked in another row (same
+    as Objects → Create/Update's Property field) and any property in the
+    `historical_object_properties` group (an associated object's read-only historical properties
+    HubSpot mixes into the same list).
+  - **Batch Send Event Occurrences** — raw JSON **Body** field pre-filled with a `pe`-prefixed
+    example, same convention as Objects → Batch Create/Update/Upsert. No dropdown to filter here.
+  - New file: `descriptions/CustomEventDescription.ts`.
+
 ### HubSpot (Owners → Users → Search now uses the guided filter builder)
 
 - Owners → Users → Search's **Search Body** raw-JSON field is replaced with the same guided
