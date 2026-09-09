@@ -33,6 +33,7 @@ import {
 	getUniquePropertiesForAssociationTo,
 	getUpsertIdProperties,
 	getUserProperties,
+	getUserSearchOperators,
 	getWritableProperties,
 	getWritableUserProperties,
 	isNotesObjectType,
@@ -160,6 +161,7 @@ export class HubspotApi implements INodeType {
 			getUpsertIdProperties,
 			getAssociationTypeIds,
 			getUserProperties,
+			getUserSearchOperators,
 			getWritableUserProperties,
 		},
 		listSearch: {
@@ -1984,31 +1986,71 @@ export class HubspotApi implements INodeType {
 						}
 					}
 
-					// ── SEARCH (Users only) ───────────────────────────────────────────
+					// ── SEARCH (Users only — the Owners API has no search endpoint) ────
 					if (operation === 'search') {
-						const searchBodyRaw = this.getNodeParameter('searchBody', i);
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const opts = this.getNodeParameter('searchOptions', i) as {
 							archived?: boolean;
 							errorWhenNotFound?: boolean;
 							properties?: string | string[];
 							propertiesWithHistory?: string | string[];
+							query?: string;
+							sortsUi?: UiSorts;
+							sortsJson?: string;
 							millisecondsBetweenItems?: number;
 						};
 
 						delayMs = opts.millisecondsBetweenItems ?? 50;
 						const errorWhenNotFound = opts.errorWhenNotFound !== false;
 
+						// Back-compat: workflows built before the Fields/Custom JSON split
+						// stored the whole search request under a `searchBody` parameter
+						// that no longer exists in this node's UI. If it still has a value,
+						// treat it as the Custom JSON input so those workflows keep running
+						// instead of silently searching with no filters.
+						const legacySearchBody = (
+							this.getNodeParameter('searchBody', i, '') as string
+						).trim();
+						const searchInputMode = legacySearchBody
+							? 'json'
+							: (this.getNodeParameter('searchInputMode', i) as string);
+
+						const resolved = resolveSearchInput({
+							searchInputMode,
+							filterJson:
+								legacySearchBody || (this.getNodeParameter('filterJson', i, '') as string),
+							filterGroupsUi: this.getNodeParameter('filterGroupsUi', i, {}) as UiFilterGroups,
+							sortsJson: opts.sortsJson,
+							sortsUi: opts.sortsUi,
+						});
+
+						if (resolved.invalidFilterJson) {
+							throw new NodeOperationError(this.getNode(), 'Filters (JSON) is not valid JSON', {
+								itemIndex: i,
+							});
+						}
+						if (resolved.invalidSortsJson) {
+							throw new NodeOperationError(this.getNode(), 'Sorts (JSON) is not valid JSON', {
+								itemIndex: i,
+							});
+						}
+
 						const propertiesList = toStringList(opts.properties);
 						const propertiesWithHistoryList = toStringList(opts.propertiesWithHistory);
+						const query = (opts.query ?? '').trim();
 
 						const searchBodyBase: JsonObject = {
-							...parseJsonParam(searchBodyRaw),
+							...resolved.baseSearchBody,
+							filterGroups: resolved.filterGroups,
+							sorts: resolved.sorts.length
+								? resolved.sorts
+								: [{ propertyName: 'hs_lastmodifieddate', direction: 'DESCENDING' }],
 							...(opts.archived !== undefined ? { archived: opts.archived } : {}),
 							...(propertiesList.length ? { properties: propertiesList } : {}),
 							...(propertiesWithHistoryList.length
 								? { propertiesWithHistory: propertiesWithHistoryList }
 								: {}),
+							...(query ? { query } : {}),
 						};
 						const searchUrl = `${HUBSPOT_BASE}${USERS_OBJECT_PATH}/search`;
 						let totalFound = 0;

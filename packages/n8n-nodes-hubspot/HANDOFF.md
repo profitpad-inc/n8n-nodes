@@ -438,10 +438,27 @@ Type** and **To Object Type** use `ASSOCIATION_OBJECT_TYPE_OPTIONS` (no Users).
 - `USERS_ALWAYS_INCLUDED_PROPERTIES` (`hs_internal_user_id`, `hs_searchable_calculated_name`,
   `hs_family_name`, `hs_given_name`, `hs_email`) is always unioned into the requested
   properties for Users, so the cross-link and display fields are present.
-- Users Search takes a raw **Search Body** (pre-filled example filters on `hs_job_title`),
-  paginates at `limit: 200` per page with **Max Pages** and the same three-way **Return All
-  Mode**, and throws "No users found matching the search criteria" when
-  `errorWhenNotFound` is on and nothing matched.
+- Users Search uses the same shared **Search Filter Mode** UX from `searchFilter.ts` as Objects
+  → Search (Fields / Custom JSON toggle, guided AND/OR **Filter Groups** builder, **Filters
+  (JSON)**), plus a **Query** free-text field and **Sorts** / **Sorts (JSON)** under Additional
+  Options. It paginates at `limit: 200` per page with **Max Pages** and the same three-way
+  **Return All Mode**, and throws "No users found matching the search criteria" when
+  `errorWhenNotFound` is on and nothing matched. The Owners object type has no Search operation
+  — HubSpot's Owners API (`/crm/v3/owners`) has no search endpoint, only Get/List.
+  - Users Search can't reuse `filterGroupsUiProperty()`/`sortsUiOption` from `searchFilter.ts`
+    directly: those bake in the CRM-object loadOptions methods (`getSearchFilterProperties`,
+    `getSearchOperators`, `getAllProperties`), which read the primary `objectType` parameter as a
+    real CRM type ID — but this resource's `objectType` holds `users`/`owners` instead. n8n's
+    eslint rules for dynamic-options fields only recognize a `loadOptionsMethod` that is a string
+    literal in the AST (confirmed by lint output), so parameterizing those functions to accept an
+    override doesn't actually work — the rules stop firing instead of validating the parameterized
+    method. `OwnerDescription.ts` instead keeps its own literal copies
+    (`userFilterGroupsUiProperty`, `userSortsUiOption`) with `getUserProperties` /
+    `getUserSearchOperators` (a new loadOptions method in `helpers.ts`, mirroring
+    `getSearchOperators` but scoped to `USERS_OBJECT_TYPE`) baked in directly.
+  - Backward compatible with the old raw-JSON **Search Body** field: if a saved workflow still has
+    a value there, it's treated as the Custom JSON filter body, same fallback convention Objects →
+    Search already uses.
 - Get supports `errorWhenNotFound` → `{ objectFound: false }`, same convention as Objects → Get.
 - `USERS_OBJECT_TYPE` (`'0-115'`) exists in helpers because the Properties API needs the real
   type ID when this resource's dropdown says `users`.

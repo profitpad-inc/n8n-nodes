@@ -1,5 +1,161 @@
 import { INodeProperties } from 'n8n-workflow';
 
+import {
+	filterJsonProperty,
+	searchFilterModeProperty,
+	sortsJsonOption,
+	VALUELESS_OPERATORS,
+} from '../searchFilter';
+
+const SEARCH_SHOW = { resource: ['owners'], objectType: ['users'], operation: ['search'] };
+
+const SEARCH_FILTER_MODE_DESCRIPTION =
+	'How to define the search filters. Searches are not case-sensitive.';
+
+const SEARCH_FILTER_JSON_DESCRIPTION =
+	'A JSON object containing <code>filterGroups</code> (and optionally <code>query</code>). Filter groups are OR\'d; filters within a group are AND\'d. See <a href="https://developers.hubspot.com/docs/api-reference/legacy/crm/objects/objects/search/search-objects">HubSpot search docs</a> for operators: BETWEEN, CONTAINS_TOKEN, EQ, GT, GTE, HAS_PROPERTY, IN, LT, LTE, NEQ, NOT_CONTAINS_TOKEN, NOT_HAS_PROPERTY, NOT_IN.';
+
+// Own copy of searchFilter.ts's filterGroupsUiProperty()/sortsUiOption, with
+// 'getUserProperties'/'getUserSearchOperators' baked in literally instead of
+// the CRM-object variants ('getSearchFilterProperties'/'getSearchOperators',
+// keyed off the primary `objectType` parameter — which for this resource
+// holds 'users'/'owners', not a real object type). n8n's eslint rules for
+// dynamic-options fields only recognise a `loadOptionsMethod` that is a
+// string literal in the AST, so this can't be shared via a parameterised
+// function without silently defeating those rules (confirmed by lint output).
+const userFilterGroupsUiProperty: INodeProperties = {
+	displayName: 'Filter Groups',
+	name: 'filterGroupsUi',
+	type: 'fixedCollection',
+	typeOptions: { multipleValues: true },
+	placeholder: 'Add Filter Group',
+	default: {},
+	description:
+		'Filter groups are combined with OR — a record matches if it satisfies any group. Filters within a group are combined with AND.',
+	displayOptions: {
+		show: { ...SEARCH_SHOW, searchInputMode: ['ui'] },
+	},
+	options: [
+		{
+			name: 'groups',
+			displayName: 'Filter Group (OR)',
+			values: [
+				{
+					displayName: 'Filters (AND)',
+					name: 'filters',
+					type: 'fixedCollection',
+					typeOptions: { multipleValues: true },
+					placeholder: 'Add Filter',
+					default: {},
+					options: [
+						{
+							name: 'conditions',
+							displayName: 'Filter',
+							values: [
+								{
+									// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+									displayName: 'Property',
+									name: 'propertyName',
+									type: 'options',
+									typeOptions: {
+										loadOptionsMethod: 'getUserProperties',
+									},
+									default: '',
+									description:
+										'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
+								},
+								{
+									// Operator values are a fixed HubSpot enum, not fetched
+									// resources, so the dynamic-options naming/description
+									// lint conventions do not apply here.
+									// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+									displayName: 'Operator',
+									name: 'operator',
+									type: 'options',
+									typeOptions: {
+										loadOptionsMethod: 'getUserSearchOperators',
+										loadOptionsDependsOn: ['&propertyName'],
+									},
+									default: 'EQ',
+									// eslint-disable-next-line n8n-nodes-base/node-param-description-wrong-for-dynamic-options
+									description:
+										"How to compare the property against the value. Only operators valid for the selected property's type are shown.",
+								},
+								{
+									displayName: 'Value',
+									name: 'value',
+									type: 'string',
+									default: '',
+									description:
+										'The value to compare against. For <em>In List</em> / <em>Not In List</em>, provide a semicolon-separated list. For <em>Between</em>, this is the lower bound.',
+									displayOptions: {
+										hide: { operator: VALUELESS_OPERATORS },
+									},
+								},
+								{
+									displayName: 'High Value',
+									name: 'highValue',
+									type: 'string',
+									default: '',
+									description: 'The upper bound for the <em>Between</em> operator',
+									displayOptions: {
+										show: { operator: ['BETWEEN'] },
+									},
+								},
+							],
+						},
+					],
+				},
+			],
+		},
+	],
+};
+
+const userSortsUiOption: INodeProperties = {
+	displayName: 'Sorts',
+	name: 'sortsUi',
+	type: 'fixedCollection',
+	typeOptions: { multipleValues: true },
+	placeholder: 'Add Sort',
+	default: {},
+	description:
+		'How to order results. When left empty, results are sorted by hs_lastmodifieddate descending.',
+	displayOptions: {
+		show: { '/searchInputMode': ['ui'] },
+	},
+	options: [
+		{
+			name: 'sortValues',
+			displayName: 'Sort',
+			values: [
+				{
+					// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+					displayName: 'Property',
+					name: 'propertyName',
+					type: 'options',
+					typeOptions: {
+						loadOptionsMethod: 'getUserProperties',
+					},
+					default: 'hs_lastmodifieddate',
+					description:
+						'The property to sort by. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				},
+				{
+					displayName: 'Direction',
+					name: 'direction',
+					type: 'options',
+					options: [
+						{ name: 'Ascending', value: 'ASCENDING' },
+						{ name: 'Descending', value: 'DESCENDING' },
+					],
+					default: 'DESCENDING',
+					description: 'The sort direction',
+				},
+			],
+		},
+	],
+};
+
 const msOption: INodeProperties = {
 	displayName: 'Milliseconds Between Items',
 	name: 'millisecondsBetweenItems',
@@ -424,34 +580,10 @@ export const ownerDescription: INodeProperties[] = [
 		],
 	},
 
-	// ── SEARCH (Users only) ─────────────────────────────────────────────────────
-	{
-		displayName: 'Search Body',
-		name: 'searchBody',
-		type: 'json',
-		default: JSON.stringify(
-			{
-				filterGroups: [
-					{
-						filters: [{ propertyName: 'hs_job_title', operator: 'EQ', value: 'CEO' }],
-					},
-				],
-				sorts: [{ propertyName: 'hs_createdate', direction: 'DESCENDING' }],
-			},
-			null,
-			2,
-		),
-		placeholder:
-			'{\n  "filterGroups": [{"filters": [{"propertyName": "hs_job_title", "operator": "EQ", "value": "CEO"}]}]\n}',
-		description:
-			'JSON body for the search request. See <a href="https://developers.hubspot.com/docs/api-reference/legacy/crm/objects/objects/search/search-objects">HubSpot search docs</a> for details. Available operators: BETWEEN, CONTAINS_TOKEN, EQ, GT, GTE, HAS_PROPERTY, IN, LT, LTE, NEQ, NOT_CONTAINS_TOKEN, NOT_HAS_PROPERTY, NOT_IN.',
-		displayOptions: {
-			show: {
-				resource: ['owners'],
-				operation: ['search'],
-			},
-		},
-	},
+	// ── SEARCH (Users only — the Owners API has no search endpoint) ────────────
+	searchFilterModeProperty(SEARCH_SHOW, SEARCH_FILTER_MODE_DESCRIPTION),
+	userFilterGroupsUiProperty,
+	filterJsonProperty(SEARCH_SHOW, SEARCH_FILTER_JSON_DESCRIPTION),
 	{
 		displayName: 'Additional Options',
 		name: 'searchOptions',
@@ -464,7 +596,22 @@ export const ownerDescription: INodeProperties[] = [
 				operation: ['search'],
 			},
 		},
-		options: [errorWhenNotFoundOption, msOption, propertiesOption, propertiesWithHistoryOption],
+		options: [
+			errorWhenNotFoundOption,
+			msOption,
+			propertiesOption,
+			propertiesWithHistoryOption,
+			{
+				displayName: 'Query',
+				name: 'query',
+				type: 'string',
+				default: '',
+				description:
+					"Free-text search string matched across the user's default searchable properties",
+			},
+			userSortsUiOption,
+			sortsJsonOption,
+		],
 	},
 
 	// ── UPDATE (Users only) ─────────────────────────────────────────────────────

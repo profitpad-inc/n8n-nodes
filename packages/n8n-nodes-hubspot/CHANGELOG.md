@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### HubSpot (Owners → Users → Search now uses the guided filter builder)
+
+- Owners → Users → Search's **Search Body** raw-JSON field is replaced with the same guided
+  search UX as Objects → Search: a **Search Filter Mode** (Fields / Custom JSON) toggle, an
+  AND/OR **Filter Groups** builder (property options from `getUserProperties`, operators
+  type-aware via a new `getUserSearchOperators` loadOptions method), and **Filters (JSON)** for
+  the raw alternative.
+- Added a **Query** free-text field and **Sorts** / **Sorts (JSON)** to Search's Additional
+  Options, matching Objects → Search. Defaults to `hs_lastmodifieddate` descending when no sort
+  is given, same as Objects → Search.
+- **Backward compatible**: a workflow with an existing **Search Body** value keeps using it as
+  the Custom JSON filter body, same fallback convention as Objects → Search's earlier migration.
+- The Owners object type (as opposed to Users) still has no Search operation — HubSpot's Owners
+  API (`/crm/v3/owners`) has no search endpoint, only Get/List.
+
 ### HubSpot / HubSpot Trigger (Forms → Form field is now a resourceLocator)
 
 - **Form** (action node's Get Form Submissions, and the Trigger's Form Submitted mode) is now a

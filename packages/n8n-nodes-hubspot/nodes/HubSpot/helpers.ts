@@ -562,6 +562,33 @@ export async function getSearchOperators(
 	return SEARCH_OPERATORS.filter((op) => allowed.includes(op.value as string));
 }
 
+/**
+ * Operator options for a Users search filter (Owners resource). Same idea as
+ * getSearchOperators, but scoped to the Users object type (0-115) rather than
+ * the primary `objectType` parameter, which holds `users`/`owners` in this
+ * resource instead of a real type ID. Users have no association
+ * pseudo-properties (see getSearchFilterProperties), so unlike the general
+ * version there is no `associations.` prefix check.
+ */
+export async function getUserSearchOperators(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	let propertyName = '';
+	try {
+		propertyName = (this.getCurrentNodeParameter('&propertyName') as string) ?? '';
+	} catch {
+		propertyName = '';
+	}
+
+	if (!propertyName) return SEARCH_OPERATORS;
+
+	const properties = await fetchPropertiesForType.call(this, USERS_OBJECT_TYPE);
+	const match = properties.find((property) => property.name === propertyName);
+	const allowed = operatorsForPropertyType(match?.type);
+
+	return SEARCH_OPERATORS.filter((op) => allowed.includes(op.value as string));
+}
+
 interface HubSpotFormSummary {
 	id: string;
 	name: string;

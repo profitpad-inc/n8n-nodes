@@ -139,7 +139,16 @@ export function searchFilterModeProperty(baseShow: Show, description: string): I
 	};
 }
 
-/** The Fields-mode AND/OR filter builder. */
+/**
+ * The Fields-mode AND/OR filter builder, for the CRM-object Search operation
+ * (property/operator options resolved from the primary `objectType`
+ * parameter). The Owners resource's Users search has its own copy of this
+ * shape in OwnerDescription.ts with different loadOptions methods baked in
+ * literally — n8n's eslint rules for dynamic-options fields only recognise a
+ * `loadOptionsMethod` that is a string literal in the AST, so parameterising
+ * it here would silently defeat those rules (confirmed by lint output) rather
+ * than genuinely share the definition.
+ */
 export function filterGroupsUiProperty(baseShow: Show): INodeProperties {
 	return {
 		displayName: 'Filter Groups',
@@ -282,9 +291,12 @@ export function propertiesProperty(baseShow: Show): INodeProperties {
 }
 
 /**
- * Sorts options for an Additional Options collection. They toggle on the
- * node-level `searchInputMode` via a root reference, so they can be dropped
- * straight into any collection.
+ * Sorts options for an Additional Options collection, for the CRM-object
+ * Search operation and the Trigger. They toggle on the node-level
+ * `searchInputMode` via a root reference, so they can be dropped straight
+ * into any collection. The Owners resource's Users search has its own copy
+ * with a different loadOptions method baked in literally — see the note on
+ * filterGroupsUiProperty above for why this isn't parameterised instead.
  */
 export const sortsUiOption: INodeProperties = {
 	displayName: 'Sorts',
