@@ -314,10 +314,42 @@ single execution can price/inventory multiple products at once. The "Product
 IDs" field (`pricingProductId`) now accepts a comma-separated list and is sent
 as repeated `ProductId` query params (`?ProductId=1&ProductId=2&...`, same
 `ProductId` casing as the pre-existing single-ID call). A new "Page Size"
-field (`pricingPageSize`, default 1000) was added, and the operation always
-paginates (loops bumping `StartIndex` by `PageSize` until a page comes back
-shorter than `PageSize`) — there's no "Return All" toggle here, since the
-caller is expected to pass exactly the product IDs they want.
+field (`pricingPageSize`, default and max 100 — see below) was added, and
+the operation always paginates (loops bumping `StartIndex` by `PageSize`
+until a page comes back shorter than `PageSize`) — there's no "Return All"
+toggle here, since the caller is expected to pass exactly the product IDs
+they want.
+
+**Live testing against Eclipse (2026-09-10)** surfaced two separate
+findings — don't conflate them, they were reported together but are
+unrelated:
+- The mass endpoints appear to cap results at 100 per page regardless of a
+  higher requested `PageSize`. `pricingPageSize` has
+  `typeOptions: { minValue: 1, maxValue: 100 }`, default 100, and
+  `execute()` also clamps via `Math.min(pageSize, MAX_PAGE_SIZE)` as a
+  belt-and-suspenders guard (the NDV's `maxValue` doesn't stop an
+  expression-driven value from exceeding it — see the "options field value
+  warnings" / expression-driven `displayOptions` entries above for the
+  general pattern of NDV constraints not being enforced at execution time).
+  **Note**: this clamp was added, then briefly removed at the user's
+  request to allow free experimentation ("don't clamp down the max, i want
+  to be able to put it to whatever i want for now"), then put back again
+  shortly after. If asked to remove it again, confirm with the user first
+  rather than assuming the earlier removal request still stands — it's
+  flip-flopped once already in the same session.
+- Separately, sending more than ~119 `ProductId` query params in one
+  request causes a **404** — confirmed independent of page size (it
+  happened even with `pageSize: 10`), so it's a query-string-length limit
+  on Eclipse's side, not a page-size-related limit (IIS's default max query
+  string is 2048 bytes, and ~119 numeric IDs as `&ProductId=NNNNNN` lands
+  right around that). `execute()` batches `productIds` into chunks of
+  `PRODUCT_ID_BATCH_SIZE` (100, comfortably under the ~119 threshold) and
+  runs the full per-batch pagination loop for each chunk, pushing one
+  output item per page per batch — same overall shape as the existing
+  Sales Order Get Many ID-batching path, but simpler since there's no
+  "request batchSize+1 to detect an extra page" trick needed here (both
+  `pageSize` and the ID batch size independently cap at 100, so a batch's
+  own IDs can never exceed one page).
 
 This was implemented without access to Eclipse's API docs for the mass
 endpoints, based on this endpoint's own existing PascalCase query param

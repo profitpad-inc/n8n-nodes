@@ -234,9 +234,9 @@ export const productDescription: INodeProperties[] = [
     displayName: 'Page Size',
     name: 'pricingPageSize',
     type: 'number',
-    typeOptions: { minValue: 1 },
-    default: 1000,
-    description: 'Number of product results to return per page. Results are always paginated.',
+    typeOptions: { minValue: 1, maxValue: 100 },
+    default: 100,
+    description: 'Number of product results to return per page (Eclipse\'s maximum is 100). Results are always paginated.',
     displayOptions: {
       show: {
         resource: ['product'],

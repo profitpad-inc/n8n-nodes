@@ -1396,11 +1396,15 @@ export class EclipseApi implements INodeType {
           const productIds = parseCommaSeparatedList(toTrimmedString(this.getNodeParameter('pricingProductId', i)));
           const considerUserAuthBranch = this.getNodeParameter('considerUserAuthBranch', i) as boolean;
           const userId = considerUserAuthBranch ? toTrimmedString(this.getNodeParameter('pricingUserId', i)) : undefined;
-          const pageSize = this.getNodeParameter('pricingPageSize', i) as number;
+          const MAX_PAGE_SIZE = 100;
+          const pageSize = Math.min(this.getNodeParameter('pricingPageSize', i) as number, MAX_PAGE_SIZE);
+          // Eclipse's query string 404s once more than ~119 ProductId params
+          // are sent, so the product ID list is batched well under that.
+          const PRODUCT_ID_BATCH_SIZE = 100;
 
-          const buildUrl = (endpoint: string, startIndex: number, extraQs: Record<string, string> = {}): string => {
+          const buildUrl = (endpoint: string, idBatch: string[], startIndex: number, extraQs: Record<string, string> = {}): string => {
             const params = new URLSearchParams();
-            for (const productId of productIds) params.append('ProductId', productId);
+            for (const productId of idBatch) params.append('ProductId', productId);
             params.set('CustomerId', customerId);
             if (considerUserAuthBranch && userId) params.set('UserId', userId);
             params.set('ConsiderUserAuthBranch', String(considerUserAuthBranch));
@@ -1410,58 +1414,62 @@ export class EclipseApi implements INodeType {
             return `${baseUrl}/${endpoint}?${params.toString()}`;
           };
 
-          let currentStart = 1;
-          while (true) {
-            const [inventoryResponse, singlePricingResponse, maxPricingResponse] = await Promise.all([
-              this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
-                method: 'GET',
-                url: buildUrl('ProductInventoryPricingMassInquiry', currentStart),
-                headers,
-              }),
-              this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
-                method: 'GET',
-                url: buildUrl('ProductPricingMassInquiry', currentStart, { ShowCost: 'true', Quantity: '1' }),
-                headers,
-              }),
-              this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
-                method: 'GET',
-                url: buildUrl('ProductPricingMassInquiry', currentStart, { ShowCost: 'true', Quantity: '1000000', IncludeTotalItems: 'true' }),
-                headers,
-              }),
-            ]);
+          for (let batchStart = 0; batchStart < productIds.length; batchStart += PRODUCT_ID_BATCH_SIZE) {
+            const idBatch = productIds.slice(batchStart, batchStart + PRODUCT_ID_BATCH_SIZE);
 
-            const inventoryResults = (inventoryResponse.results ?? []) as JsonObject[];
-            const singlePricingResults = (singlePricingResponse.results ?? []) as JsonObject[];
-            const maxPricingResults = (maxPricingResponse.results ?? []) as JsonObject[];
+            let currentStart = 1;
+            while (true) {
+              const [inventoryResponse, singlePricingResponse, maxPricingResponse] = await Promise.all([
+                this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                  method: 'GET',
+                  url: buildUrl('ProductInventoryPricingMassInquiry', idBatch, currentStart),
+                  headers,
+                }),
+                this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                  method: 'GET',
+                  url: buildUrl('ProductPricingMassInquiry', idBatch, currentStart, { ShowCost: 'true', Quantity: '1' }),
+                  headers,
+                }),
+                this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                  method: 'GET',
+                  url: buildUrl('ProductPricingMassInquiry', idBatch, currentStart, { ShowCost: 'true', Quantity: '1000000', IncludeTotalItems: 'true' }),
+                  headers,
+                }),
+              ]);
 
-            // the single pricing response doesn't return quantityBreaks
-            // and the maxPricing response has the wrong value for the first quantity break
-            const mergedResults = singlePricingResults.map((singlePricing, index) => {
-              const maxPricing = maxPricingResults[index];
-              const inventory = inventoryResults[index];
-              const quantityBreaks = maxPricing?.quantityBreaks as JsonObject[] | undefined;
+              const inventoryResults = (inventoryResponse.results ?? []) as JsonObject[];
+              const singlePricingResults = (singlePricingResponse.results ?? []) as JsonObject[];
+              const maxPricingResults = (maxPricingResponse.results ?? []) as JsonObject[];
 
-              if (quantityBreaks && quantityBreaks.length > 0) {
-                singlePricing.quantityBreaks = quantityBreaks;
-                const productUnitPrice = singlePricing.productUnitPrice as JsonObject;
-                (quantityBreaks[0].unitPrice as JsonObject).value = productUnitPrice.value;
-              }
+              // the single pricing response doesn't return quantityBreaks
+              // and the maxPricing response has the wrong value for the first quantity break
+              const mergedResults = singlePricingResults.map((singlePricing, index) => {
+                const maxPricing = maxPricingResults[index];
+                const inventory = inventoryResults[index];
+                const quantityBreaks = maxPricing?.quantityBreaks as JsonObject[] | undefined;
 
-              return { ...singlePricing, ...inventory };
-            });
+                if (quantityBreaks && quantityBreaks.length > 0) {
+                  singlePricing.quantityBreaks = quantityBreaks;
+                  const productUnitPrice = singlePricing.productUnitPrice as JsonObject;
+                  (quantityBreaks[0].unitPrice as JsonObject).value = productUnitPrice.value;
+                }
 
-            const metadata = {
-              ...(inventoryResponse.metadata as JsonObject | undefined),
-              totalItems: (maxPricingResponse.metadata as JsonObject | undefined)?.totalItems ?? null,
-            };
+                return { ...singlePricing, ...inventory };
+              });
 
-            returnData.push({
-              json: { ...singlePricingResponse, ...inventoryResponse, metadata, results: mergedResults },
-              pairedItem: { item: i },
-            });
+              const metadata = {
+                ...(inventoryResponse.metadata as JsonObject | undefined),
+                totalItems: (maxPricingResponse.metadata as JsonObject | undefined)?.totalItems ?? null,
+              };
 
-            if (mergedResults.length < pageSize) break;
-            currentStart += pageSize;
+              returnData.push({
+                json: { ...singlePricingResponse, ...inventoryResponse, metadata, results: mergedResults },
+                pairedItem: { item: i },
+              });
+
+              if (mergedResults.length < pageSize) break;
+              currentStart += pageSize;
+            }
           }
         }
       } catch (error) {

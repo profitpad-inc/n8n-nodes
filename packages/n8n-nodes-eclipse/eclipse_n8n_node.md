@@ -67,9 +67,14 @@ which determine which other fields appear.
   quantity breaks and the correct first-unit price in one call. All
   requested Product IDs are sent on every call as repeated `ProductId`
   query params (`?ProductId=1&ProductId=2&...`). The operation always
-  paginates using a **Page Size** field (default 1000, no "Return All"
-  toggle) — it loops, advancing the start index by the page size, until a
-  page comes back with fewer results than the page size.
+  paginates using a **Page Size** field (default and maximum 100, matching
+  Eclipse's own cap on this endpoint) — it loops, advancing the start index
+  by the page size, until a page comes back with fewer results than the
+  page size. Independently of page size, if more than 100 Product IDs are
+  supplied, they're automatically split into batches of 100 (Eclipse's
+  query string 404s somewhere above ~119 `ProductId` params, regardless of
+  page size), each batch paginated the same way, transparent to the agent
+  building the workflow.
 
 ### Resource: Sales Order
 The largest resource, with many operations:
