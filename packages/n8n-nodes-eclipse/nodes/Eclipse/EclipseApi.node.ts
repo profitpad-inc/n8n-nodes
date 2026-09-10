@@ -1392,43 +1392,77 @@ export class EclipseApi implements INodeType {
         }
 
         if (resource === 'product' && operation === 'getProductInventoryPricingInquiry') {
-          const customerId = (this.getNodeParameter('pricingCustomerId', i) as string).trim();
-          const productId = (this.getNodeParameter('pricingProductId', i) as string).trim();
+          const customerId = toTrimmedString(this.getNodeParameter('pricingCustomerId', i));
+          const productIds = parseCommaSeparatedList(toTrimmedString(this.getNodeParameter('pricingProductId', i)));
           const considerUserAuthBranch = this.getNodeParameter('considerUserAuthBranch', i) as boolean;
-          const userId = considerUserAuthBranch ? (this.getNodeParameter('pricingUserId', i) as string).trim() : undefined;
+          const userId = considerUserAuthBranch ? toTrimmedString(this.getNodeParameter('pricingUserId', i)) : undefined;
+          const pageSize = this.getNodeParameter('pricingPageSize', i) as number;
 
-          const sharedQs: Record<string, string> = { CustomerId: customerId, ProductId: productId };
-          if (considerUserAuthBranch && userId) sharedQs.UserId = userId;
+          const buildUrl = (endpoint: string, startIndex: number, extraQs: Record<string, string> = {}): string => {
+            const params = new URLSearchParams();
+            for (const productId of productIds) params.append('ProductId', productId);
+            params.set('CustomerId', customerId);
+            if (considerUserAuthBranch && userId) params.set('UserId', userId);
+            params.set('ConsiderUserAuthBranch', String(considerUserAuthBranch));
+            params.set('PageSize', String(pageSize));
+            params.set('StartIndex', String(startIndex));
+            for (const [key, value] of Object.entries(extraQs)) params.set(key, value);
+            return `${baseUrl}/${endpoint}?${params.toString()}`;
+          };
 
-          const [inventoryResponse, singlePricingResponse, maxPricingResponse] = await Promise.all([
-            this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
-              method: 'GET',
-              url: `${baseUrl}/ProductInventoryPricingInquiry`,
-              headers,
-              qs: { ...sharedQs, ConsiderUserAuthBranch: String(considerUserAuthBranch) },
-            }),
-            this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
-              method: 'GET',
-              url: `${baseUrl}/ProductPricingInquiry`,
-              headers,
-              qs: { ...sharedQs, ShowCost: 'true', ConsiderUserAuthBranch: String(considerUserAuthBranch), Quantity: 1 },
-            }),
-            this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
-              method: 'GET',
-              url: `${baseUrl}/ProductPricingInquiry`,
-              headers,
-              qs: { ...sharedQs, ShowCost: 'true', ConsiderUserAuthBranch: String(considerUserAuthBranch), Quantity: 1000000 },
-            }),
-          ]);
+          let currentStart = 1;
+          while (true) {
+            const [inventoryResponse, singlePricingResponse, maxPricingResponse] = await Promise.all([
+              this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                method: 'GET',
+                url: buildUrl('ProductInventoryPricingMassInquiry', currentStart),
+                headers,
+              }),
+              this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                method: 'GET',
+                url: buildUrl('ProductPricingMassInquiry', currentStart, { ShowCost: 'true', Quantity: '1' }),
+                headers,
+              }),
+              this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                method: 'GET',
+                url: buildUrl('ProductPricingMassInquiry', currentStart, { ShowCost: 'true', Quantity: '1000000', IncludeTotalItems: 'true' }),
+                headers,
+              }),
+            ]);
 
-          // the single pricing resposne doesn't return quantityBreaks
-          // and the maxPricing response has the wrong value for the first quantity break
-          if (maxPricingResponse.quantityBreaks.length > 0) {
-            singlePricingResponse.quantityBreaks = maxPricingResponse.quantityBreaks
-            singlePricingResponse.quantityBreaks[0].unitPrice.value = singlePricingResponse.productUnitPrice.value
+            const inventoryResults = (inventoryResponse.results ?? []) as JsonObject[];
+            const singlePricingResults = (singlePricingResponse.results ?? []) as JsonObject[];
+            const maxPricingResults = (maxPricingResponse.results ?? []) as JsonObject[];
+
+            // the single pricing response doesn't return quantityBreaks
+            // and the maxPricing response has the wrong value for the first quantity break
+            const mergedResults = singlePricingResults.map((singlePricing, index) => {
+              const maxPricing = maxPricingResults[index];
+              const inventory = inventoryResults[index];
+              const quantityBreaks = maxPricing?.quantityBreaks as JsonObject[] | undefined;
+
+              if (quantityBreaks && quantityBreaks.length > 0) {
+                singlePricing.quantityBreaks = quantityBreaks;
+                const productUnitPrice = singlePricing.productUnitPrice as JsonObject;
+                (quantityBreaks[0].unitPrice as JsonObject).value = productUnitPrice.value;
+              }
+
+              return { ...singlePricing, ...inventory };
+            });
+
+            const metadata = {
+              ...(inventoryResponse.metadata as JsonObject | undefined),
+              totalItems: (maxPricingResponse.metadata as JsonObject | undefined)?.totalItems ?? null,
+            };
+
+            returnData.push({
+              json: { ...singlePricingResponse, ...inventoryResponse, metadata, results: mergedResults },
+              pairedItem: { item: i },
+            });
+
+            if (mergedResults.length < pageSize) break;
+            currentStart += pageSize;
           }
-
-          returnData.push({ json: { ...singlePricingResponse, ...inventoryResponse }, pairedItem: { item: i } });
         }
       } catch (error) {
         if (this.continueOnFail()) {

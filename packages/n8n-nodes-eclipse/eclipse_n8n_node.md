@@ -58,12 +58,18 @@ which determine which other fields appear.
 ### Resource: Product
 - **Get** — retrieve a single product by ID
 - **Get Many** — list products, with filtering and pagination
-- **Product Inventory Pricing Inquiry** — given a Customer ID + Product ID,
-  returns combined inventory and pricing data (this operation fires three
-  parallel Eclipse API calls internally — an inventory-pricing inquiry, a
+- **Product Inventory Pricing Inquiry** — given a Customer ID + one or more
+  Product IDs (comma-separated), returns combined inventory and pricing
+  data for every product. This operation fires three parallel Eclipse
+  "mass inquiry" API calls internally — an inventory-pricing inquiry, a
   single-unit pricing inquiry, and a large-quantity pricing inquiry — and
-  merges them, because no single Eclipse endpoint returns both quantity
-  breaks and the correct first-unit price in one call)
+  merges them per product, because no single Eclipse endpoint returns both
+  quantity breaks and the correct first-unit price in one call. All
+  requested Product IDs are sent on every call as repeated `ProductId`
+  query params (`?ProductId=1&ProductId=2&...`). The operation always
+  paginates using a **Page Size** field (default 1000, no "Return All"
+  toggle) — it loops, advancing the start index by the page size, until a
+  page comes back with fewer results than the page size.
 
 ### Resource: Sales Order
 The largest resource, with many operations:

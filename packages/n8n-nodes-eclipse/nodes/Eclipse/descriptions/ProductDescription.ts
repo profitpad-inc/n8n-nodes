@@ -216,12 +216,27 @@ export const productDescription: INodeProperties[] = [
     },
   },
   {
-    displayName: 'Product ID',
+    displayName: 'Product IDs',
     name: 'pricingProductId',
     type: 'string',
     default: '',
     required: true,
-    description: 'The ID of the product',
+    placeholder: '123 or 123,456,789',
+    description: 'The ID of the product to look up. Separate multiple IDs with commas.',
+    displayOptions: {
+      show: {
+        resource: ['product'],
+        operation: ['getProductInventoryPricingInquiry'],
+      },
+    },
+  },
+  {
+    displayName: 'Page Size',
+    name: 'pricingPageSize',
+    type: 'number',
+    typeOptions: { minValue: 1 },
+    default: 1000,
+    description: 'Number of product results to return per page. Results are always paginated.',
     displayOptions: {
       show: {
         resource: ['product'],

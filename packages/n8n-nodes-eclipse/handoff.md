@@ -303,6 +303,47 @@ necessarily as the parent's type).
   sometimes). Don't hardcode "the current version" anywhere assuming it's
   stable — read `package.json` fresh each time.
 
+## Product Inventory Pricing Inquiry: mass inquiry endpoints
+
+`getProductInventoryPricingInquiry` (Product resource) originally called
+`ProductInventoryPricingInquiry` and `ProductPricingInquiry` with a single
+`ProductId`, returning one flat object per call (no `results` wrapper). It
+was changed to call the mass-inquiry variants instead —
+`ProductInventoryPricingMassInquiry` and `ProductPricingMassInquiry` — so a
+single execution can price/inventory multiple products at once. The "Product
+IDs" field (`pricingProductId`) now accepts a comma-separated list and is sent
+as repeated `ProductId` query params (`?ProductId=1&ProductId=2&...`, same
+`ProductId` casing as the pre-existing single-ID call). A new "Page Size"
+field (`pricingPageSize`, default 1000) was added, and the operation always
+paginates (loops bumping `StartIndex` by `PageSize` until a page comes back
+shorter than `PageSize`) — there's no "Return All" toggle here, since the
+caller is expected to pass exactly the product IDs they want.
+
+This was implemented without access to Eclipse's API docs for the mass
+endpoints, based on this endpoint's own existing PascalCase query param
+convention (`CustomerId`, `ProductId`, `ConsiderUserAuthBranch`, `ShowCost`,
+`Quantity`) and this package's general list-response shape. **Confirmed
+against a live execution** (2026-09-10, 5 product IDs, default page size):
+the `PageSize`/`StartIndex`/`ProductId` PascalCase query params work as
+expected, and the response shape is `{ metadata: { startIndex, pageSize,
+totalItems }, results: [...] }` — note the envelope key is `metadata`
+(singular object), not a flat spread of `startIndex`/`pageSize`/`totalItems`
+at the top level, and the response's own field names inside `metadata` are
+lowercase camelCase even though the request query params are PascalCase.
+Each entry in `results` carries a `productId` field.
+
+The per-product merge logic (`quantityBreaks` fix-up: the single-quantity
+response doesn't return `quantityBreaks` and the max-quantity response has
+the wrong first-break price) merges the three mass responses' `results`
+arrays by array index rather than matching on the `productId` field each
+result carries. This worked fine in the one live test done so far (5 IDs,
+single page), but if the three mass endpoints ever return results in
+different orders relative to each other (e.g. one sorts, one doesn't) or
+omit an entry for some product, an index-based merge would silently
+misalign data across products. Matching by `productId` instead would be a
+quick, low-risk hardening if that's ever observed — the field is confirmed
+present on every result.
+
 ## Commands
 
 - `npm run dev` (`n8n-node dev`) — runs n8n locally at `localhost:5678` with
