@@ -195,23 +195,74 @@ Polls on a schedule. Two lookback modes:
 Returns `null` (not an empty array) when there are zero results, which is
 the n8n convention for "nothing happened this poll."
 
-**Bug fixed (2026-08-17)**: the rolling-window branch used to pick
-whichever of `lastRunTime` or `now - pollInterval` was *earlier*, on every
-run, not just the first. Intent (per the original comment) was to widen the
-window after downtime, but the effect in the normal steady-state case
-(trigger polling continuously, `lastRunTime` more recent than
-`now - pollInterval`) was the opposite of what's wanted: `lastRunTime` lost
-that comparison every time, so `now - pollInterval` won and every poll
-re-fetched the full `pollInterval`-minutes window from scratch. Any record
-modified inside that window got re-emitted on *every* poll until it aged
-out — e.g. with the default 5-minute Lookback Window and a 1-minute poll
-schedule, the same record could be redelivered 5 times in a row. Symptom
-reported by a user: the same sales order showing up repeatedly with what
-looked like different snapshots of its data over the course of a day. Fix:
+**Bug fixed (2026-08-17), then deliberately reverted (2026-09-11)**: the
+rolling-window branch used to pick whichever of `lastRunTime` or
+`now - pollInterval` was *earlier*, on every run, not just the first. Intent
+(per the original comment) was to widen the window after downtime, but the
+effect in the normal steady-state case (trigger polling continuously,
+`lastRunTime` more recent than `now - pollInterval`) was the opposite of
+what's wanted: `lastRunTime` lost that comparison every time, so
+`now - pollInterval` won and every poll re-fetched the full
+`pollInterval`-minutes window from scratch. Any record modified inside that
+window got re-emitted on *every* poll until it aged out — e.g. with the
+default 5-minute Lookback Window and a 1-minute poll schedule, the same
+record could be redelivered 5 times in a row. Symptom reported by a user:
+the same sales order showing up repeatedly with what looked like different
+snapshots of its data over the course of a day. 2026-08-17 fix:
 `lookbackTime = lastRun ?? intervalLookback` — trust `lastRunTime`
-unconditionally once it exists; `intervalLookback` is now only reachable on
-the first-ever run. Downtime catch-up still works fine under this simpler
-rule, since a stale `lastRunTime` is itself already the wider window.
+unconditionally once it exists; `intervalLookback` was only reachable on the
+first-ever run.
+
+That fix was then **explicitly reverted back to the earlier-of-the-two
+comparison on 2026-09-11**, at a user's request, for a specific workflow:
+`rawLookback = lastRun && lastRun < intervalLookback ? lastRun : intervalLookback`,
+applied every run again, not just the first. The user confirmed their
+downstream flow is fully idempotent, so the re-emission side effect above is
+acceptable to them — they wanted the Lookback Window to act as a hard
+"always look back at least N minutes" guarantee on every poll, not just a
+gap-filler for the first run. **If a future session is asked to "fix"
+duplicate/re-emitted records on this trigger again, don't reflexively
+reapply the 2026-08-17 fix** — check whether the workflow depends on this
+reverted behavior first, since removing it silently would violate what was
+explicitly requested here.
+
+## Poll Buffer (Minutes) (`pollBufferMinutes`, added 2026-09-11)
+
+Added alongside the revert above, to fix a related but distinct problem:
+Sales Order polling has an optional `LastModifiedDateAndTimeStampEnd` filter
+(Date Filter Options → Last Modified Date End) that a user had set manually
+to a fixed `$now.minus(10, 'minutes')` expression, to work around a "weird
+Eclipse bug" (their words — not independently diagnosed) where very
+recently modified orders come back inconsistently. That field only shifts
+the *end* of the window; the *start* (`LastModifiedDateAndTimeStampStart`,
+i.e. `lookbackTime`) is computed independently from `lastRunTime`/lookback
+and keeps advancing toward "now" every poll. Once the actual poll schedule
+ran more frequently than the fixed 10-minute End offset, `lastRunTime`
+(Start) became more recent than `now - 10min` (End), and Eclipse rejected
+the request with `"LastModifiedDateAndTimeStampStart can not be greater
+than LastModifiedDateAndTimeStampEnd"` (400) — reliably, on every poll,
+until the user manually intervened.
+
+Root cause: shifting only one side of the window while the other side keeps
+tracking real time will always eventually invert once the poll cadence is
+faster than the shift amount. Fix: `pollBufferMinutes` (default `0`, so
+existing workflows are unaffected) is now applied symmetrically to *both*
+`lookbackTime` and a new `windowEndTime`, computed from the same
+`rawLookback`/`currentRunTime` before the buffer subtraction — see the
+`poll()` block right after the lookback-timestamp comments in
+`EclipseApiTrigger.node.ts`. For Sales Order, `windowEndTime` is
+auto-set as `LastModifiedDateAndTimeStampEnd` only when the buffer is > 0
+**and** the user hasn't manually filled in Date Filter Options' own End
+field (a manual value always wins, so existing per-workflow overrides don't
+silently change). Other resources (Contact/Customer/Product) only ever send
+`updatedAfter` (no End param exists for them in the API), so the buffer
+just shifts that value back; there's nothing to auto-populate there.
+
+If asked to debug this again on a workflow that still has a manual
+`$now.minus(...)` expression in Date Filter Options' Last Modified Date End
+field, the fix is to clear that field and use `pollBufferMinutes` instead —
+leaving both configured at once works (manual wins) but is redundant and
+confusing, since only one of them is actually doing anything.
 
 ## Known n8n editor quirk: "options" field value warnings
 

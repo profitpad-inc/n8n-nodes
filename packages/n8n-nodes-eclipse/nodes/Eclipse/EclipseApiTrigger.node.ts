@@ -65,6 +65,19 @@ export class EclipseApiTrigger implements INodeType {
         description: 'Whether to use a fixed date instead of a rolling lookback window',
       },
       {
+        displayName: 'Poll Buffer (Minutes)',
+        name: 'pollBufferMinutes',
+        type: 'number',
+        typeOptions: { minValue: 0 },
+        default: 0,
+        description: 'Shifts the entire polling window back by this many minutes (both the start and, for Sales Order, the end). Use this to work around Eclipse returning inconsistent results for records modified very recently.',
+        displayOptions: {
+          show: {
+            useCustomDate: [false],
+          },
+        },
+      },
+      {
         displayName: 'Updated After',
         name: 'updatedAfter',
         type: 'dateTime',
@@ -386,43 +399,55 @@ export class EclipseApiTrigger implements INodeType {
     const resource = this.getNodeParameter('resource') as string;
     const useCustomDate = this.getNodeParameter('useCustomDate') as boolean;
     const pollInterval = useCustomDate ? 0 : this.getNodeParameter('pollInterval') as number;
+    const pollBufferMinutes = useCustomDate ? 0 : this.getNodeParameter('pollBufferMinutes') as number;
+    const bufferMs = Math.max(pollBufferMinutes, 0) * 60 * 1000;
     const returnAll = this.getNodeParameter('returnAll') as boolean;
     const pageSize = this.getNodeParameter('pageSize') as number;
     const fieldsFilterMode = (this.getNodeParameter('fieldsFilterMode') as string).trim();
     const fieldsToInclude = fieldsFilterMode === 'selected' ? (this.getNodeParameter('fieldsToInclude') as string) : '';
     const fieldsToExclude = fieldsFilterMode === 'except' ? (this.getNodeParameter('fieldsToExclude') as string) : '';
 
-    // Determine the lookback timestamp:
-    //  1. Custom Date mode: use the top-level updatedAfter field directly.
-    //  2. Otherwise, use the timestamp from the last successful poll.
-    //  3. On first ever run, fall back to now minus pollInterval minutes.
-    const workflowStaticData = this.getWorkflowStaticData('node');
-    let lookbackTime: string;
-
-    if (useCustomDate) {
-      lookbackTime = this.getNodeParameter('updatedAfter') as string;
-    } else {
-      const intervalLookback = new Date(Date.now() - Math.ceil(pollInterval) * 60 * 1000).toISOString();
-      const isManual = this.getMode() === 'manual';
-      if (isManual) {
-        lookbackTime = intervalLookback;
-      } else {
-        const lastRun = workflowStaticData.lastRunTime as string | undefined;
-        // Always trust lastRunTime once it exists — it marks exactly where the
-        // previous poll left off, so resuming from it never gaps or overlaps.
-        // Only fall back to intervalLookback on the very first run, when there's
-        // no lastRunTime yet. (Previously this compared lastRun against
-        // intervalLookback and took whichever was earlier, which meant any poll
-        // running more frequently than the configured Lookback Window would
-        // discard lastRun and re-fetch the full window every time, causing the
-        // same records to be re-emitted repeatedly until they aged out.)
-        lookbackTime = lastRun ?? intervalLookback;
-      }
-    }
-
     // Capture current time before the request so we don't miss records
     // that arrive between query execution and the next poll.
     const currentRunTime = new Date().toISOString();
+
+    // Determine the lookback timestamp:
+    //  1. Custom Date mode: use the top-level updatedAfter field directly.
+    //  2. Otherwise, take whichever of lastRunTime or (now - pollInterval) is
+    //     earlier, every run. This intentionally re-fetches the full Lookback
+    //     Window whenever polling more often than that window, which can
+    //     re-emit already-seen records on every poll until they age out of the
+    //     window — acceptable here since this flow is idempotent downstream.
+    //     (An earlier version of this trigger trusted lastRunTime
+    //     unconditionally once it existed, to avoid exactly that re-emission;
+    //     reverted back to the earlier-of-the-two comparison at the user's
+    //     explicit request.)
+    //  3. windowEndTime mirrors the same shift for the upper bound, so a
+    //     configured Poll Buffer moves the whole window back symmetrically
+    //     instead of only affecting the start.
+    const workflowStaticData = this.getWorkflowStaticData('node');
+    let lookbackTime: string;
+    let windowEndTime: string;
+
+    if (useCustomDate) {
+      lookbackTime = this.getNodeParameter('updatedAfter') as string;
+      windowEndTime = currentRunTime;
+    } else {
+      const intervalLookback = new Date(Date.now() - Math.ceil(pollInterval) * 60 * 1000).toISOString();
+      const isManual = this.getMode() === 'manual';
+      let rawLookback: string;
+      if (isManual) {
+        rawLookback = intervalLookback;
+      } else {
+        const lastRun = workflowStaticData.lastRunTime as string | undefined;
+        rawLookback = lastRun && lastRun < intervalLookback ? lastRun : intervalLookback;
+      }
+      // Poll Buffer (Minutes): shifts both boundaries back by the same amount,
+      // to work around Eclipse returning inconsistent results for records
+      // modified in the last few minutes. Zero (the default) is a no-op.
+      lookbackTime = new Date(new Date(rawLookback).getTime() - bufferMs).toISOString();
+      windowEndTime = new Date(new Date(currentRunTime).getTime() - bufferMs).toISOString();
+    }
 
     const splitParam = (val: string | undefined): string[] =>
       val ? val.split(',').map((s) => s.trim()).filter(Boolean) : [];
@@ -472,7 +497,12 @@ export class EclipseApiTrigger implements INodeType {
         for (const v of splitParam(soOptions.outsideSalesperson)) params.append('OutsideSalesperson', v);
         for (const v of splitParam(soOptions.writer)) params.append('Writer', v);
         for (const v of (soOptions.orderStatus ?? [])) params.append('OrderStatus', v);
-        if (dfOptions.lastModifiedDateAndTimeStampEnd) params.set('LastModifiedDateAndTimeStampEnd', dfOptions.lastModifiedDateAndTimeStampEnd);
+        if (dfOptions.lastModifiedDateAndTimeStampEnd) {
+          // Manually configured End filter always wins over the auto-computed one.
+          params.set('LastModifiedDateAndTimeStampEnd', dfOptions.lastModifiedDateAndTimeStampEnd);
+        } else if (bufferMs > 0) {
+          params.set('LastModifiedDateAndTimeStampEnd', windowEndTime);
+        }
         if (dfOptions.orderDateStart) params.set('OrderDateStart', dfOptions.orderDateStart);
         if (dfOptions.orderDateEnd) params.set('OrderDateEnd', dfOptions.orderDateEnd);
         if (dfOptions.shipDateStart) params.set('ShipDateStart', dfOptions.shipDateStart);
