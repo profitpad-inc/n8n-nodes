@@ -125,6 +125,9 @@ export class EclipseApi implements INodeType {
             };
 
             if (returnAll) {
+              const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+              const allResults: JsonObject[] = [];
+              const allMetadata: (JsonObject | null)[] = [];
               let currentStart = 1;
 
               while (true) {
@@ -135,13 +138,31 @@ export class EclipseApi implements INodeType {
                 });
 
                 const results: JsonObject[] = response.results ?? [];
-                returnData.push({
-                  json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
-                  pairedItem: { item: i },
-                });
+                const filteredResults = applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude);
+
+                if (returnAllMode === 'eachPage') {
+                  returnData.push({
+                    json: { ...response, results: filteredResults },
+                    pairedItem: { item: i },
+                  });
+                } else if (returnAllMode === 'eachResult') {
+                  for (const result of filteredResults) {
+                    returnData.push({ json: result, pairedItem: { item: i } });
+                  }
+                } else {
+                  allResults.push(...filteredResults);
+                  allMetadata.push((response.metadata as JsonObject | undefined) ?? null);
+                }
 
                 if (results.length < pageSize) break;
                 currentStart += pageSize;
+              }
+
+              if (returnAllMode === 'allInOne') {
+                returnData.push({
+                  json: { metadata: allMetadata, results: allResults },
+                  pairedItem: { item: i },
+                });
               }
             } else {
               const startIndex = additionalOptions.startIndex ?? 1;
@@ -158,6 +179,7 @@ export class EclipseApi implements INodeType {
                 pairedItem: { item: i },
               });
             }
+
           }
 
           // ── GET SINGLE ──────────────────────────────────────────────────
@@ -440,6 +462,9 @@ export class EclipseApi implements INodeType {
                 });
               }
             } else if (returnAll) {
+              const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+              const allResults: JsonObject[] = [];
+              const allMetadata: (JsonObject | null)[] = [];
               let currentStart = 1;
 
               while (true) {
@@ -450,13 +475,31 @@ export class EclipseApi implements INodeType {
                 });
 
                 const results: JsonObject[] = response.results ?? [];
-                returnData.push({
-                  json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
-                  pairedItem: { item: i },
-                });
+                const filteredResults = applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude);
+
+                if (returnAllMode === 'eachPage') {
+                  returnData.push({
+                    json: { ...response, results: filteredResults },
+                    pairedItem: { item: i },
+                  });
+                } else if (returnAllMode === 'eachResult') {
+                  for (const result of filteredResults) {
+                    returnData.push({ json: result, pairedItem: { item: i } });
+                  }
+                } else {
+                  allResults.push(...filteredResults);
+                  allMetadata.push((response.metadata as JsonObject | undefined) ?? null);
+                }
 
                 if (results.length < pageSize) break;
                 currentStart += pageSize;
+              }
+
+              if (returnAllMode === 'allInOne') {
+                returnData.push({
+                  json: { metadata: allMetadata, results: allResults },
+                  pairedItem: { item: i },
+                });
               }
             } else {
               const startIndex = additionalOptions.startIndex ?? 1;
@@ -824,6 +867,9 @@ export class EclipseApi implements INodeType {
                 });
               }
             } else if (returnAll) {
+              const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+              const allResults: JsonObject[] = [];
+              const allMetadata: (JsonObject | null)[] = [];
               let currentStart = 1;
 
               while (true) {
@@ -834,13 +880,31 @@ export class EclipseApi implements INodeType {
                 });
 
                 const results: JsonObject[] = response.results ?? [];
-                returnData.push({
-                  json: { ...response, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
-                  pairedItem: { item: i },
-                });
+                const filteredResults = applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude);
+
+                if (returnAllMode === 'eachPage') {
+                  returnData.push({
+                    json: { ...response, results: filteredResults },
+                    pairedItem: { item: i },
+                  });
+                } else if (returnAllMode === 'eachResult') {
+                  for (const result of filteredResults) {
+                    returnData.push({ json: result, pairedItem: { item: i } });
+                  }
+                } else {
+                  allResults.push(...filteredResults);
+                  allMetadata.push((response.metadata as JsonObject | undefined) ?? null);
+                }
 
                 if (results.length < pageSize) break;
                 currentStart += pageSize;
+              }
+
+              if (returnAllMode === 'allInOne') {
+                returnData.push({
+                  json: { metadata: allMetadata, results: allResults },
+                  pairedItem: { item: i },
+                });
               }
             } else {
               const startIndex = additionalOptions.startIndex ?? 1;
@@ -1398,9 +1462,12 @@ export class EclipseApi implements INodeType {
           const userId = considerUserAuthBranch ? toTrimmedString(this.getNodeParameter('pricingUserId', i)) : undefined;
           const MAX_PAGE_SIZE = 100;
           const pageSize = Math.min(this.getNodeParameter('pricingPageSize', i) as number, MAX_PAGE_SIZE);
+          const returnAllMode = this.getNodeParameter('pricingReturnAllMode', i) as string;
           // Eclipse's query string 404s once more than ~119 ProductId params
           // are sent, so the product ID list is batched well under that.
           const PRODUCT_ID_BATCH_SIZE = 100;
+          const allResults: JsonObject[] = [];
+          const allMetadata: JsonObject[] = [];
 
           const buildUrl = (endpoint: string, idBatch: string[], startIndex: number, extraQs: Record<string, string> = {}): string => {
             const params = new URLSearchParams();
@@ -1461,15 +1528,34 @@ export class EclipseApi implements INodeType {
                 ...(inventoryResponse.metadata as JsonObject | undefined),
                 totalItems: (maxPricingResponse.metadata as JsonObject | undefined)?.totalItems ?? null,
               };
+              allMetadata.push(metadata);
 
-              returnData.push({
-                json: { ...singlePricingResponse, ...inventoryResponse, metadata, results: mergedResults },
-                pairedItem: { item: i },
-              });
+              if (returnAllMode === 'eachPage') {
+                returnData.push({
+                  json: { ...singlePricingResponse, ...inventoryResponse, metadata, results: mergedResults },
+                  pairedItem: { item: i },
+                });
+              } else if (returnAllMode === 'eachResult') {
+                for (const result of mergedResults) {
+                  returnData.push({ json: result, pairedItem: { item: i } });
+                }
+              } else {
+                allResults.push(...mergedResults);
+              }
 
-              if (mergedResults.length < pageSize) break;
+              const totalItems = metadata.totalItems;
+              const pastTotalItems = typeof totalItems === 'number' && currentStart + pageSize > totalItems;
+
+              if (mergedResults.length < pageSize || pastTotalItems) break;
               currentStart += pageSize;
             }
+          }
+
+          if (returnAllMode === 'allInOne') {
+            returnData.push({
+              json: { metadata: allMetadata, results: allResults },
+              pairedItem: { item: i },
+            });
           }
         }
       } catch (error) {

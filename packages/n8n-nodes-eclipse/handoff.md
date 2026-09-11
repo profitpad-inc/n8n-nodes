@@ -122,6 +122,35 @@ on, loop bumping `startIndex += pageSize` until a page comes back shorter
 than `pageSize`. Copy this pattern for new list endpoints instead of
 inventing pagination logic.
 
+**Return All Mode** (`returnAllMode`, added 2026-09-11, one per resource —
+same param name reused across Contact/Customer/Product/Sales Order
+description files, gated by `displayOptions.show.returnAll: [true]`, same
+convention as `returnAll`/`pageSize` already being duplicated per-resource
+rather than shared via a helper): added to every plain Get Many `returnAll`
+loop (Contact, Customer, Product, Sales Order), mirroring the
+`pricingReturnAllMode` field added earlier to Product Inventory Pricing
+Inquiry and the pre-existing `returnAllMode` pattern in
+`n8n-nodes-hubspot`/`n8n-nodes-microsoft-outlook`. Same three options,
+same semantics: `eachPage` (default, unchanged), `allInOne` (all filtered
+results combined into one item, `metadata` as an array of every page's
+`response.metadata`), `eachResult` (one item per filtered record, no
+metadata). Assumes these list endpoints' response envelope is
+`{ metadata: {...}, results: [...] }`, following the shape confirmed for
+the pricing mass-inquiry endpoints — not independently re-confirmed for
+Contacts/Customers/Products/SalesOrders specifically, so if `allInOne`'s
+metadata array comes back full of `null`s for one of these resources, that
+assumption is the first thing to check.
+
+**Deliberately out of scope**: the two dedicated ID-batching paths (Product
+Get Many >200 IDs, Sales Order Get Many >100 IDs — see below) do not read
+`returnAllMode` at all. They already unconditionally combine/re-chunk
+results themselves regardless of Return All, and already intentionally
+drop the per-page envelope (see the Sales Order batching note below), so
+layering Return All Mode on top of them wasn't requested and would need
+its own design (e.g. what "each page" even means once results are
+recombined and re-chunked by Page Size). If asked to extend Return All
+Mode to those paths later, treat it as a separate task, not an oversight.
+
 ## Sales Order Get Many: ID batching
 
 Eclipse errors when a single `GET /SalesOrders` request carries too many `id`
@@ -315,10 +344,13 @@ IDs" field (`pricingProductId`) now accepts a comma-separated list and is sent
 as repeated `ProductId` query params (`?ProductId=1&ProductId=2&...`, same
 `ProductId` casing as the pre-existing single-ID call). A new "Page Size"
 field (`pricingPageSize`, default and max 100 — see below) was added, and
-the operation always paginates (loops bumping `StartIndex` by `PageSize`
-until a page comes back shorter than `PageSize`) — there's no "Return All"
-toggle here, since the caller is expected to pass exactly the product IDs
-they want.
+the operation always paginates (loops bumping `StartIndex` by `PageSize`),
+stopping when either: a page comes back shorter than `PageSize`, or
+`currentStart + pageSize` would exceed the response's `metadata.totalItems`
+(only checked when `totalItems` is an actual number — it can be `null` if
+`IncludeTotalItems` wasn't honored, in which case only the page-length
+check applies). There's no "Return All" toggle here, since the caller is
+expected to pass exactly the product IDs they want.
 
 **Live testing against Eclipse (2026-09-10)** surfaced two separate
 findings — don't conflate them, they were reported together but are
@@ -375,6 +407,36 @@ omit an entry for some product, an index-based merge would silently
 misalign data across products. Matching by `productId` instead would be a
 quick, low-risk hardening if that's ever observed — the field is confirmed
 present on every result.
+
+**Different Eclipse accounts return different field names** (2026-09-11):
+tested with a second customer's credential (`eclipse`, distinct from the
+first session's `fairbank`) and the per-product fields came back as
+`productCOGS`/`listPrice`/`unitPrice`/`totalWarehouseQty`/`stockInfo`/
+`customerPN`/`productDescription`, not the `productCost`/`productUnitPrice`
+names confirmed earlier. The merge logic's field-name assumptions
+(`singlePricing.productUnitPrice`, in particular) were written against the
+first account's shape — if a future session sees the quantityBreaks
+fix-up silently no-op or throw on a different customer's data, check
+whether that account's response uses different field names before
+assuming it's a logic bug. (Separately, on 2026-09-11 an apparent "stopped
+returning quantityBreaks" report turned out to be the product itself
+having no volume pricing configured in Eclipse — not a code issue. Confirm
+the product actually has tiered pricing before assuming a regression.)
+
+**Return All Mode** (`pricingReturnAllMode`, added 2026-09-11): mirrors the
+`returnAllMode` pattern already used in sibling packages
+(`n8n-nodes-hubspot`, `n8n-nodes-microsoft-outlook` — see e.g.
+`ObjectDescription.ts` in the HubSpot package). Three options — `eachPage`
+(default, unchanged behavior: one output item per page/batch with that
+page's `metadata`), `allInOne` (every result across every page and batch
+combined into one output item; `metadata` here is an **array** of every
+page's metadata, not just the last page — deliberately different from the
+HubSpot/Outlook precedent, which uses the last page's metadata only,
+because the user explicitly asked for all pages' metadata to be kept),
+`eachResult` (one output item per individual product result, no metadata
+at all). Implemented by branching inside the existing batch/pagination
+loop rather than adding a separate code path, so it
+doesn't duplicate the request logic per mode.
 
 ## Commands
 

@@ -69,12 +69,21 @@ which determine which other fields appear.
   query params (`?ProductId=1&ProductId=2&...`). The operation always
   paginates using a **Page Size** field (default and maximum 100, matching
   Eclipse's own cap on this endpoint) — it loops, advancing the start index
-  by the page size, until a page comes back with fewer results than the
-  page size. Independently of page size, if more than 100 Product IDs are
+  by the page size, stopping once a page comes back with fewer results than
+  the page size, or once `startIndex + pageSize` would exceed the
+  response's `totalItems` count (whichever comes first). Independently of
+  page size, if more than 100 Product IDs are
   supplied, they're automatically split into batches of 100 (Eclipse's
   query string 404s somewhere above ~119 `ProductId` params, regardless of
   page size), each batch paginated the same way, transparent to the agent
-  building the workflow.
+  building the workflow. A **Return All Mode** field controls how the
+  fetched pages/results are shaped into output items: `Each Page as 1 Item`
+  (default) keeps today's behavior, one output item per API page/batch
+  with that page's metadata; `All Results as 1 Item` combines every result
+  across every page and batch into a single output item, with `metadata`
+  as an array holding every page's metadata (not just the last one);
+  `Each Result as 1 Item` emits one output item per individual product
+  result, with no metadata envelope at all.
 
 ### Resource: Sales Order
 The largest resource, with many operations:
@@ -130,6 +139,19 @@ a common shape:
   (ID, keyword, date filters, and for Sales Order: BillTo, ShipTo,
   ShipBranch, PriceBranch, ShipVia, salesperson fields, Order Status,
   sort order, etc.)
+- When **Return All** is on, a **Return All Mode** field controls how the
+  fetched pages are shaped into output items: `Each Page as 1 Item`
+  (default) — one output item per page, unchanged from prior behavior;
+  `All Results as 1 Item` — every result across every page combined into a
+  single output item, with `metadata` as an array holding every page's
+  metadata; `Each Result as 1 Item` — one output item per individual
+  record, with no metadata envelope. This mirrors the same `returnAllMode`
+  field already used in the `n8n-nodes-hubspot` and
+  `n8n-nodes-microsoft-outlook` packages. Note: for **Product** Get Many
+  with more than 200 IDs, and **Sales Order** Get Many with more than 100
+  IDs, the dedicated ID-batching paths described below are unaffected by
+  this setting — they always combine everything themselves regardless of
+  Return All or Return All Mode.
 
 **Large ID lists get auto-batched**, transparent to the agent building the
 workflow:

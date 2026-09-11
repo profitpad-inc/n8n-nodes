@@ -60,6 +60,38 @@ export const customerDescription: INodeProperties[] = [
     },
   },
   {
+    displayName: 'Return All Mode',
+    name: 'returnAllMode',
+    type: 'options',
+    noDataExpression: true,
+    default: 'eachPage',
+    description: 'How to output the fetched results',
+    displayOptions: {
+      show: {
+        resource: ['customer'],
+        operation: ['getMany'],
+        returnAll: [true],
+      },
+    },
+    options: [
+      {
+        name: 'All Results as 1 Item',
+        value: 'allInOne',
+        description: 'Aggregate all pages and return every result combined in a single output item, with an array of each page\'s metadata',
+      },
+      {
+        name: 'Each Page as 1 Item',
+        value: 'eachPage',
+        description: 'Return each API page response as a separate output item',
+      },
+      {
+        name: 'Each Result as 1 Item',
+        value: 'eachResult',
+        description: 'Return each individual record as a separate output item, with no metadata',
+      },
+    ],
+  },
+  {
     displayName: 'Page Size',
     name: 'pageSize',
     type: 'number',
