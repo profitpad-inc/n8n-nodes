@@ -1,4 +1,4 @@
-import { INodeProperties } from 'n8n-workflow';
+import { INodeProperties, INodePropertyOptions } from 'n8n-workflow';
 
 import { OBJECT_TYPE_OPTIONS } from '../helpers';
 import {
@@ -29,6 +29,69 @@ const msOption: INodeProperties = {
 	description:
 		'How long to wait between processing each input item, in milliseconds. Useful for avoiding HubSpot rate limits.',
 };
+
+// Shared by Batch Read (Fields mode) and Batch Read With Associations
+// (which shows Properties as a top-level field instead).
+const batchReadOutputModeOptions: INodePropertyOptions[] = [
+	{
+		name: 'All Results as 1 Item',
+		value: 'allInOne',
+		description:
+			'Aggregate all batches and return every result combined in a single output item',
+	},
+	{
+		name: 'Each Page as 1 Item',
+		value: 'eachPage',
+		description: 'Return each batch response as a separate output item',
+	},
+	{
+		name: 'Each Result as 1 Item',
+		value: 'eachResult',
+		description: 'Return each individual record as a separate output item',
+	},
+];
+
+const batchReadAdditionalOptions: INodeProperties[] = [
+	{
+		// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+		displayName: 'ID Property',
+		name: 'idProperty',
+		type: 'options',
+		typeOptions: {
+			loadOptionsMethod: 'getUniqueProperties',
+			loadOptionsDependsOn: ['objectType'],
+		},
+		default: '',
+		description:
+			'Look up records by this property instead of the record ID (e.g. <em>email</em> for contacts). Only properties with a unique value are listed. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+	},
+	msOption,
+	{
+		// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
+		displayName: 'Properties',
+		name: 'properties',
+		type: 'multiOptions',
+		typeOptions: {
+			loadOptionsMethod: 'getAllProperties',
+			loadOptionsDependsOn: ['objectType'],
+		},
+		default: [],
+		description:
+			'Properties to return. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+	},
+	{
+		displayName: 'Properties With History',
+		name: 'propertiesWithHistory',
+		type: 'multiOptions',
+		typeOptions: {
+			loadOptionsMethod: 'getAllProperties',
+			loadOptionsDependsOn: ['objectType'],
+		},
+		default: [],
+		description:
+			'Properties to return along with their historical values. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+	},
+];
 
 export const objectDescription: INodeProperties[] = [
 	// ── Object Type ───────────────────────────────────────────────────────────
@@ -77,6 +140,13 @@ export const objectDescription: INodeProperties[] = [
 				value: 'batchRead',
 				description: 'Read multiple objects by ID in a single request',
 				action: 'Batch read objects',
+			},
+			{
+				name: 'Batch Read With Associations',
+				value: 'batchReadWithAssociations',
+				description:
+					'Read multiple objects by ID, including the properties of their associated records',
+				action: 'Batch read with associations',
 			},
 			{
 				name: 'Batch Update',
@@ -176,6 +246,13 @@ export const objectDescription: INodeProperties[] = [
 				value: 'batchRead',
 				description: 'Read multiple objects by ID in a single request',
 				action: 'Batch read objects',
+			},
+			{
+				name: 'Batch Read With Associations',
+				value: 'batchReadWithAssociations',
+				description:
+					'Read multiple objects by ID, including the properties of their associated records',
+				action: 'Batch read with associations',
 			},
 			{
 				name: 'Batch Update',
@@ -1116,24 +1193,7 @@ export const objectDescription: INodeProperties[] = [
 				batchReadInputMode: ['ui'],
 			},
 		},
-		options: [
-			{
-				name: 'All Results as 1 Item',
-				value: 'allInOne',
-				description:
-					'Aggregate all batches and return every result combined in a single output item',
-			},
-			{
-				name: 'Each Page as 1 Item',
-				value: 'eachPage',
-				description: 'Return each batch response as a separate output item',
-			},
-			{
-				name: 'Each Result as 1 Item',
-				value: 'eachResult',
-				description: 'Return each individual record as a separate output item',
-			},
-		],
+		options: batchReadOutputModeOptions,
 	},
 	{
 		displayName: 'Additional Options',
@@ -1148,47 +1208,130 @@ export const objectDescription: INodeProperties[] = [
 				batchReadInputMode: ['ui'],
 			},
 		},
+		options: batchReadAdditionalOptions,
+	},
+
+	// ── BATCH READ WITH ASSOCIATIONS ──────────────────────────────────────────
+	// Always Fields-style (no Input Mode toggle). Object IDs, Output Mode and
+	// Additional Options reuse Batch Read's parameter names so values carry over
+	// when switching between the two operations.
+	{
+		displayName: 'Object IDs',
+		name: 'batchReadObjectIds',
+		type: 'string',
+		required: true,
+		default: '',
+		placeholder: '123,456,789',
+		description:
+			'Comma-separated list of HubSpot record IDs, or values of the property specified in <em>ID Property</em>',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchReadWithAssociations'],
+			},
+		},
+	},
+	{
+		// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
+		displayName: 'Properties',
+		name: 'properties',
+		type: 'multiOptions',
+		typeOptions: {
+			loadOptionsMethod: 'getAllProperties',
+			loadOptionsDependsOn: ['objectType'],
+		},
+		default: [],
+		description:
+			'Properties to return. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchReadWithAssociations'],
+			},
+		},
+	},
+	{
+		displayName: 'Associations',
+		name: 'batchReadAssociations',
+		type: 'fixedCollection',
+		placeholder: 'Add Association',
+		typeOptions: {
+			multipleValues: true,
+			fixedCollection: { itemTitle: '={{$collection.item.value.toObjectType}}' },
+		},
+		default: {},
+		description:
+			'Associated object types to include with each record, and which of their properties to return',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchReadWithAssociations'],
+			},
+		},
 		options: [
 			{
-				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
-				displayName: 'ID Property',
-				name: 'idProperty',
-				type: 'options',
-				typeOptions: {
-					loadOptionsMethod: 'getUniqueProperties',
-					loadOptionsDependsOn: ['objectType'],
-				},
-				default: '',
-				description:
-					'Look up records by this property instead of the record ID (e.g. <em>email</em> for contacts). Only properties with a unique value are listed. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
-			},
-			msOption,
-			{
-				// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
-				displayName: 'Properties',
-				name: 'properties',
-				type: 'multiOptions',
-				typeOptions: {
-					loadOptionsMethod: 'getAllProperties',
-					loadOptionsDependsOn: ['objectType'],
-				},
-				default: [],
-				description:
-					'Properties to return. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
-			},
-			{
-				displayName: 'Properties With History',
-				name: 'propertiesWithHistory',
-				type: 'multiOptions',
-				typeOptions: {
-					loadOptionsMethod: 'getAllProperties',
-					loadOptionsDependsOn: ['objectType'],
-				},
-				default: [],
-				description:
-					'Properties to return along with their historical values. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				displayName: 'Association',
+				name: 'associationValues',
+				values: [
+					{
+						// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-options
+						displayName: 'Object Type',
+						name: 'toObjectType',
+						type: 'options',
+						typeOptions: {
+							loadOptionsMethod: 'getBatchReadAssociationObjectTypes',
+						},
+						default: '',
+						// eslint-disable-next-line n8n-nodes-base/node-param-description-wrong-for-dynamic-options
+						description:
+							'The associated object type to include. Each object type can only be added once.',
+					},
+					{
+						// eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
+						displayName: 'Properties',
+						name: 'properties',
+						type: 'multiOptions',
+						typeOptions: {
+							loadOptionsMethod: 'getBatchReadAssociationProperties',
+							loadOptionsDependsOn: ['&toObjectType'],
+						},
+						default: [],
+						description:
+							'Properties to return for each associated record. Returns all simple properties when left blank. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+					},
+				],
 			},
 		],
+	},
+	{
+		displayName: 'Output Mode',
+		name: 'batchReadReturnAllMode',
+		type: 'options',
+		noDataExpression: true,
+		default: 'eachResult',
+		description: 'How to output the fetched results',
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchReadWithAssociations'],
+			},
+		},
+		options: batchReadOutputModeOptions,
+	},
+	{
+		displayName: 'Additional Options',
+		name: 'batchReadOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: {
+			show: {
+				resource: ['objects'],
+				operation: ['batchReadWithAssociations'],
+			},
+		},
+		// Properties is a top-level field on this operation.
+		options: batchReadAdditionalOptions.filter((option) => option.name !== 'properties'),
 	},
 
 	// ── BATCH CREATE ──────────────────────────────────────────────────────────

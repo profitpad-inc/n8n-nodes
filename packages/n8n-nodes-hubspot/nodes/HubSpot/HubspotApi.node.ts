@@ -25,6 +25,8 @@ import {
 	getAllProperties,
 	getAssociationTargetObjectType,
 	getAssociationTypeIds,
+	getBatchReadAssociationObjectTypes,
+	getBatchReadAssociationProperties,
 	getCustomEventProperties,
 	getCustomEventTypes,
 	getEnumerationProperties,
@@ -40,6 +42,7 @@ import {
 	getUserSearchOperators,
 	getWritableProperties,
 	getWritableUserProperties,
+	hubspotRequest,
 	isNotesObjectType,
 	OWNERS_BASE_PATH,
 	resolveUsersLookup,
@@ -77,6 +80,111 @@ const BASE_HEADERS = {
 function parseJsonParam(value: unknown): JsonObject {
 	if (typeof value === 'string') return JSON.parse(value) as JsonObject;
 	return value as JsonObject;
+}
+
+const BATCH_READ_CHUNK_SIZE = 100;
+const ASSOCIATIONS_PAGE_LIMIT = 500;
+
+interface AssociationLink {
+	toObjectId: string;
+	associationTypes: Array<{ category?: string; typeId?: number; label?: string | null }>;
+}
+
+interface AssociationsPage {
+	results?: Array<{
+		toObjectId: string | number;
+		associationTypes?: AssociationLink['associationTypes'];
+	}>;
+	paging?: { next?: { after?: string } };
+}
+
+/**
+ * Reads every association from each of `fromIds` (at most 1000, HubSpot's
+ * batch cap) to `toObjectType`, keyed by from-record ID. A record whose
+ * associations spill past the batch response's first page is followed up
+ * through the per-record v4 associations endpoint until exhausted. Records
+ * with no associations of that type are simply absent from the map.
+ */
+async function fetchBatchAssociationLinks(
+	this: IExecuteFunctions,
+	fromObjectType: string,
+	toObjectType: string,
+	fromIds: string[],
+): Promise<Map<string, AssociationLink[]>> {
+	const response = (await hubspotRequest.call(this, {
+		method: 'POST',
+		url: `${HUBSPOT_BASE}${ASSOC_BASE_PATH}/${fromObjectType}/${toObjectType}/batch/read`,
+		headers: BASE_HEADERS,
+		body: JSON.stringify({ inputs: fromIds.map((id) => ({ id })) }),
+	})) as {
+		results?: Array<{
+			from?: { id: string | number };
+			to?: AssociationsPage['results'];
+			paging?: AssociationsPage['paging'];
+		}>;
+	};
+
+	const toLinks = (entries: AssociationsPage['results']): AssociationLink[] =>
+		(entries ?? []).map((entry) => ({
+			toObjectId: String(entry.toObjectId),
+			associationTypes: entry.associationTypes ?? [],
+		}));
+
+	const linksByRecord = new Map<string, AssociationLink[]>();
+	for (const result of response.results ?? []) {
+		if (result.from?.id === undefined) continue;
+		const fromId = String(result.from.id);
+		const links = [...(linksByRecord.get(fromId) ?? []), ...toLinks(result.to)];
+
+		let after = result.paging?.next?.after;
+		while (after) {
+			const page = (await hubspotRequest.call(this, {
+				method: 'GET',
+				url: buildHubSpotUrl(
+					HUBSPOT_BASE,
+					`/crm/v4/objects/${fromObjectType}/${fromId}/associations/${toObjectType}`,
+					{ limit: ASSOCIATIONS_PAGE_LIMIT, after },
+				),
+				headers: BASE_HEADERS,
+			})) as AssociationsPage;
+			links.push(...toLinks(page.results));
+			after = page.paging?.next?.after;
+		}
+
+		linksByRecord.set(fromId, links);
+	}
+	return linksByRecord;
+}
+
+/**
+ * Batch reads `ids` of `objectType` (chunked at 100) and returns each
+ * record's `properties` keyed by record ID. An empty `properties` list lets
+ * HubSpot return its default property set.
+ */
+async function fetchRecordPropertiesById(
+	this: IExecuteFunctions,
+	objectType: string,
+	ids: string[],
+	properties: string[],
+): Promise<Map<string, JsonObject>> {
+	const propertiesById = new Map<string, JsonObject>();
+	for (let c = 0; c < ids.length; c += BATCH_READ_CHUNK_SIZE) {
+		const chunk = ids.slice(c, c + BATCH_READ_CHUNK_SIZE);
+		const response = (await hubspotRequest.call(this, {
+			method: 'POST',
+			url: `${HUBSPOT_BASE}${OBJECTS_BASE_PATH}/${objectType}/batch/read`,
+			headers: BASE_HEADERS,
+			body: JSON.stringify({
+				inputs: chunk.map((id) => ({ id })),
+				...(properties.length ? { properties } : {}),
+			}),
+		})) as { results?: Array<{ id: string | number; properties?: JsonObject }> };
+
+		for (const record of response.results ?? []) {
+			propertiesById.set(String(record.id), record.properties ?? {});
+		}
+	}
+	return propertiesById;
 }
 
 export class HubspotApi implements INodeType {
@@ -172,6 +280,8 @@ export class HubspotApi implements INodeType {
 			getUniquePropertiesForAssociationTo,
 			getUpsertIdProperties,
 			getAssociationTypeIds,
+			getBatchReadAssociationObjectTypes,
+			getBatchReadAssociationProperties,
 			getCustomEventProperties,
 			getCustomEventTypes,
 			getSendableCustomEventTypes,
@@ -218,9 +328,8 @@ export class HubspotApi implements INodeType {
 							const resolvedIds: string[] = [];
 							for (let j = 0; j < fromIds.length; j += 100) {
 								const batch = fromIds.slice(j, j + 100);
-								const batchResponse = (await this.helpers.httpRequestWithAuthentication.call(
+								const batchResponse = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{
 										method: 'POST',
 										url: `${HUBSPOT_BASE}${OBJECTS_BASE_PATH}/${fromObjectType}/batch/read`,
@@ -255,9 +364,8 @@ export class HubspotApi implements INodeType {
 
 							for (let j = 0; j < fromIds.length; j += 1000) {
 								const batch = fromIds.slice(j, j + 1000);
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{
 										method: 'POST',
 										url: `${assocBase}/batch/read`,
@@ -305,7 +413,7 @@ export class HubspotApi implements INodeType {
 					// ── ASSOC BATCH DELETE ────────────────────────────────────────────
 					if (operation === 'assocBatchDelete') {
 						const body = parseJsonParam(this.getNodeParameter('assocBatchDeleteBody', i));
-						await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+						await hubspotRequest.call(this, {
 							method: 'POST',
 							url: `${assocBase}/batch/archive`,
 							headers: BASE_HEADERS,
@@ -319,9 +427,8 @@ export class HubspotApi implements INodeType {
 						const body = parseJsonParam(
 							this.getNodeParameter('assocBatchCreateDefaultBody', i),
 						);
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'POST',
 								url: `${assocBase}/batch/associate/default`,
@@ -337,9 +444,8 @@ export class HubspotApi implements INodeType {
 						const body = parseJsonParam(
 							this.getNodeParameter('assocBatchCreateLabeledBody', i),
 						);
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'POST',
 								url: `${assocBase}/batch/create`,
@@ -357,9 +463,8 @@ export class HubspotApi implements INodeType {
 							i,
 						) as boolean;
 
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'GET',
 								url: `${assocBase}/labels`,
@@ -368,9 +473,8 @@ export class HubspotApi implements INodeType {
 						)) as JsonObject;
 
 						if (includeReverseLabels) {
-							const reverseResponse = (await this.helpers.httpRequestWithAuthentication.call(
+							const reverseResponse = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{
 									method: 'GET',
 									url: `${HUBSPOT_BASE}${ASSOC_BASE_PATH}/${toObjectType}/${fromObjectType}/labels`,
@@ -428,9 +532,8 @@ export class HubspotApi implements INodeType {
 								after,
 							});
 
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{ method: 'GET', url, headers: BASE_HEADERS },
 							)) as JsonObject;
 
@@ -485,9 +588,8 @@ export class HubspotApi implements INodeType {
 									after,
 								});
 
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{ method: 'GET', url, headers: BASE_HEADERS },
 								)) as JsonObject;
 
@@ -547,9 +649,8 @@ export class HubspotApi implements INodeType {
 								after: submissionsOpts.after || undefined,
 							});
 
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{ method: 'GET', url, headers: BASE_HEADERS },
 							)) as JsonObject;
 
@@ -616,9 +717,8 @@ export class HubspotApi implements INodeType {
 									after,
 								});
 
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{ method: 'GET', url, headers: BASE_HEADERS },
 								)) as JsonObject;
 
@@ -660,9 +760,8 @@ export class HubspotApi implements INodeType {
 								after: opts.after || undefined,
 							});
 
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{ method: 'GET', url, headers: BASE_HEADERS },
 							)) as JsonObject;
 
@@ -730,9 +829,8 @@ export class HubspotApi implements INodeType {
 									after,
 								});
 
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{ method: 'GET', url, headers: BASE_HEADERS },
 								)) as JsonObject;
 
@@ -769,9 +867,8 @@ export class HubspotApi implements INodeType {
 								after: opts.after || undefined,
 							});
 
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{ method: 'GET', url, headers: BASE_HEADERS },
 							)) as JsonObject;
 
@@ -822,7 +919,7 @@ export class HubspotApi implements INodeType {
 						if (sendOpts.utk) body.utk = sendOpts.utk;
 						if (sendOpts.occurredAt) body.occurredAt = sendOpts.occurredAt;
 
-						await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+						await hubspotRequest.call(this, {
 							method: 'POST',
 							url: `${HUBSPOT_BASE}${EVENTS_BASE_PATH}/send`,
 							headers: BASE_HEADERS,
@@ -838,7 +935,7 @@ export class HubspotApi implements INodeType {
 							this.getNodeParameter('batchSendEventOccurrencesBody', i),
 						);
 
-						await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+						await hubspotRequest.call(this, {
 							method: 'POST',
 							url: `${HUBSPOT_BASE}${EVENTS_BASE_PATH}/send/batch`,
 							headers: BASE_HEADERS,
@@ -858,9 +955,8 @@ export class HubspotApi implements INodeType {
 							this.getNodeParameter('marketingEventId', i, undefined, { extractValue: true }),
 						).trim();
 
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'GET',
 								url: `${HUBSPOT_BASE}${marketingEventsPath}/${marketingEventId}`,
@@ -898,9 +994,8 @@ export class HubspotApi implements INodeType {
 									after,
 								});
 
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{ method: 'GET', url, headers: BASE_HEADERS },
 								)) as JsonObject;
 
@@ -936,9 +1031,8 @@ export class HubspotApi implements INodeType {
 								after: opts.after || undefined,
 							});
 
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{ method: 'GET', url, headers: BASE_HEADERS },
 							)) as JsonObject;
 
@@ -967,9 +1061,8 @@ export class HubspotApi implements INodeType {
 						}
 
 						if (operation === 'participationsCounts') {
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{
 									method: 'GET',
 									url: `${HUBSPOT_BASE}${participationsPath}`,
@@ -1015,9 +1108,8 @@ export class HubspotApi implements INodeType {
 										contactIdentifier: opts.contactIdentifier || undefined,
 									});
 
-									const response = (await this.helpers.httpRequestWithAuthentication.call(
+									const response = (await hubspotRequest.call(
 										this,
-										'hubspotApi',
 										{ method: 'GET', url, headers: BASE_HEADERS },
 									)) as JsonObject;
 
@@ -1071,9 +1163,8 @@ export class HubspotApi implements INodeType {
 									contactIdentifier: opts.contactIdentifier || undefined,
 								});
 
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{ method: 'GET', url, headers: BASE_HEADERS },
 								)) as JsonObject;
 
@@ -1131,9 +1222,8 @@ export class HubspotApi implements INodeType {
 						const errorWhenNotFound = opts.errorWhenNotFound !== false;
 
 						try {
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{
 									method: 'GET',
 									url,
@@ -1203,9 +1293,8 @@ export class HubspotApi implements INodeType {
 									archived: opts.archived,
 								});
 
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{
 										method: 'GET',
 										url,
@@ -1249,9 +1338,8 @@ export class HubspotApi implements INodeType {
 								archived: opts.archived,
 							});
 
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{
 									method: 'GET',
 									url,
@@ -1331,9 +1419,8 @@ export class HubspotApi implements INodeType {
 										`${OBJECTS_BASE_PATH}/${toObjectType}/${resolvedToId}`,
 										{ idProperty: toIdProperty },
 									);
-									const resolveResponse = (await this.helpers.httpRequestWithAuthentication.call(
+									const resolveResponse = (await hubspotRequest.call(
 										this,
-										'hubspotApi',
 										{ method: 'GET', url: resolveUrl, headers: BASE_HEADERS },
 									)) as { id: string };
 									resolvedToId = resolveResponse.id;
@@ -1354,9 +1441,8 @@ export class HubspotApi implements INodeType {
 							createBody.associations = createAssociations;
 						}
 
-						const response = await this.helpers.httpRequestWithAuthentication.call(
+						const response = await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'POST',
 								url: `${HUBSPOT_BASE}${objectsPath}`,
@@ -1397,9 +1483,8 @@ export class HubspotApi implements INodeType {
 							idProperty: updateOpts.idProperty || undefined,
 						});
 
-						const response = await this.helpers.httpRequestWithAuthentication.call(
+						const response = await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'PATCH',
 								url,
@@ -1452,9 +1537,8 @@ export class HubspotApi implements INodeType {
 							);
 						}
 
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'POST',
 								url: `${HUBSPOT_BASE}${objectsPath}/batch/upsert`,
@@ -1496,16 +1580,15 @@ export class HubspotApi implements INodeType {
 								idProperty: deleteOpts.idProperty,
 							});
 
-							const getResponse = (await this.helpers.httpRequestWithAuthentication.call(
+							const getResponse = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{ method: 'GET', url: getUrl, headers: BASE_HEADERS },
 							)) as { id: string };
 
 							realObjectId = getResponse.id;
 						}
 
-						await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+						await hubspotRequest.call(this, {
 							method: 'DELETE',
 							url: `${HUBSPOT_BASE}${objectsPath}/${realObjectId}`,
 							headers: BASE_HEADERS,
@@ -1597,9 +1680,8 @@ export class HubspotApi implements INodeType {
 									...(after ? { after } : {}),
 								};
 
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{
 										method: 'POST',
 										url: searchUrl,
@@ -1635,9 +1717,8 @@ export class HubspotApi implements INodeType {
 							}
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{
 									method: 'POST',
 									url: searchUrl,
@@ -1660,9 +1741,8 @@ export class HubspotApi implements INodeType {
 						if (batchReadInputMode === 'json') {
 							const body = parseJsonParam(this.getNodeParameter('batchReadBody', i));
 
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{
 									method: 'POST',
 									url: `${HUBSPOT_BASE}${objectsPath}/batch/read`,
@@ -1708,9 +1788,8 @@ export class HubspotApi implements INodeType {
 									...(opts.idProperty ? { idProperty: opts.idProperty } : {}),
 								};
 
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{
 										method: 'POST',
 										url: `${HUBSPOT_BASE}${objectsPath}/batch/read`,
@@ -1738,13 +1817,141 @@ export class HubspotApi implements INodeType {
 						}
 					}
 
+					// ── BATCH READ WITH ASSOCIATIONS ──────────────────────────────────
+					if (operation === 'batchReadWithAssociations') {
+						const objectIds = String(this.getNodeParameter('batchReadObjectIds', i))
+							.split(',')
+							.map((s) => s.trim())
+							.filter(Boolean);
+						const opts = this.getNodeParameter('batchReadOptions', i) as {
+							propertiesWithHistory?: string | string[];
+							idProperty?: string;
+							millisecondsBetweenItems?: number;
+						};
+						const associationsUi = this.getNodeParameter('batchReadAssociations', i, {}) as {
+							associationValues?: Array<{ toObjectType?: string; properties?: string | string[] }>;
+						};
+
+						delayMs = opts.millisecondsBetweenItems ?? 50;
+
+						const propertiesList = toStringList(
+							this.getNodeParameter('properties', i, []) as string | string[],
+						);
+						const propertiesWithHistoryList = toStringList(opts.propertiesWithHistory);
+						const outputMode = this.getNodeParameter('batchReadReturnAllMode', i) as string;
+
+						// One entry per associated object type; a type repeated by
+						// expression keeps its first row, matching the one-per-type UI.
+						const associationConfigs: Array<{ toObjectType: string; properties: string[] }> =
+							[];
+						for (const row of associationsUi.associationValues ?? []) {
+							const toObjectType = String(row.toObjectType ?? '').trim();
+							if (!toObjectType) continue;
+							if (associationConfigs.some((config) => config.toObjectType === toObjectType)) {
+								continue;
+							}
+							associationConfigs.push({ toObjectType, properties: toStringList(row.properties) });
+						}
+
+						const allResults: JsonObject[] = [];
+
+						for (let c = 0; c < objectIds.length; c += BATCH_READ_CHUNK_SIZE) {
+							const chunk = objectIds.slice(c, c + BATCH_READ_CHUNK_SIZE);
+							const body: JsonObject = {
+								inputs: chunk.map((id) => ({ id })),
+								...(propertiesList.length ? { properties: propertiesList } : {}),
+								...(propertiesWithHistoryList.length
+									? { propertiesWithHistory: propertiesWithHistoryList }
+									: {}),
+								...(opts.idProperty ? { idProperty: opts.idProperty } : {}),
+							};
+
+							const response = (await hubspotRequest.call(
+								this,
+								{
+									method: 'POST',
+									url: `${HUBSPOT_BASE}${objectsPath}/batch/read`,
+									headers: BASE_HEADERS,
+									body: JSON.stringify(body),
+								},
+							)) as JsonObject;
+
+							const results = (response.results as JsonObject[] | undefined) ?? [];
+							// Always the real record IDs, even when looked up by ID Property.
+							const recordIds = results.map((result) => String(result.id));
+
+							const associationsByRecord = new Map<string, JsonObject>();
+							for (const recordId of recordIds) associationsByRecord.set(recordId, {});
+
+							for (const { toObjectType, properties } of associationConfigs) {
+								const linksByRecord = recordIds.length
+									? await fetchBatchAssociationLinks.call(
+											this,
+											objectType,
+											toObjectType,
+											recordIds,
+										)
+									: new Map<string, AssociationLink[]>();
+
+								const toIds = Array.from(
+									new Set(
+										Array.from(linksByRecord.values()).flatMap((links) =>
+											links.map((link) => link.toObjectId),
+										),
+									),
+								);
+								const propertiesById = await fetchRecordPropertiesById.call(
+									this,
+									toObjectType,
+									toIds,
+									properties,
+								);
+
+								for (const recordId of recordIds) {
+									const links = linksByRecord.get(recordId) ?? [];
+									associationsByRecord.get(recordId)![toObjectType] = links.length
+										? links.map((link) => ({
+												labels: link.associationTypes.map((type) => ({
+													label: type.label ?? null,
+													typeId: type.typeId ?? null,
+													category: type.category ?? null,
+												})),
+												properties: propertiesById.get(link.toObjectId) ?? null,
+											}))
+										: null;
+								}
+							}
+
+							const enrichedResults = results.map((result) => ({
+								...result,
+								associations: associationsByRecord.get(String(result.id)) ?? {},
+							})) as JsonObject[];
+
+							if (outputMode === 'eachPage') {
+								returnData.push({
+									json: { ...response, results: enrichedResults },
+									pairedItem: { item: i },
+								});
+							} else if (outputMode === 'eachResult') {
+								for (const result of enrichedResults) {
+									returnData.push({ json: result, pairedItem: { item: i } });
+								}
+							} else {
+								allResults.push(...enrichedResults);
+							}
+						}
+
+						if (outputMode === 'allInOne') {
+							returnData.push({ json: { results: allResults }, pairedItem: { item: i } });
+						}
+					}
+
 					// ── BATCH CREATE ──────────────────────────────────────────────────
 					if (operation === 'batchCreate') {
 						const body = parseJsonParam(this.getNodeParameter('batchCreateBody', i));
 
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'POST',
 								url: `${HUBSPOT_BASE}${objectsPath}/batch/create`,
@@ -1760,9 +1967,8 @@ export class HubspotApi implements INodeType {
 					if (operation === 'batchUpdate') {
 						const body = parseJsonParam(this.getNodeParameter('batchUpdateBody', i));
 
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'POST',
 								url: `${HUBSPOT_BASE}${objectsPath}/batch/update`,
@@ -1778,9 +1984,8 @@ export class HubspotApi implements INodeType {
 					if (operation === 'batchUpsert') {
 						const body = parseJsonParam(this.getNodeParameter('batchUpsertBody', i));
 
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'POST',
 								url: `${HUBSPOT_BASE}${objectsPath}/batch/upsert`,
@@ -1822,9 +2027,8 @@ export class HubspotApi implements INodeType {
 								`${objectsPath}/${primaryObjectId}`,
 								{ properties: propertiesToPreserve },
 							);
-							const primaryRecord = (await this.helpers.httpRequestWithAuthentication.call(
+							const primaryRecord = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{ method: 'GET', url: getUrl, headers: BASE_HEADERS },
 							)) as { properties?: Record<string, unknown> };
 
@@ -1841,9 +2045,8 @@ export class HubspotApi implements INodeType {
 						let mergeResponse: JsonObject = {};
 
 						for (const secondaryId of secondaryIds) {
-							mergeResponse = (await this.helpers.httpRequestWithAuthentication.call(
+							mergeResponse = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{
 									method: 'POST',
 									url: `${HUBSPOT_BASE}${objectsPath}/merge`,
@@ -1860,7 +2063,7 @@ export class HubspotApi implements INodeType {
 
 						// Step 3: Restore preserved property values on the surviving record
 						if (Object.keys(preservedValues).length > 0) {
-							await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+							await hubspotRequest.call(this, {
 								method: 'PATCH',
 								url: `${HUBSPOT_BASE}${objectsPath}/${currentPrimaryId}`,
 								headers: BASE_HEADERS,
@@ -1884,7 +2087,7 @@ export class HubspotApi implements INodeType {
 						if (batchDeleteInputMode === 'json') {
 							const body = parseJsonParam(this.getNodeParameter('batchDeleteBody', i));
 
-							await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+							await hubspotRequest.call(this, {
 								method: 'POST',
 								url: `${HUBSPOT_BASE}${objectsPath}/batch/archive`,
 								headers: BASE_HEADERS,
@@ -1923,9 +2126,8 @@ export class HubspotApi implements INodeType {
 								let notFoundIds: string[] = [];
 
 								if (opts.idProperty) {
-									const readResponse = (await this.helpers.httpRequestWithAuthentication.call(
+									const readResponse = (await hubspotRequest.call(
 										this,
-										'hubspotApi',
 										{
 											method: 'POST',
 											url: `${HUBSPOT_BASE}${objectsPath}/batch/read`,
@@ -1954,7 +2156,7 @@ export class HubspotApi implements INodeType {
 								}
 
 								if (idsToArchive.length) {
-									await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+									await hubspotRequest.call(this, {
 										method: 'POST',
 										url: `${HUBSPOT_BASE}${objectsPath}/batch/archive`,
 										headers: BASE_HEADERS,
@@ -2013,7 +2215,7 @@ export class HubspotApi implements INodeType {
 							properties: USERS_ALWAYS_INCLUDED_PROPERTIES,
 						});
 						try {
-							return (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+							return (await hubspotRequest.call(this, {
 								method: 'GET',
 								url: userUrl,
 								headers: BASE_HEADERS,
@@ -2084,9 +2286,8 @@ export class HubspotApi implements INodeType {
 								});
 
 								try {
-									const response = (await this.helpers.httpRequestWithAuthentication.call(
+									const response = (await hubspotRequest.call(
 										this,
-										'hubspotApi',
 										{ method: 'GET', url, headers: BASE_HEADERS },
 									)) as JsonObject;
 
@@ -2129,9 +2330,8 @@ export class HubspotApi implements INodeType {
 								});
 
 								try {
-									const response = (await this.helpers.httpRequestWithAuthentication.call(
+									const response = (await hubspotRequest.call(
 										this,
-										'hubspotApi',
 										{ method: 'GET', url, headers: BASE_HEADERS },
 									)) as JsonObject;
 
@@ -2224,9 +2424,8 @@ export class HubspotApi implements INodeType {
 									archived: opts.archived,
 								});
 
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{ method: 'GET', url, headers: BASE_HEADERS },
 								)) as JsonObject;
 
@@ -2265,9 +2464,8 @@ export class HubspotApi implements INodeType {
 								archived: opts.archived,
 							});
 
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{ method: 'GET', url, headers: BASE_HEADERS },
 							)) as JsonObject;
 
@@ -2362,9 +2560,8 @@ export class HubspotApi implements INodeType {
 									...(after ? { after } : {}),
 								};
 
-								const response = (await this.helpers.httpRequestWithAuthentication.call(
+								const response = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{
 										method: 'POST',
 										url: searchUrl,
@@ -2400,9 +2597,8 @@ export class HubspotApi implements INodeType {
 							}
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
+							const response = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{
 									method: 'POST',
 									url: searchUrl,
@@ -2457,9 +2653,8 @@ export class HubspotApi implements INodeType {
 							idProperty: lookup.idPropertyParam,
 						});
 
-						const response = await this.helpers.httpRequestWithAuthentication.call(
+						const response = await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'PATCH',
 								url,
@@ -2480,9 +2675,8 @@ export class HubspotApi implements INodeType {
 					if (operation === 'getProperty') {
 						const propertyName = String(this.getNodeParameter('getPropertyName', i)).trim();
 
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'GET',
 								url: `${HUBSPOT_BASE}${propertiesPath}/${propertyName}`,
@@ -2495,9 +2689,8 @@ export class HubspotApi implements INodeType {
 
 					// ── LIST PROPERTIES ─────────────────────────────────────────────────
 					if (operation === 'listProperties') {
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'GET',
 								url: `${HUBSPOT_BASE}${propertiesPath}`,
@@ -2510,9 +2703,8 @@ export class HubspotApi implements INodeType {
 
 					// ── LIST PROPERTY GROUPS ─────────────────────────────────────────────
 					if (operation === 'listPropertyGroups') {
-						const response = (await this.helpers.httpRequestWithAuthentication.call(
+						const response = (await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'GET',
 								url: `${HUBSPOT_BASE}${propertiesPath}/groups`,
@@ -2536,9 +2728,8 @@ export class HubspotApi implements INodeType {
 							body.description = fields.description;
 						}
 
-						const response = await this.helpers.httpRequestWithAuthentication.call(
+						const response = await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'PATCH',
 								url: `${HUBSPOT_BASE}${propertiesPath}/${propertyName}`,
@@ -2568,9 +2759,8 @@ export class HubspotApi implements INodeType {
 									.filter(Boolean),
 							);
 
-							const currentProperty = (await this.helpers.httpRequestWithAuthentication.call(
+							const currentProperty = (await hubspotRequest.call(
 								this,
-								'hubspotApi',
 								{ method: 'GET', url: propertyUrl, headers: BASE_HEADERS },
 							)) as { options?: JsonObject[] };
 							const currentOptions = currentProperty.options ?? [];
@@ -2587,9 +2777,8 @@ export class HubspotApi implements INodeType {
 							if (mode === 'overwrite') {
 								finalOptions = providedOptions;
 							} else {
-								const currentProperty = (await this.helpers.httpRequestWithAuthentication.call(
+								const currentProperty = (await hubspotRequest.call(
 									this,
-									'hubspotApi',
 									{ method: 'GET', url: propertyUrl, headers: BASE_HEADERS },
 								)) as { options?: JsonObject[] };
 								const currentOptions = currentProperty.options ?? [];
@@ -2602,9 +2791,8 @@ export class HubspotApi implements INodeType {
 							}
 						}
 
-						const response = await this.helpers.httpRequestWithAuthentication.call(
+						const response = await hubspotRequest.call(
 							this,
-							'hubspotApi',
 							{
 								method: 'PATCH',
 								url: propertyUrl,

@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### HubSpot (Rate-limit retry)
+
+- Every HubSpot request (action node, Trigger, and dropdown lookups) now retries automatically
+  when HubSpot responds with **429 Too Many Requests**: up to 4 retries, backing off 2s, 4s, 8s,
+  16s (or honoring `Retry-After` when available). Other errors are unchanged and still fail
+  immediately; a 429 that persists after the last retry fails exactly as before.
+
+### HubSpot (Objects: Batch Read With Associations)
+
+- Added **Batch Read With Associations** under the Objects resource. It works like Batch Read in
+  Fields mode (comma-separated Object IDs batched by 100, Output Mode, same Additional Options
+  except Properties, which is a main field below Object IDs), with no Input Mode toggle. A new **Associations** list picks associated object types (each type
+  once) and the properties to return for each; every result gets an `associations` object keyed
+  by object type ID, holding each associated record's labels and properties, or `null` when there
+  are none.
+
+### HubSpot (Products: SKU as ID Property)
+
+- **Products** (`0-7`) now offer **SKU (`hs_sku`)** in every ID Property dropdown (Get, Update,
+  Upsert, Delete, Batch Read, Batch Delete, and the association lookups). It was previously
+  hidden by the blanket `hs_` exclusion.
+
 ### HubSpot (New resource: Custom Events)
 
 - Added a **Custom Events** resource wrapping HubSpot's Custom Behavioral Events API

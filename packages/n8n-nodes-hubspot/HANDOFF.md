@@ -61,7 +61,18 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 - Icon: `file:app-icon.svg`
 
 ### Node-wide conventions — `HubspotApi.node.ts`
-- Auth: always `httpRequestWithAuthentication('hubspotApi', ...)` — credentials inject the header
+- Auth: every HubSpot call goes through `hubspotRequest.call(this, options)` (`helpers.ts`), a
+  thin wrapper over `httpRequestWithAuthentication('hubspotApi', ...)` — credentials inject the
+  header. Use it for any new call instead of calling `httpRequestWithAuthentication` directly.
+- **429 retry** (`hubspotRequest`): a 429 is retried up to 4 times (`RATE_LIMIT_MAX_RETRIES`),
+  waiting 2s, 4s, 8s, 16s plus up to 250ms jitter (sized for HubSpot's 100 requests per rolling
+  10 seconds limit, per the account owner), or `Retry-After` when available, each wait
+  capped at 30s. The `NodeApiError` that `httpRequestWithAuthentication` throws keeps
+  `httpCode: '429'` but drops the response headers (confirmed against the local n8n-workflow),
+  so `Retry-After` is usually not visible and the backoff applies. Any other error, and a 429
+  after the last retry, is re-thrown unchanged (same instance, hence the inline
+  `require-node-api-error` disable) so 404 checks and Continue On Fail behave as before. Applies
+  to the action node, the Trigger, and every loadOptions/listSearch method.
 - `BASE_HEADERS` (`content-type` / `accept: application/json`) on every request
 - Bodies are always `JSON.stringify`-ed; `parseJsonParam()` accepts either a JSON string or an
   already-parsed object from an expression
@@ -120,6 +131,7 @@ associable records.
 | Merge | POST | `/crm/v3/objects/{objectType}/merge` |
 | Search | POST | `/crm/v3/objects/{objectType}/search` |
 | Batch Read | POST | `/crm/v3/objects/{objectType}/batch/read` |
+| Batch Read With Associations | POST | `/crm/v3/objects/{objectType}/batch/read` + `/crm/v4/associations/{objectType}/{toObjectType}/batch/read` + `/crm/v3/objects/{toObjectType}/batch/read` |
 | Batch Create | POST | `/crm/v3/objects/{objectType}/batch/create` |
 | Batch Update | POST | `/crm/v3/objects/{objectType}/batch/update` |
 | Batch Upsert | POST | `/crm/v3/objects/{objectType}/batch/upsert` |
@@ -215,6 +227,32 @@ Top-level **Properties** multi-select; Additional Options: `propertiesWithHistor
 - **Custom JSON** mode: raw body
 - Additional options: `properties`, `propertiesWithHistory`, `idProperty`,
   `millisecondsBetweenItems`
+
+#### Batch Read With Associations
+- Value `batchReadWithAssociations`. Same as Batch Read's Fields mode, with no Input Mode
+  toggle at all. **Object IDs** (`batchReadObjectIds`), **Output Mode**
+  (`batchReadReturnAllMode`) and **Additional Options** (`batchReadOptions`) are separate field
+  definitions sharing Batch Read's parameter names, so values carry over when switching between
+  the two operations. **Properties** is a top-level field here (`properties`, directly below
+  Object IDs), not an Additional Option; this operation's Additional Options filter it out of the
+  shared list. The Output Mode options and Additional Options list are shared constants
+  (`batchReadOutputModeOptions`, `batchReadAdditionalOptions`) at the top of
+  `ObjectDescription.ts`.
+- **Associations** (`batchReadAssociations.associationValues[]`): each row has an **Object Type**
+  (`toObjectType`, `getBatchReadAssociationObjectTypes`: `ASSOCIATION_OBJECT_TYPE_OPTIONS` minus
+  types already picked in another row, so each type appears once) and **Properties**
+  (`getBatchReadAssociationProperties`, depends on `&toObjectType`). A type repeated through an
+  expression keeps only its first row at execute time.
+- Per 100-ID chunk: (1) primary `batch/read`, (2) for each association row, one v4
+  `batch/read` using the returned record IDs (real IDs even when ID Property was used), following
+  any per-record `paging.next.after` through `GET /crm/v4/objects/{from}/{id}/associations/{to}`
+  (`fetchBatchAssociationLinks`), (3) one `batch/read` per 100 distinct associated IDs for their
+  properties (`fetchRecordPropertiesById`). Both helpers live above the class in
+  `HubspotApi.node.ts`.
+- Each result gains `associations: { [toObjectType]: [{ labels: [{ label, typeId, category }],
+  properties }] | null }`; `null` means no associations of that type. An associated record whose
+  properties couldn't be read comes back with `properties: null`. `eachPage` output replaces the
+  chunk response's `results` with the enriched ones.
 
 #### Batch Delete
 - **Fields / Custom JSON** toggle; Custom JSON (raw **Body**) is the default so saved
@@ -656,6 +694,12 @@ Endpoints hang off `/crm/properties/2026-03/{objectType}` (Object Type is a real
   `getUniquePropertiesForAssociationFrom` / `To`. Filters out "(legacy)"-labelled properties
   everywhere, and additionally `hs_createdate` / `hs_lastmodifieddate` for Contacts (`0-1`) —
   see the Contacts quirk below.
+- ID Property pickers (`getUniqueProperties`, `getUpsertIdProperties`, the association From/To
+  variants) all filter through `isIdPropertyCandidate()`: `hasUniqueValue` and not
+  `hs_`-prefixed, **except** properties in `ID_PROPERTY_ALLOWLIST` (keyed by object type ID,
+  with `products`/`product` aliased to `0-7`). Currently only `hs_sku` on Products (`0-7`).
+  `fetchPropertiesForType()` tags allowlisted properties with a local `allowAsIdProperty` flag.
+  Add an entry there when another `hs_` property is confirmed to work as an `idProperty`.
 - Property cache: keyed by credential + object type, `PROPERTIES_CACHE_TTL_MS` = 2 minutes, so
   a property added in HubSpot shows up without an n8n restart. A failed fetch is evicted
   immediately.

@@ -17,6 +17,7 @@ import {
 	getAllProperties,
 	getSearchFilterProperties,
 	getSearchOperators,
+	hubspotRequest,
 	searchForms,
 } from './helpers';
 import {
@@ -140,9 +141,8 @@ async function pollFormSubmissions(
 				this.logger.info(`[HubSpot Trigger] GET ${url}`);
 			}
 
-			const response = (await this.helpers.httpRequestWithAuthentication.call(
+			const response = (await hubspotRequest.call(
 				this,
-				'hubspotApi',
 				{
 					method: 'GET',
 					url,
@@ -743,9 +743,8 @@ export class HubspotApiTrigger implements INodeType {
 					);
 				}
 
-				const response = (await this.helpers.httpRequestWithAuthentication.call(
+				const response = (await hubspotRequest.call(
 					this,
-					'hubspotApi',
 					{
 						method: 'POST',
 						url: searchUrl,
@@ -844,9 +843,8 @@ export class HubspotApiTrigger implements INodeType {
 					.slice(i, i + 50)
 					.map((result) => ({ id: String(result.id) }));
 
-				const response = (await this.helpers.httpRequestWithAuthentication.call(
+				const response = (await hubspotRequest.call(
 					this,
-					'hubspotApi',
 					{
 						method: 'POST',
 						url: batchReadUrl,

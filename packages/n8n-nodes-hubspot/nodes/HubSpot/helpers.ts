@@ -1,5 +1,6 @@
 import {
 	IExecuteFunctions,
+	IHttpRequestOptions,
 	ILoadOptionsFunctions,
 	INodeListSearchResult,
 	INodePropertyOptions,
@@ -20,6 +21,103 @@ const BASE_HEADERS = {
 	'accept': 'application/json',
 };
 export const OWNERS_BASE_PATH = '/crm/v3/owners';
+
+// ── Rate-limit retry ─────────────────────────────────────────────────────────
+// Every HubSpot call in this package goes through hubspotRequest, which
+// retries a request HubSpot rejected with 429 Too Many Requests. A 429 means
+// the request was not processed, so retrying is safe for POST/PATCH/DELETE
+// too. Any other error, and a 429 that is still failing after the last retry,
+// is re-thrown unchanged so existing error handling (404 checks, Continue On
+// Fail) behaves exactly as before.
+const RATE_LIMIT_MAX_RETRIES = 4;
+// HubSpot's limit for this account is 100 requests per rolling 10 seconds, so
+// the backoff is sized to span at least one full window across retries.
+const RATE_LIMIT_BASE_DELAY_MS = 2000;
+const RATE_LIMIT_MAX_DELAY_MS = 30000;
+
+type HubSpotRequestContext = IExecuteFunctions | IPollFunctions | ILoadOptionsFunctions;
+
+interface HttpErrorShape {
+	httpCode?: string | number | null;
+	status?: number;
+	statusCode?: number;
+	response?: { status?: number; headers?: Record<string, unknown> };
+	headers?: Record<string, unknown>;
+	cause?: HttpErrorShape;
+}
+
+/** Reads the HTTP status from a NodeApiError, its `cause`, or a raw axios error. */
+function getErrorStatus(error: HttpErrorShape | undefined): number | undefined {
+	if (!error) return undefined;
+	const candidates = [
+		error.httpCode,
+		error.response?.status,
+		error.statusCode,
+		error.status,
+		error.cause?.response?.status,
+		error.cause?.statusCode,
+		error.cause?.status,
+	];
+	for (const candidate of candidates) {
+		const status = Number(candidate);
+		if (candidate !== undefined && candidate !== null && Number.isFinite(status)) return status;
+	}
+	return undefined;
+}
+
+/**
+ * Retry-After in ms (seconds or an HTTP date), when it can be found. The
+ * NodeApiError thrown by httpRequestWithAuthentication does not keep the
+ * response headers, so in practice this is usually undefined and the
+ * exponential backoff below applies; it is still read in case a raw error
+ * (or a future n8n version) carries them.
+ */
+function getRetryAfterMs(error: HttpErrorShape): number | undefined {
+	const headers = error.response?.headers ?? error.cause?.response?.headers ?? error.headers;
+	if (!headers) return undefined;
+	const raw = headers['retry-after'] ?? headers['Retry-After'];
+	if (raw === undefined || raw === null || raw === '') return undefined;
+	const seconds = Number(raw);
+	if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+	const date = Date.parse(String(raw));
+	return Number.isNaN(date) ? undefined : Math.max(0, date - Date.now());
+}
+
+function rateLimitDelayMs(error: HttpErrorShape, attempt: number): number {
+	const retryAfter = getRetryAfterMs(error);
+	const backoff = RATE_LIMIT_BASE_DELAY_MS * 2 ** attempt + Math.floor(Math.random() * 250);
+	return Math.min(retryAfter ?? backoff, RATE_LIMIT_MAX_DELAY_MS);
+}
+
+/**
+ * Drop-in replacement for
+ * `this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', options)`
+ * that retries 429 responses up to RATE_LIMIT_MAX_RETRIES times, waiting for
+ * a Retry-After header when one is available, otherwise backing off
+ * exponentially (2s, 4s, 8s, 16s, plus up to 250ms jitter). Each wait is
+ * capped at RATE_LIMIT_MAX_DELAY_MS.
+ */
+export async function hubspotRequest(
+	this: HubSpotRequestContext,
+	options: IHttpRequestOptions,
+): ReturnType<IExecuteFunctions['helpers']['httpRequestWithAuthentication']> {
+	for (let attempt = 0; ; attempt++) {
+		try {
+			return await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', options);
+		} catch (error) {
+			if (attempt >= RATE_LIMIT_MAX_RETRIES || getErrorStatus(error as HttpErrorShape) !== 429) {
+				// Re-thrown as-is on purpose: callers already wrap it (and check
+				// httpCode / response.status for 404s), so this wrapper must not
+				// change the error's type or shape.
+				// eslint-disable-next-line @n8n/community-nodes/require-node-api-error
+				throw error;
+			}
+			const delayMs = rateLimitDelayMs(error as HttpErrorShape, attempt);
+			// eslint-disable-next-line @n8n/community-nodes/no-restricted-globals
+			await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+		}
+	}
+}
 
 export const OBJECT_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Calls (0-48)', value: '0-48' },
@@ -147,6 +245,8 @@ interface HubSpotPropertySummary {
 	label: string;
 	type: string;
 	hasUniqueValue?: boolean;
+	/** Set locally for properties in ID_PROPERTY_ALLOWLIST, not by HubSpot. */
+	allowAsIdProperty?: boolean;
 	modificationMetadata?: {
 		readOnlyDefinition?: boolean;
 		readOnlyValue?: boolean;
@@ -166,6 +266,34 @@ const CONTACTS_INVALID_SEARCH_PROPERTIES = ['hs_createdate', 'hs_lastmodifieddat
 // passed straight through to the Properties API. The Users object's actual
 // type ID is 0-115.
 export const USERS_OBJECT_TYPE = '0-115';
+
+// HubSpot-defined (`hs_`-prefixed) properties that HubSpot accepts as an
+// `idProperty` lookup key even though the `hs_` filter in
+// isIdPropertyCandidate would otherwise hide them. Keyed by object type ID;
+// OBJECT_TYPE_ALIASES maps the hand-typed names the noValidation Object Type
+// dropdown can pass through.
+const ID_PROPERTY_ALLOWLIST: Record<string, string[]> = {
+	'0-7': ['hs_sku'],
+};
+const OBJECT_TYPE_ALIASES: Record<string, string> = {
+	products: '0-7',
+	product: '0-7',
+};
+
+function getAllowedIdProperties(objectType: string): string[] {
+	const normalized = objectType.trim().toLowerCase();
+	return ID_PROPERTY_ALLOWLIST[OBJECT_TYPE_ALIASES[normalized] ?? normalized] ?? [];
+}
+
+/**
+ * Whether a property can be offered as an "ID Property" lookup key: any
+ * property marked as having a unique value, excluding HubSpot-internal
+ * `hs_`-prefixed ones (rarely meaningful as a lookup key) unless allowlisted.
+ */
+function isIdPropertyCandidate(property: HubSpotPropertySummary): boolean {
+	if (property.allowAsIdProperty) return true;
+	return Boolean(property.hasUniqueValue) && !property.name.startsWith('hs_');
+}
 
 // Property definitions rarely change and every dropdown in this node
 // (Properties, ID Property, Property, etc.) ultimately fetches them through
@@ -194,7 +322,7 @@ async function fetchPropertiesForType(
 	if (cached && cached.expiresAt > Date.now()) return cached.promise;
 
 	const promise = (async () => {
-		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+		const response = (await hubspotRequest.call(this, {
 			method: 'GET',
 			url: `${HUBSPOT_BASE}${PROPERTIES_BASE_PATH}/${objectType}`,
 			headers: { accept: 'application/json' },
@@ -202,16 +330,23 @@ async function fetchPropertiesForType(
 
 		// Exclude legacy properties (e.g. owneremail), which HubSpot marks with a
 		// "(legacy)" suffix in the label. They should not be offered in dropdowns.
-		return (response.results ?? []).filter((property) => {
-			if (/\(legacy\)/i.test(property.label ?? '')) return false;
-			if (
-				objectType === CONTACTS_OBJECT_TYPE &&
-				CONTACTS_INVALID_SEARCH_PROPERTIES.includes(property.name)
-			) {
-				return false;
-			}
-			return true;
-		});
+		const allowedIdProperties = getAllowedIdProperties(objectType);
+		return (response.results ?? [])
+			.filter((property) => {
+				if (/\(legacy\)/i.test(property.label ?? '')) return false;
+				if (
+					objectType === CONTACTS_OBJECT_TYPE &&
+					CONTACTS_INVALID_SEARCH_PROPERTIES.includes(property.name)
+				) {
+					return false;
+				}
+				return true;
+			})
+			.map((property) =>
+				allowedIdProperties.includes(property.name)
+					? { ...property, allowAsIdProperty: true }
+					: property,
+			);
 	})();
 
 	propertiesCache.set(cacheKey, { promise, expiresAt: Date.now() + PROPERTIES_CACHE_TTL_MS });
@@ -253,13 +388,11 @@ function toOption(property: HubSpotPropertySummary): INodePropertyOptions {
  * default, represented as an empty value so it round-trips with the
  * pre-existing "blank means record ID" behaviour) plus every property marked
  * as having a unique value, which is what HubSpot allows a record to be
- * looked up by instead of its ID. HubSpot-internal `hs_`-prefixed properties
- * are excluded — they're rarely meaningful as a lookup key and just add
- * noise to the list.
+ * looked up by instead of its ID (see isIdPropertyCandidate).
  */
 function toUniqueIdPropertyOptions(properties: HubSpotPropertySummary[]): INodePropertyOptions[] {
 	const uniqueOptions = properties
-		.filter((property) => property.hasUniqueValue && !property.name.startsWith('hs_'))
+		.filter(isIdPropertyCandidate)
 		.map(toOption)
 		.sort((a, b) => a.name.localeCompare(b.name));
 	return [{ name: 'Record ID', value: '' }, ...uniqueOptions];
@@ -337,6 +470,43 @@ export async function getWritableProperties(
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Object Type options for a Batch Read With Associations row: every
+ * associable object type, minus any already picked in another row, so each
+ * object type can only be added once. The row's own current value stays
+ * listed so it still renders as selected.
+ */
+export async function getBatchReadAssociationObjectTypes(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	let currentValue = '';
+	try {
+		currentValue = (this.getCurrentNodeParameter('&toObjectType') as string) ?? '';
+	} catch {
+		currentValue = '';
+	}
+	const collection = this.getCurrentNodeParameters()?.batchReadAssociations as
+		| { associationValues?: Array<{ toObjectType?: string }> }
+		| undefined;
+	const usedElsewhere = new Set(
+		(collection?.associationValues ?? [])
+			.map((row) => row?.toObjectType)
+			.filter((value): value is string => Boolean(value)),
+	);
+	usedElsewhere.delete(currentValue);
+	return ASSOCIATION_OBJECT_TYPE_OPTIONS.filter(
+		(option) => !usedElsewhere.has(String(option.value)),
+	);
+}
+
+/** Properties for the object type picked in the same Batch Read With Associations row. */
+export async function getBatchReadAssociationProperties(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const properties = await fetchPropertiesForParam.call(this, '&toObjectType');
+	return properties.map(toOption).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** All properties for the Owners resource's Users object type (0-115). */
 export async function getUserProperties(
 	this: ILoadOptionsFunctions,
@@ -379,7 +549,7 @@ export async function getUpsertIdProperties(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
 	const uniqueOptions = (await fetchProperties.call(this))
-		.filter((property) => property.hasUniqueValue && !property.name.startsWith('hs_'))
+		.filter(isIdPropertyCandidate)
 		.map(toOption)
 		.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -635,7 +805,7 @@ async function fetchForms(this: ILoadOptionsFunctions): Promise<HubSpotFormSumma
 		let pageCount = 0;
 
 		do {
-			const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+			const response = (await hubspotRequest.call(this, {
 				method: 'GET',
 				url: buildHubSpotUrl(HUBSPOT_BASE, '/marketing/v3/forms', {
 					formTypes: 'all',
@@ -746,7 +916,7 @@ async function fetchMarketingEvents(
 		let pageCount = 0;
 
 		do {
-			const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+			const response = (await hubspotRequest.call(this, {
 				method: 'GET',
 				url: buildHubSpotUrl(HUBSPOT_BASE, MARKETING_EVENTS_BASE_PATH, { limit: 100, after }),
 				headers: { accept: 'application/json' },
@@ -909,7 +1079,7 @@ async function resolveContactBySearch(
 	if (contactFields.length === 0) return undefined;
 
 	try {
-		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+		const response = (await hubspotRequest.call(this, {
 			method: 'POST',
 			url: `${HUBSPOT_BASE}${OBJECTS_BASE_PATH}/${CONTACTS_OBJECT_TYPE}/search`,
 			headers: BASE_HEADERS,
@@ -1000,9 +1170,8 @@ export async function enrichSubmissionsWithAssociations(
 		try {
 			for (let start = 0; start < distinctEmails.length; start += CONTACT_BATCH_READ_CHUNK_SIZE) {
 				const chunk = distinctEmails.slice(start, start + CONTACT_BATCH_READ_CHUNK_SIZE);
-				const response = (await this.helpers.httpRequestWithAuthentication.call(
+				const response = (await hubspotRequest.call(
 					this,
-					'hubspotApi',
 					{
 						method: 'POST',
 						url: `${HUBSPOT_BASE}${OBJECTS_BASE_PATH}/${CONTACTS_OBJECT_TYPE}/batch/read`,
@@ -1065,9 +1234,8 @@ export async function enrichSubmissionsWithAssociations(
 			const contactIds = Array.from(contactIdSet);
 			for (let start = 0; start < contactIds.length; start += ASSOCIATION_BATCH_READ_CHUNK_SIZE) {
 				const chunk = contactIds.slice(start, start + ASSOCIATION_BATCH_READ_CHUNK_SIZE);
-				const response = (await this.helpers.httpRequestWithAuthentication.call(
+				const response = (await hubspotRequest.call(
 					this,
-					'hubspotApi',
 					{
 						method: 'POST',
 						url: `${HUBSPOT_BASE}${ASSOC_BASE_PATH}/${CONTACTS_OBJECT_TYPE}/${toObjectType}/batch/read`,
@@ -1116,7 +1284,7 @@ export async function resolveUserIdFromOwnerId(
 	ownerId: string,
 	itemIndex: number,
 ): Promise<string> {
-	const owner = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+	const owner = (await hubspotRequest.call(this, {
 		method: 'GET',
 		url: `${HUBSPOT_BASE}${OWNERS_BASE_PATH}/${ownerId}`,
 		headers: { accept: 'application/json' },
@@ -1150,7 +1318,7 @@ export async function findOwnerByField(
 
 	do {
 		const url = buildHubSpotUrl(HUBSPOT_BASE, OWNERS_BASE_PATH, { archived, after, limit: 100 });
-		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+		const response = (await hubspotRequest.call(this, {
 			method: 'GET',
 			url,
 			headers: { accept: 'application/json' },
@@ -1250,7 +1418,7 @@ async function fetchEventDefinitions(
 		let pageCount = 0;
 
 		do {
-			const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+			const response = (await hubspotRequest.call(this, {
 				method: 'GET',
 				url: buildHubSpotUrl(HUBSPOT_BASE, `${EVENTS_BASE_PATH}/event-definitions`, {
 					limit: 100,
@@ -1357,7 +1525,7 @@ async function fetchEventDefinitionDetail(
 
 	const promise = (async () => {
 		try {
-			return (await this.helpers.httpRequestWithAuthentication.call(this, 'hubspotApi', {
+			return (await hubspotRequest.call(this, {
 				method: 'GET',
 				url: `${HUBSPOT_BASE}${EVENTS_BASE_PATH}/event-definitions/${encodeURIComponent(eventName)}`,
 				headers: { accept: 'application/json' },
