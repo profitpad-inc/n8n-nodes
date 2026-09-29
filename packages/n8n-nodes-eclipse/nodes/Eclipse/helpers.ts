@@ -1,11 +1,11 @@
-import { IExecuteFunctions, JsonObject } from 'n8n-workflow';
+import { IExecuteFunctions, ILoadOptionsFunctions, JsonObject } from 'n8n-workflow';
 
 // Eclipse requires a session token obtained from POST /Sessions before any
 // other API call. This pre-auth step cannot go through httpRequestWithAuthentication
 // because the token is not a static credential — it is created on demand here.
 // Retries up to 2 times with a 500 ms delay to handle intermittent 500s from the API.
 export async function createSession(
-  context: IExecuteFunctions,
+  context: IExecuteFunctions | ILoadOptionsFunctions,
   baseUrl: string,
   username: string,
   password: string,

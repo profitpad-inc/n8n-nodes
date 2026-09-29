@@ -62,6 +62,25 @@ times, then every other API call in the node uses
 `EclipseApi.credentials.ts`) hits the same `/Sessions` endpoint to validate
 username/password.
 
+## File Read resource (`descriptions/FileReadDescription.ts`)
+
+Single operation, Get Many, over `GET /FileRead/{fileName}` (generic read of
+any Eclipse file, e.g. `CUST.CLASS`). Same `returnAll` / `returnAllMode` /
+`pageSize` / `startIndex` (1-based) pattern as the other resources, minus
+`includeTotalItems` and the Fields to Return filter (not requested). Response
+is `{ metadata, results: [{ fileName, userDefinedData: [{ key, value }] }] }`.
+
+The API supports no filtering, so Additional Options are **post-processing on
+each fetched page**: `id` (comma-separated, matched against the entry whose
+key is `@ID`) drops non-matching records, and `keys` trims each record's
+`userDefinedData` to the selected keys. The `keys` multiOptions is populated
+by the `getFileKeys` loadOptions method in `EclipseApi.node.ts`, which mints
+a session and reads the file with `pageSize=1` (depends on `fileName`).
+`createSession` accepts `ILoadOptionsFunctions` for that reason. With Return
+All off, filters only see the requested page, so a filtered single page can
+come back with fewer than `pageSize` records. Paging stops on the unfiltered
+page length, not the filtered one. Not yet tested against a live Eclipse.
+
 ## Sales Order ID format quirk
 
 Sales order IDs are composite: `S2680001.0001` (order number + generation,

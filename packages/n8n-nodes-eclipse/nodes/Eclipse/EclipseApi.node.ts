@@ -1,6 +1,8 @@
 import {
   IExecuteFunctions,
+  ILoadOptionsFunctions,
   INodeExecutionData,
+  INodePropertyOptions,
   INodeType,
   INodeTypeDescription,
   JsonObject,
@@ -11,6 +13,7 @@ import {
 
 import { contactDescription } from './descriptions/ContactDescription';
 import { customerDescription } from './descriptions/CustomerDescription';
+import { fileReadDescription } from './descriptions/FileReadDescription';
 import { productDescription } from './descriptions/ProductDescription';
 import { salesOrderDescription, salesOrderUpdateStatuses } from './descriptions/SalesOrderDescription';
 import { applyFieldFilter, createSession, normalizeEnumValue, parseCommaSeparatedList, parseJsonParameter, toTrimmedString } from './helpers';
@@ -53,6 +56,10 @@ export class EclipseApi implements INodeType {
             value: 'customer',
           },
           {
+            name: 'File Read',
+            value: 'fileRead',
+          },
+          {
             name: 'Product',
             value: 'product',
           },
@@ -65,9 +72,38 @@ export class EclipseApi implements INodeType {
       },
       ...contactDescription,
       ...customerDescription,
+      ...fileReadDescription,
       ...productDescription,
       ...salesOrderDescription,
     ],
+  };
+
+  methods = {
+    loadOptions: {
+      // Reads a single record from the chosen file to discover its keys.
+      async getFileKeys(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+        const fileName = toTrimmedString(this.getNodeParameter('fileName', ''));
+        if (!fileName) return [];
+
+        const credentials = await this.getCredentials('eclipseApi');
+        const baseUrl = (credentials.baseUrl as string).replace(/\/$/, '');
+        const sessionToken = await createSession(
+          this,
+          baseUrl,
+          credentials.username as string,
+          credentials.password as string,
+        );
+
+        const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+          method: 'GET',
+          url: `${baseUrl}/FileRead/${encodeURIComponent(fileName)}?pageSize=1&startIndex=1`,
+          headers: { Accept: 'application/json', sessionToken },
+        });
+
+        const first = (response.results?.[0] ?? {}) as { userDefinedData?: Array<{ key: string }> };
+        return (first.userDefinedData ?? []).map((entry) => ({ name: entry.key, value: entry.key }));
+      },
+    },
   };
 
   async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -407,6 +443,110 @@ export class EclipseApi implements INodeType {
             }
 
             returnData.push({ json: { success: true, id: contactId }, pairedItem: { item: i } });
+          }
+        }
+
+        if (resource === 'fileRead') {
+          const fileName = toTrimmedString(this.getNodeParameter('fileName', i));
+          if (!fileName) {
+            throw new NodeOperationError(this.getNode(), 'File Name is required', { itemIndex: i });
+          }
+
+          const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+          const pageSize = this.getNodeParameter('pageSize', i) as number;
+          const additionalOptions = this.getNodeParameter('additionalOptions', i) as {
+            id?: string | number;
+            keys?: string[] | string;
+            startIndex?: number;
+          };
+
+          const idFilter = new Set(parseCommaSeparatedList(String(additionalOptions.id ?? '')));
+          const keysRaw = additionalOptions.keys ?? [];
+          const keyFilter = new Set(
+            (Array.isArray(keysRaw) ? keysRaw : String(keysRaw).split(',')).map((k) => String(k).trim()).filter(Boolean),
+          );
+
+          type FileReadEntry = { key: string; value: unknown };
+          type FileReadRecord = JsonObject;
+          const entriesOf = (r: FileReadRecord): FileReadEntry[] => (r.userDefinedData as unknown as FileReadEntry[] | undefined) ?? [];
+
+          // The API supports neither filter, so both run on each fetched page.
+          const postFilter = (records: FileReadRecord[]): FileReadRecord[] => {
+            let out = records;
+            if (idFilter.size > 0) {
+              out = out.filter((r) => {
+                const idEntry = entriesOf(r).find((e) => e.key === '@ID');
+                return idEntry !== undefined && idFilter.has(String(idEntry.value).trim());
+              });
+            }
+            if (keyFilter.size > 0) {
+              out = out.map((r) => ({
+                ...r,
+                userDefinedData: entriesOf(r).filter((e) => keyFilter.has(e.key)) as unknown as JsonObject[],
+              }));
+            }
+            return out;
+          };
+
+          const buildUrl = (startIndex: number): string => {
+            const params = new URLSearchParams();
+            params.set('pageSize', String(pageSize));
+            params.set('startIndex', String(startIndex));
+            return `${baseUrl}/FileRead/${encodeURIComponent(fileName)}?${params.toString()}`;
+          };
+
+          if (returnAll) {
+            const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+            const allResults: JsonObject[] = [];
+            const allMetadata: (JsonObject | null)[] = [];
+            let currentStart = 1;
+
+            while (true) {
+              const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+                method: 'GET',
+                url: buildUrl(currentStart),
+                headers,
+              });
+
+              const results: FileReadRecord[] = response.results ?? [];
+              const filteredResults = postFilter(results);
+
+              if (returnAllMode === 'eachPage') {
+                returnData.push({
+                  json: { ...response, results: filteredResults },
+                  pairedItem: { item: i },
+                });
+              } else if (returnAllMode === 'eachResult') {
+                for (const result of filteredResults) {
+                  returnData.push({ json: result, pairedItem: { item: i } });
+                }
+              } else {
+                allResults.push(...filteredResults);
+                allMetadata.push((response.metadata as JsonObject | undefined) ?? null);
+              }
+
+              if (results.length < pageSize) break;
+              currentStart += pageSize;
+            }
+
+            if (returnAllMode === 'allInOne') {
+              returnData.push({
+                json: { metadata: allMetadata, results: allResults },
+                pairedItem: { item: i },
+              });
+            }
+          } else {
+            const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'GET',
+              url: buildUrl(additionalOptions.startIndex ?? 1),
+              headers,
+            });
+
+            const results: FileReadRecord[] = response.results ?? [];
+            returnData.push({
+              json: { ...response, results: postFilter(results) },
+              pairedItem: { item: i },
+            });
           }
         }
 
