@@ -101,7 +101,8 @@ export class EclipseApi implements INodeType {
         });
 
         const first = (response.results?.[0] ?? {}) as { userDefinedData?: Array<{ key: string }> };
-        return (first.userDefinedData ?? []).map((entry) => ({ name: entry.key, value: entry.key }));
+        return (first.userDefinedData ?? []).filter((entry) => entry.key !== 'ID')
+          .map((entry) => ({ name: entry.key, value: entry.key }));
       },
     },
   };
@@ -452,12 +453,12 @@ export class EclipseApi implements INodeType {
             throw new NodeOperationError(this.getNode(), 'File Name is required', { itemIndex: i });
           }
 
-          const returnAll = this.getNodeParameter('returnAll', i) as boolean;
           const pageSize = this.getNodeParameter('pageSize', i) as number;
           const additionalOptions = this.getNodeParameter('additionalOptions', i) as {
             id?: string | number;
             keys?: string[] | string;
             startIndex?: number;
+            hideEmpty?: boolean;
           };
 
           const idFilter = new Set(parseCommaSeparatedList(String(additionalOptions.id ?? '')));
@@ -470,6 +471,8 @@ export class EclipseApi implements INodeType {
           type FileReadRecord = JsonObject;
           const entriesOf = (r: FileReadRecord): FileReadEntry[] => (r.userDefinedData as unknown as FileReadEntry[] | undefined) ?? [];
 
+          const isEmpty = (v: unknown): boolean => v === null || v === undefined || v === '';
+
           // The API supports neither filter, so both run on each fetched page.
           const postFilter = (records: FileReadRecord[]): FileReadRecord[] => {
             let out = records;
@@ -479,10 +482,17 @@ export class EclipseApi implements INodeType {
                 return idEntry !== undefined && idFilter.has(String(idEntry.value).trim());
               });
             }
+            if (additionalOptions.hideEmpty) {
+              out = out.filter((r) =>
+                entriesOf(r).some(
+                  (e) => e.key !== 'ID' && e.key !== '@ID' && (keyFilter.size === 0 || keyFilter.has(e.key)) && !isEmpty(e.value),
+                ),
+              );
+            }
             if (keyFilter.size > 0) {
               out = out.map((r) => ({
                 ...r,
-                userDefinedData: entriesOf(r).filter((e) => keyFilter.has(e.key)) as unknown as JsonObject[],
+                userDefinedData: entriesOf(r).filter((e) => e.key === 'ID' || keyFilter.has(e.key)) as unknown as JsonObject[],
               }));
             }
             return out;
@@ -495,60 +505,19 @@ export class EclipseApi implements INodeType {
             return `${baseUrl}/FileRead/${encodeURIComponent(fileName)}?${params.toString()}`;
           };
 
-          if (returnAll) {
-            const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
-            const allResults: JsonObject[] = [];
-            const allMetadata: (JsonObject | null)[] = [];
-            let currentStart = 1;
+          const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+            method: 'GET',
+            url: buildUrl(additionalOptions.startIndex ?? 1),
+            headers,
+          });
 
-            while (true) {
-              const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
-                method: 'GET',
-                url: buildUrl(currentStart),
-                headers,
-              });
-
-              const results: FileReadRecord[] = response.results ?? [];
-              const filteredResults = postFilter(results);
-
-              if (returnAllMode === 'eachPage') {
-                returnData.push({
-                  json: { ...response, results: filteredResults },
-                  pairedItem: { item: i },
-                });
-              } else if (returnAllMode === 'eachResult') {
-                for (const result of filteredResults) {
-                  returnData.push({ json: result, pairedItem: { item: i } });
-                }
-              } else {
-                allResults.push(...filteredResults);
-                allMetadata.push((response.metadata as JsonObject | undefined) ?? null);
-              }
-
-              if (results.length < pageSize) break;
-              currentStart += pageSize;
-            }
-
-            if (returnAllMode === 'allInOne') {
-              returnData.push({
-                json: { metadata: allMetadata, results: allResults },
-                pairedItem: { item: i },
-              });
-            }
-          } else {
-            const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
-              method: 'GET',
-              url: buildUrl(additionalOptions.startIndex ?? 1),
-              headers,
-            });
-
-            const results: FileReadRecord[] = response.results ?? [];
-            returnData.push({
-              json: { ...response, results: postFilter(results) },
-              pairedItem: { item: i },
-            });
-          }
+          const results: FileReadRecord[] = response.results ?? [];
+          returnData.push({
+            json: { ...response, results: postFilter(results) },
+            pairedItem: { item: i },
+          });
         }
+
 
         if (resource === 'customer' || resource === 'product') {
           const endpoint = resource === 'customer' ? 'Customers' : 'Products';

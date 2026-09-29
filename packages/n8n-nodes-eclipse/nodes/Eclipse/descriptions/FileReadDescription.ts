@@ -39,56 +39,11 @@ export const fileReadDescription: INodeProperties[] = [
     },
   },
   {
-    displayName: 'Return All',
-    name: 'returnAll',
-    type: 'boolean',
-    default: false,
-    description: 'Whether to return all results or only up to a given limit',
-    displayOptions: {
-      show: {
-        resource: ['fileRead'],
-        operation: ['getMany'],
-      },
-    },
-  },
-  {
-    displayName: 'Return All Mode',
-    name: 'returnAllMode',
-    type: 'options',
-    noDataExpression: true,
-    default: 'eachPage',
-    description: 'How to output the fetched results',
-    displayOptions: {
-      show: {
-        resource: ['fileRead'],
-        operation: ['getMany'],
-        returnAll: [true],
-      },
-    },
-    options: [
-      {
-        name: 'All Results as 1 Item',
-        value: 'allInOne',
-        description: 'Aggregate all pages and return every result combined in a single output item, with an array of each page\'s metadata',
-      },
-      {
-        name: 'Each Page as 1 Item',
-        value: 'eachPage',
-        description: 'Return each API page response as a separate output item',
-      },
-      {
-        name: 'Each Result as 1 Item',
-        value: 'eachResult',
-        description: 'Return each individual record as a separate output item, with no metadata',
-      },
-    ],
-  },
-  {
     displayName: 'Page Size',
     name: 'pageSize',
     type: 'number',
     typeOptions: { minValue: 1 },
-    default: 10,
+    default: 1000,
     description: 'Number of records to request per page',
     displayOptions: {
       show: {
@@ -111,6 +66,13 @@ export const fileReadDescription: INodeProperties[] = [
     },
     options: [
       {
+        displayName: 'Hide Empty Records',
+        name: 'hideEmpty',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to hide records where every selected key is null or empty. If no keys are selected, all keys except ID are checked.',
+      },
+      {
         displayName: 'ID',
         name: 'id',
         type: 'string',
@@ -119,7 +81,8 @@ export const fileReadDescription: INodeProperties[] = [
         description: 'Only return records with these IDs (matched against the record\'s @ID). Separate multiple IDs with commas. Applied after the records are fetched, since the API does not support it.',
       },
       {
-        displayName: 'Key Names or IDs',
+        // eslint-disable-next-line n8n-nodes-base/node-param-display-name-wrong-for-dynamic-multi-options
+        displayName: 'Keys',
         name: 'keys',
         type: 'multiOptions',
         typeOptions: {
@@ -127,7 +90,8 @@ export const fileReadDescription: INodeProperties[] = [
           loadOptionsDependsOn: ['fileName'],
         },
         default: [],
-        description: 'Only return these keys from each record\'s user-defined data (keys are loaded by reading one record from the file, and filtering happens after fetching). Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+        // eslint-disable-next-line n8n-nodes-base/node-param-description-wrong-for-dynamic-multi-options
+        description: 'Only return these keys from each record\'s user-defined data (keys are loaded by reading one record from the file, and filtering happens after fetching). The ID key is always included. Choose from the list, or specify keys using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
       },
       {
         displayName: 'Start Index',
@@ -135,7 +99,7 @@ export const fileReadDescription: INodeProperties[] = [
         type: 'number',
         typeOptions: { minValue: 1 },
         default: 1,
-        description: 'The index of the first record to return (1-based). Ignored when Return All is on.',
+        description: 'The index of the first record to return (1-based)',
       },
     ],
   },

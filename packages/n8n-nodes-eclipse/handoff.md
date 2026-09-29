@@ -65,9 +65,11 @@ username/password.
 ## File Read resource (`descriptions/FileReadDescription.ts`)
 
 Single operation, Get Many, over `GET /FileRead/{fileName}` (generic read of
-any Eclipse file, e.g. `CUST.CLASS`). Same `returnAll` / `returnAllMode` /
-`pageSize` / `startIndex` (1-based) pattern as the other resources, minus
-`includeTotalItems` and the Fields to Return filter (not requested). Response
+any Eclipse file, e.g. `CUST.CLASS`). Single request only: `pageSize` and
+`startIndex` (1-based), no Return All, `includeTotalItems` or Fields to Return.
+Return All was removed because Eclipse's FileRead returns empty pages partway
+through the file (confirmed Eclipse-side bug, not a node bug: with `totalItems`
+124 it returned nothing past ~30-60 records), so paging can't be trusted. Response
 is `{ metadata, results: [{ fileName, userDefinedData: [{ key, value }] }] }`.
 
 The API supports no filtering, so Additional Options are **post-processing on
@@ -76,9 +78,14 @@ key is `@ID`) drops non-matching records, and `keys` trims each record's
 `userDefinedData` to the selected keys. The `keys` multiOptions is populated
 by the `getFileKeys` loadOptions method in `EclipseApi.node.ts`, which mints
 a session and reads the file with `pageSize=1` (depends on `fileName`).
-`createSession` accepts `ILoadOptionsFunctions` for that reason. With Return
-All off, filters only see the requested page, so a filtered single page can
-come back with fewer than `pageSize` records. Paging stops on the unfiltered
+`createSession` accepts `ILoadOptionsFunctions` for that reason. Filters only see
+the requested page, so a filtered page can
+come back with fewer than `pageSize` records. The `ID` key is always kept
+when a key filter is active and is hidden from the Keys list (the `@ID` entry
+is separate and only used for the ID filter). `hideEmpty` drops records where
+every selected key (or, with none selected, every key except `ID`/`@ID`) is
+null or `""`; it runs before key trimming. The Keys field disables two n8n lint
+rules that force a "Names or IDs" label. Paging stops on the unfiltered
 page length, not the filtered one. Not yet tested against a live Eclipse.
 
 ## Sales Order ID format quirk
