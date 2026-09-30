@@ -87,9 +87,9 @@ Frappe REST v1 (works on ERPNext v14 to v16):
   `CUSTOM.erpNext` and `CUSTOM.erpNextTrigger`**, not `@profitpad-inc/n8n-nodes-erpnext.*`.
   Workflow JSON for that VM must use the `CUSTOM.*` names (the same goes for `CUSTOM.hubspotApi`).
 - n8n must restart to load a new version.
-- 0.1.0 was installed from an unpacked `npm pack` tarball, because it wasn't published to GitHub
-  Packages yet. Add it to the Dockerfile's custom-nodes `npm install` line only after publishing,
-  or image builds will fail.
+- Published to GitHub Packages (`npm publish` for 0.1.0, tag `n8n-nodes-erpnext@0.1.0`). Future
+  versions go out with `npm run release`. The VM's `~/docker/Dockerfile` custom-nodes `npm install`
+  line includes it.
 - The first user is the ERPNext ↔ HubSpot customer and contact sync; see
   `profitpad_work/ERP.Next/HANDOFF.md`.
 
