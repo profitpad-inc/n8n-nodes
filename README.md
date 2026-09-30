@@ -9,6 +9,7 @@ Monorepo containing n8n community node packages maintained by [ProfitPad](https:
 | [`@profitpad-inc/n8n-nodes-eclipse`](packages/n8n-nodes-eclipse) | n8n node for the Epicor Eclipse API |
 | [`@profitpad-inc/n8n-nodes-friendgrid`](packages/n8n-nodes-hubspot) | n8n node for HubSpot API |
 | [`@profitpad-inc/n8n-nodes-friendgrid`](packages/n8n-nodes-microsoft-outlook) | n8n node for Microsoft Outlook Graph API |
+| [`@profitpad-inc/n8n-nodes-erpnext`](packages/n8n-nodes-erpnext) | n8n nodes for ERPNext (Frappe): documents, upsert, methods, polling trigger |
 
 ## Development
 

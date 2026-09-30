@@ -1,0 +1,55 @@
+{
+  "name": "@profitpad-inc/n8n-nodes-erpnext",
+  "version": "0.1.0",
+  "description": "n8n community node for the ERPNext (Frappe) REST API",
+  "license": "MIT",
+  "homepage": "",
+  "keywords": [
+    "n8n-community-node-package"
+  ],
+  "author": {
+    "name": "ProfitPad",
+    "email": "ali.ismail@profitpad.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/profitpad-inc/n8n-nodes.git",
+    "directory": "packages/n8n-nodes-erpnext"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "build": "n8n-node build",
+    "build:watch": "tsc --watch",
+    "dev": "n8n-node dev",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "test": "node --test \"test/*.test.js\"",
+    "release": "release-it"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": true,
+    "credentials": [
+      "dist/nodes/ErpNext/ErpNextTokenApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/ErpNext/ErpNext.node.js",
+      "dist/nodes/ErpNext/ErpNextTrigger.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@n8n/node-cli": "*",
+    "eslint": "9.32.0",
+    "prettier": "3.6.2",
+    "release-it": "^19.0.4",
+    "typescript": "5.9.2"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}
