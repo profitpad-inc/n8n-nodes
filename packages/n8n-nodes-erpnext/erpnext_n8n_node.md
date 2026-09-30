@@ -2,6 +2,10 @@
 
 Parameter names for generating workflow JSON. Both nodes are `typeVersion: 1`.
 
+**Node type strings** depend on how the package is installed. Installed as a community package, they're
+`@profitpad-inc/n8n-nodes-erpnext.erpNext` and `.erpNextTrigger`. Installed in a custom extensions folder,
+as on the ProfitPad VM (`/home/node/custom-nodes`), they're `CUSTOM.erpNext` and `CUSTOM.erpNextTrigger`.
+
 ## Credential
 
 ```json
@@ -10,7 +14,7 @@ Parameter names for generating workflow JSON. Both nodes are `typeVersion: 1`.
 
 Fields: `notes`, `baseUrl`, `apiKey` (password), `apiSecret` (password).
 
-## Action node `@profitpad-inc/n8n-nodes-erpnext.erpNext`
+## Action node `erpNext`
 
 Top level: `resource` = `document` (default) | `method`.
 
@@ -49,7 +53,7 @@ Update and upsert output:
 
 Output: ERPNext's response as-is (the result is under `message`).
 
-## Trigger node `@profitpad-inc/n8n-nodes-erpnext.erpNextTrigger`
+## Trigger node `erpNextTrigger`
 
 | Parameter | Notes |
 |---|---|

@@ -81,12 +81,16 @@ Frappe REST v1 (works on ERPNext v14 to v16):
 
 ## Deployment on the ProfitPad VM
 
-- Installed into n8n's persisted community-nodes folder `/home/node/.n8n/nodes` (the same place
-  as `n8n-nodes-eclipse`).
-- The image's Dockerfile (`~/docker/Dockerfile`) also lists it on the custom-nodes
-  `npm install` line, so a rebuild keeps it.
+- Installed in n8n's custom extensions folder, `/home/node/custom-nodes/node_modules/@profitpad-inc/n8n-nodes-erpnext`,
+  next to the HubSpot, Eclipse and robust-scheduler packages.
+- n8n loads that folder with its custom-directory loader, so **node types there are
+  `CUSTOM.erpNext` and `CUSTOM.erpNextTrigger`**, not `@profitpad-inc/n8n-nodes-erpnext.*`.
+  Workflow JSON for that VM must use the `CUSTOM.*` names (the same goes for `CUSTOM.hubspotApi`).
 - n8n must restart to load a new version.
-- The first sync using this package is ERPNext ↔ HubSpot customers and contacts. See
+- 0.1.0 was installed from an unpacked `npm pack` tarball, because it wasn't published to GitHub
+  Packages yet. Add it to the Dockerfile's custom-nodes `npm install` line only after publishing,
+  or image builds will fail.
+- The first user is the ERPNext ↔ HubSpot customer and contact sync; see
   `profitpad_work/ERP.Next/HANDOFF.md`.
 
 ## Known limits / ideas
