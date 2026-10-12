@@ -26,6 +26,7 @@ released version in `package.json` is `0.1.43`.
 | `nodes/HubSpot/searchFilter.ts` | Shared Fields / Custom JSON search-filter UI and its resolver |
 | `nodes/HubSpot/associationTypes.ts` | `ASSOCIATION_TYPES` — per-object-type `[associationTypeId, label]` table |
 | `nodes/HubSpot/descriptions/ObjectDescription.ts` | Objects resource UI (largest file) |
+| `nodes/HubSpot/descriptions/AnalyticsDescription.ts` | Analytics resource UI |
 | `nodes/HubSpot/descriptions/AssociationDescription.ts` | Associations resource UI |
 | `nodes/HubSpot/descriptions/CustomEventDescription.ts` | Custom Events resource UI |
 | `nodes/HubSpot/descriptions/OwnerDescription.ts` | Owners resource UI (Users + Owners branches) |
@@ -46,6 +47,7 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 | `MARKETING_EVENTS_BASE_PATH` | `/marketing/v3/marketing-events` |
 | `EVENTS_BASE_PATH` | `/events/2026-09` |
 | `EVENT_OCCURRENCES_BASE_PATH` | `/events/event-occurrences/2026-09` |
+| `ANALYTICS_REPORTS_BASE_PATH` (helpers) | `/analytics/v2/reports` |
 
 ---
 
@@ -83,7 +85,7 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 - Every output item carries `pairedItem: { item: i }`
 
 ### Resources
-Seven resources, selected by the top-level **Resource** dropdown: **Associations**,
+Eight resources, selected by the top-level **Resource** dropdown: **Analytics**, **Associations**,
 **Custom Events**, **Forms**, **Marketing Events**, **Objects** (default), **Owners**,
 **Properties**.
 
@@ -527,6 +529,61 @@ entry.
   the only way to keep the startDateTime-descending order visible in the UI. Both search methods
   (`searchMarketingEvents`, `searchMarketingEventExternalEventIds` in `helpers.ts`) also support
   the resourceLocator's live search box, filtering case-insensitively on event name or ID.
+
+---
+
+## Resource: Analytics
+
+Read-only. Wraps HubSpot's legacy Analytics v2 reports API
+([docs](https://developers.hubspot.com/docs/api-reference/legacy/reporting/reports/get-analytics-v2-reports-object_type-time_period)).
+Parameter names are prefixed or distinct (`analyticsObjectType`, `timePeriod`, `startDate`,
+`endDate`, `reportOptions`) so they never collide with the Objects/Owners `objectType`.
+
+| Operation | Value | Method | URL |
+|---|---|---|---|
+| Get Report | `getReport` | GET | `/analytics/v2/reports/{object_type}/{time_period}` |
+
+- **Object Type** (`analyticsObjectType`, default `pages`): `event-completions`, `forms`,
+  `geolocation`, `pages`, `sessions`, `social-assists`, `sources`, `totals`, `utm-campaigns`,
+  `utm-contents`, `utm-mediums`, `utm-sources`, `utm-terms`. HubSpot's reference page only lists
+  `event-completions`, `forms`, `pages` and `social-assists`; the rest came from the account
+  owner and are unverified against the docs.
+  The list is `ANALYTICS_OBJECT_TYPE_OPTIONS` in `AnalyticsDescription.ts`.
+- **Time Period** (`timePeriod`, default `total`): `total`, `daily`, `weekly`, `monthly`,
+  `summarize/daily`, `summarize/weekly`, `summarize/monthly`. The `summarize/...` values go into
+  the path with their slash unencoded.
+- **Start Date** / **End Date**: `dateTime` fields (n8n has no date-only field type), converted by
+  `toHubSpotAnalyticsDate()` (`helpers.ts`) to the `YYYYMMDD` form HubSpot requires. The date as
+  written is kept (the `YYYY-MM-DD` prefix of the ISO string), so no timezone shift; an
+  expression may also return `YYYYMMDD` directly. Empty/invalid dates throw a
+  `NodeOperationError`.
+- **Return All** / **Limit** (1 to 350, HubSpot's default and max page size) / **Max Pages** /
+  **Return All Mode**, the same convention as the other list operations. Return All requests 350
+  per page and follows `offset`: HubSpot returns `offset` as the position after the page's last
+  breakdown (observed: no limit over 116 rows gave `offset: 116, total: 116`), so it is sent back
+  as-is. `analyticsNextOffset()` stops on an empty page, `offset >= total`, or an offset that did
+  not advance. The docs do not spell out the offset semantics; this is inferred from the response.
+  - `allInOne` output: `{ offset, total, totals, breakdowns }` (`totals` from the first page,
+    `offset`/`total` from the last). `eachResult` emits one item per breakdown.
+  - The non-`summarize` daily/weekly/monthly periods are expected to return a date-keyed object
+    with no `breakdowns` array (not confirmed against a live response). When a page has no
+    `breakdowns` array it is pushed as one item and pagination stops, whatever the mode.
+- **Additional Options** (`reportOptions`):
+  - **Include Breakdowns** (`f`, repeated) / **Exclude Breakdowns** (`e`, repeated):
+    multi-selects backed by `getAnalyticsBreakdowns`, which calls
+    `/analytics/v2/reports/{analyticsObjectType}/total` for the chosen Start/End Date (the last 30
+    days if a date is empty) and, when set, the **Filter (Analytics View)** `filterId`, pages through by `offset` (capped at 10 pages of 350) and lists each distinct
+    `breakdown` value, with `meta` (e.g. the page title) as the option description. It always uses
+    the `total` period because that returns one flat breakdowns list. Depends on
+    `analyticsObjectType`, `startDate`, `endDate`, `reportOptions.filterId` (read from the
+    `reportOptions` collection); cached per credential + object type + dates + filterId
+    (2-minute TTL, evict on failure).
+  - **Filter (Analytics View)** (`filterId`): dropdown from `getAnalyticsViews`
+    (`GET /analytics/v2/views`), shown as `Title (id)` with only the id sent. Views with a
+    non-zero `deletedAt` are dropped.
+  - **Offset**: seeds the first page (both Return All on and off).
+  - Milliseconds Between Items.
+- Not exposed yet (documented by HubSpot): `d1` / `d2` drilldowns, `sort`, `sortDir`.
 
 ---
 

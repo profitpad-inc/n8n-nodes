@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### HubSpot (New resource: Analytics)
+
+- Added an **Analytics** resource with a **Get Report** operation wrapping HubSpot's
+  `GET /analytics/v2/reports/{object_type}/{time_period}`. Pick an **Object Type** (pages, forms,
+  sessions, sources, UTM breakdowns, and more) and a **Time Period** (total, daily, weekly,
+  monthly, or a summarized variant), plus **Start Date** / **End Date** (only the date is used,
+  sent as `YYYYMMDD`).
+- **Return All** follows HubSpot's `offset` paging at 350 results per page, with the usual
+  **Max Pages** and **Return All Mode** options; otherwise **Limit** (up to 350) applies.
+- Additional Options: **Include Breakdowns** / **Exclude Breakdowns** (multi-selects listing the
+  breakdowns HubSpot reports for the chosen object type, Start/End Date and, when set, analytics view), **Filter (Analytics View)**
+  (a dropdown of the account's analytics views, shown as `Title (id)`), **Offset**, and
+  Milliseconds Between Items.
+
 ### HubSpot (Rate-limit retry)
 
 - Every HubSpot request (action node, Trigger, and dropdown lookups) now retries automatically

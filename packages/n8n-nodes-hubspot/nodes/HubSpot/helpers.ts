@@ -1588,3 +1588,170 @@ export async function getCustomEventProperties(
 		}))
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
+
+// ── Analytics ────────────────────────────────────────────────────────────────
+export const ANALYTICS_REPORTS_BASE_PATH = '/analytics/v2/reports';
+const ANALYTICS_VIEWS_PATH = '/analytics/v2/views';
+export const ANALYTICS_PAGE_LIMIT = 350;
+// Safety valve for the breakdown dropdown's offset loop.
+const ANALYTICS_BREAKDOWNS_MAX_PAGES = 10;
+const ANALYTICS_DEFAULT_LOOKBACK_DAYS = 30;
+
+/**
+ * Converts a date picker value (ISO string), an expression result, or an
+ * already formatted `YYYYMMDD` string into the `YYYYMMDD` form the Analytics
+ * v2 API expects. Only the calendar date is kept: the date as written in the
+ * value is used rather than shifting it through a timezone.
+ */
+export function toHubSpotAnalyticsDate(value: unknown): string {
+	const raw = String(value ?? '').trim();
+	if (/^\d{8}$/.test(raw)) return raw;
+	const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+	if (isoMatch) return `${isoMatch[1]}${isoMatch[2]}${isoMatch[3]}`;
+	const parsed = raw ? new Date(raw) : undefined;
+	if (!parsed || Number.isNaN(parsed.getTime())) return '';
+	return parsed.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+interface AnalyticsView {
+	id: number | string;
+	title?: string;
+	deletedAt?: number;
+}
+
+/** "Filter (Analytics View)" dropdown: shown as "Title (id)", passes only the id. */
+export async function getAnalyticsViews(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const response = (await hubspotRequest.call(this, {
+		method: 'GET',
+		url: `${HUBSPOT_BASE}${ANALYTICS_VIEWS_PATH}`,
+		headers: { accept: 'application/json' },
+	})) as AnalyticsView[] | { results?: AnalyticsView[] };
+
+	const views = Array.isArray(response) ? response : (response.results ?? []);
+	return views
+		.filter((view) => !view.deletedAt)
+		.map((view) => ({
+			name: `${view.title ?? 'Untitled'} (${view.id})`,
+			value: String(view.id),
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+const analyticsBreakdownsCache = new Map<
+	string,
+	{ promise: Promise<INodePropertyOptions[]>; expiresAt: number }
+>();
+
+function readCurrentParameter(this: ILoadOptionsFunctions, name: string): unknown {
+	try {
+		return this.getCurrentNodeParameter(name);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * "Include Breakdowns" / "Exclude Breakdowns" dropdowns. Calls the selected
+ * object type's `total` report for the chosen dates (the last 30 days when a
+ * date is still empty), narrowed by the Filter (Analytics View) option when
+ * one is set, and lists every `breakdown` value it returns. The
+ * `total` period is always used here because it returns one flat breakdowns
+ * list regardless of the Time Period the report itself uses.
+ */
+export async function getAnalyticsBreakdowns(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const objectType = String(readCurrentParameter.call(this, 'analyticsObjectType') ?? '');
+	if (!objectType) return [];
+
+	const now = new Date();
+	const lookbackStart = new Date(now.getTime() - ANALYTICS_DEFAULT_LOOKBACK_DAYS * 86400000);
+	const start =
+		toHubSpotAnalyticsDate(readCurrentParameter.call(this, 'startDate')) ||
+		toHubSpotAnalyticsDate(lookbackStart.toISOString());
+	const end =
+		toHubSpotAnalyticsDate(readCurrentParameter.call(this, 'endDate')) ||
+		toHubSpotAnalyticsDate(now.toISOString());
+	const reportOptions = readCurrentParameter.call(this, 'reportOptions') as
+		| { filterId?: string | number }
+		| undefined;
+	const filterId = String(reportOptions?.filterId ?? '').trim();
+
+	const credentialId = this.getNode().credentials?.hubspotApi?.id ?? 'unknown';
+	const cacheKey = `${credentialId}:${objectType}:${start}:${end}:${filterId}`;
+	const cached = analyticsBreakdownsCache.get(cacheKey);
+	if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+	const promise = (async () => {
+		const options = new Map<string, INodePropertyOptions>();
+		let offset: number | undefined;
+		let pageCount = 0;
+
+		while (pageCount < ANALYTICS_BREAKDOWNS_MAX_PAGES) {
+			const response = (await hubspotRequest.call(this, {
+				method: 'GET',
+				url: buildHubSpotUrl(HUBSPOT_BASE, `${ANALYTICS_REPORTS_BASE_PATH}/${objectType}/total`, {
+					start,
+					end,
+					limit: ANALYTICS_PAGE_LIMIT,
+					offset,
+					filterId: filterId || undefined,
+				}),
+				headers: { accept: 'application/json' },
+			})) as {
+				offset?: number;
+				total?: number;
+				breakdowns?: Array<{ breakdown?: string; meta?: string }>;
+			};
+
+			const breakdowns = response.breakdowns ?? [];
+			for (const entry of breakdowns) {
+				if (!entry.breakdown || options.has(entry.breakdown)) continue;
+				options.set(entry.breakdown, {
+					name: entry.breakdown,
+					value: entry.breakdown,
+					...(entry.meta ? { description: entry.meta } : {}),
+				});
+			}
+
+			pageCount++;
+			const next = analyticsNextOffset(response, offset, breakdowns.length);
+			if (next === undefined) break;
+			offset = next;
+		}
+
+		return [...options.values()].sort((a, b) => a.name.localeCompare(b.name));
+	})();
+
+	analyticsBreakdownsCache.set(cacheKey, {
+		promise,
+		expiresAt: Date.now() + PROPERTIES_CACHE_TTL_MS,
+	});
+	promise.catch(() => analyticsBreakdownsCache.delete(cacheKey));
+
+	return promise;
+}
+
+/**
+ * Next `offset` for an Analytics v2 report page, or undefined when there are
+ * no more pages. HubSpot returns `offset` as the position after the last
+ * breakdown in the page (a request with no limit over 116 rows came back with
+ * `offset: 116, total: 116`), so it is passed straight back. Stops when the
+ * page was empty, when `offset` reached `total`, or when the offset did not
+ * advance (guards against looping on an unexpected response shape, such as the
+ * date-keyed daily/weekly/monthly reports, which carry no offset at all).
+ */
+export function analyticsNextOffset(
+	response: { offset?: unknown; total?: unknown },
+	previousOffset: number | undefined,
+	pageSize: number,
+): number | undefined {
+	const offset = Number(response.offset);
+	const total = Number(response.total);
+	if (!pageSize || !Number.isFinite(offset) || !Number.isFinite(total)) return undefined;
+	if (offset >= total) return undefined;
+	if (previousOffset !== undefined && offset <= previousOffset) return undefined;
+	return offset;
+}

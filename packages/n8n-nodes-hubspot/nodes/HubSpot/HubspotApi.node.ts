@@ -9,6 +9,7 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
+import { analyticsDescription } from './descriptions/AnalyticsDescription';
 import { associationDescription } from './descriptions/AssociationDescription';
 import { customEventDescription } from './descriptions/CustomEventDescription';
 import { formDescription } from './descriptions/FormDescription';
@@ -17,12 +18,17 @@ import { objectDescription } from './descriptions/ObjectDescription';
 import { ownerDescription } from './descriptions/OwnerDescription';
 import { propertyDescription } from './descriptions/PropertyDescription';
 import {
+	ANALYTICS_PAGE_LIMIT,
+	ANALYTICS_REPORTS_BASE_PATH,
+	analyticsNextOffset,
 	FormSubmissionValue,
 	buildFormSubmissionFields,
 	buildHubSpotUrl,
 	enrichSubmissionsWithAssociations,
 	findOwnerByField,
 	getAllProperties,
+	getAnalyticsBreakdowns,
+	getAnalyticsViews,
 	getAssociationTargetObjectType,
 	getAssociationTypeIds,
 	getBatchReadAssociationObjectTypes,
@@ -49,6 +55,7 @@ import {
 	searchForms,
 	searchMarketingEventExternalEventIds,
 	searchMarketingEvents,
+	toHubSpotAnalyticsDate,
 	UsersLookup,
 } from './helpers';
 import { resolveSearchInput, toStringList, UiFilterGroups, UiSorts } from './searchFilter';
@@ -195,7 +202,7 @@ export class HubspotApi implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle:
-			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : $parameter["resource"] === "forms" ? ($parameter["operation"] + (($parameter["formGuid"] && $parameter["formGuid"].value) ? (": " + $parameter["formGuid"].value) : "")) : $parameter["resource"] === "marketingEvents" ? ($parameter["operation"] + (($parameter["marketingEventId"] && $parameter["marketingEventId"].value) ? (": " + $parameter["marketingEventId"].value) : "")) : $parameter["resource"] === "customEvents" ? ($parameter["operation"] + (($parameter["operation"] === "sendEventOccurrence" && $parameter["eventName"]) ? (": " + $parameter["eventName"]) : "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
+			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : $parameter["resource"] === "forms" ? ($parameter["operation"] + (($parameter["formGuid"] && $parameter["formGuid"].value) ? (": " + $parameter["formGuid"].value) : "")) : $parameter["resource"] === "marketingEvents" ? ($parameter["operation"] + (($parameter["marketingEventId"] && $parameter["marketingEventId"].value) ? (": " + $parameter["marketingEventId"].value) : "")) : $parameter["resource"] === "analytics" ? ($parameter["operation"] + ": " + ($parameter["analyticsObjectType"] || "") + " / " + ($parameter["timePeriod"] || "")) : $parameter["resource"] === "customEvents" ? ($parameter["operation"] + (($parameter["operation"] === "sendEventOccurrence" && $parameter["eventName"]) ? (": " + $parameter["eventName"]) : "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
 		description:
 			'Interact with HubSpot CRM objects. Docs: https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis',
 		usableAsTool: true,
@@ -217,6 +224,11 @@ export class HubspotApi implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: [
+					{
+						name: 'Analytics',
+						value: 'analytics',
+						description: 'Retrieve HubSpot website and marketing analytics reports',
+					},
 					{
 						// eslint-disable-next-line n8n-nodes-base/node-param-resource-with-plural-option
 						name: 'Associations',
@@ -257,6 +269,7 @@ export class HubspotApi implements INodeType {
 				],
 				default: 'objects',
 			},
+			...analyticsDescription,
 			...associationDescription,
 			...customEventDescription,
 			...formDescription,
@@ -272,6 +285,8 @@ export class HubspotApi implements INodeType {
 			getProperties,
 			getEnumerationProperties,
 			getAllProperties,
+			getAnalyticsBreakdowns,
+			getAnalyticsViews,
 			getSearchFilterProperties,
 			getSearchOperators,
 			getWritableProperties,
@@ -1177,6 +1192,112 @@ export class HubspotApi implements INodeType {
 
 								returnData.push({ json: { ...response, results }, pairedItem: { item: i } });
 							}
+						}
+					}
+				}
+
+				if (resource === 'analytics') {
+					// ── GET REPORT ───────────────────────────────────────────────────
+					if (operation === 'getReport') {
+						const objectType = this.getNodeParameter('analyticsObjectType', i) as string;
+						const timePeriod = this.getNodeParameter('timePeriod', i) as string;
+						const start = toHubSpotAnalyticsDate(this.getNodeParameter('startDate', i));
+						const end = toHubSpotAnalyticsDate(this.getNodeParameter('endDate', i));
+						if (!start || !end) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Start Date and End Date must both be valid dates',
+								{ itemIndex: i },
+							);
+						}
+
+						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+						const opts = this.getNodeParameter('reportOptions', i) as {
+							includeBreakdowns?: string[];
+							excludeBreakdowns?: string[];
+							filterId?: string;
+							offset?: number;
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = opts.millisecondsBetweenItems ?? 50;
+
+						const reportPath = `${ANALYTICS_REPORTS_BASE_PATH}/${objectType}/${timePeriod}`;
+						const fetchPage = async (limit: number, offset: number | undefined) =>
+							(await hubspotRequest.call(this, {
+								method: 'GET',
+								url: buildHubSpotUrl(HUBSPOT_BASE, reportPath, {
+									start,
+									end,
+									limit,
+									offset,
+									f: opts.includeBreakdowns?.length ? opts.includeBreakdowns : undefined,
+									e: opts.excludeBreakdowns?.length ? opts.excludeBreakdowns : undefined,
+									filterId: opts.filterId || undefined,
+								}),
+								headers: BASE_HEADERS,
+							})) as JsonObject;
+
+						const initialOffset = opts.offset ? Math.floor(opts.offset) : undefined;
+
+						if (returnAll) {
+							const maxPages = Math.max(
+								1,
+								Math.floor(this.getNodeParameter('maxPages', i) as number),
+							);
+							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+							let offset = initialOffset;
+							let pageCount = 0;
+							const allBreakdowns: JsonObject[] = [];
+							let firstPage: JsonObject | undefined;
+							let lastPage: JsonObject | undefined;
+
+							while (pageCount < maxPages) {
+								const response = await fetchPage(ANALYTICS_PAGE_LIMIT, offset);
+								pageCount++;
+
+								// Daily/weekly/monthly reports come back keyed by date rather
+								// than as one offset-paged breakdowns list, so they are output
+								// as-is in a single item.
+								if (!Array.isArray(response.breakdowns)) {
+									returnData.push({ json: response, pairedItem: { item: i } });
+									break;
+								}
+
+								const breakdowns = response.breakdowns as JsonObject[];
+								firstPage = firstPage ?? response;
+								lastPage = response;
+
+								if (returnAllMode === 'eachPage') {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								} else if (returnAllMode === 'eachResult') {
+									for (const breakdown of breakdowns) {
+										returnData.push({ json: breakdown, pairedItem: { item: i } });
+									}
+								} else {
+									allBreakdowns.push(...breakdowns);
+								}
+
+								const next = analyticsNextOffset(response, offset, breakdowns.length);
+								if (next === undefined) break;
+								offset = next;
+							}
+
+							if (returnAllMode === 'allInOne' && firstPage && lastPage) {
+								returnData.push({
+									json: {
+										offset: lastPage.offset ?? null,
+										total: lastPage.total ?? null,
+										totals: firstPage.totals ?? null,
+										breakdowns: allBreakdowns,
+									},
+									pairedItem: { item: i },
+								});
+							}
+						} else {
+							const limit = this.getNodeParameter('limit', i) as number;
+							const response = await fetchPage(limit, initialOffset);
+							returnData.push({ json: response, pairedItem: { item: i } });
 						}
 					}
 				}
