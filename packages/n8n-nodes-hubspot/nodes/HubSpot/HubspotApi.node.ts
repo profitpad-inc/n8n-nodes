@@ -32,6 +32,8 @@ import {
 	USERS_OBJECT_TYPE,
 	getAnalyticsBreakdowns,
 	getAnalyticsViews,
+	getMarketingEmails,
+	MARKETING_EMAILS_BASE_PATH,
 	getAssociationTargetObjectType,
 	getAssociationTypeIds,
 	getBatchReadAssociationObjectTypes,
@@ -77,7 +79,6 @@ const FORMS_BASE_PATH = '/marketing/v3/forms';
 const FORMS_LIST_MAX_PAGES = 50;
 const FORM_SUBMISSIONS_BASE_PATH = '/form-integrations/v1/submissions/forms';
 const MARKETING_EVENTS_BASE_PATH = '/marketing/v3/marketing-events';
-const MARKETING_EMAILS_BASE_PATH = '/marketing/emails/2026-09';
 const EVENTS_BASE_PATH = '/events/2026-09';
 const EVENT_OCCURRENCES_BASE_PATH = '/events/event-occurrences/2026-09';
 const USERS_OBJECT_PATH = `${OBJECTS_BASE_PATH}/users`;
@@ -93,6 +94,15 @@ const BASE_HEADERS = {
 	'content-type': 'application/json',
 	accept: 'application/json',
 };
+
+// Date-times go out as ISO 8601 in UTC. A value with no offset is read as UTC
+// (same rule as the search filters); anything that doesn't parse as a date is
+// passed through as typed.
+function toHubSpotDateTime(value: unknown): string | undefined {
+	if (!value) return undefined;
+	const millis = dateLikeToMillis(String(value));
+	return /^\d+$/.test(millis) ? new Date(Number(millis)).toISOString() : String(value);
+}
 
 function parseJsonParam(value: unknown): JsonObject {
 	if (typeof value === 'string') return JSON.parse(value) as JsonObject;
@@ -305,6 +315,7 @@ export class HubspotApi implements INodeType {
 			getAllProperties,
 			getAnalyticsBreakdowns,
 			getAnalyticsViews,
+			getMarketingEmails,
 			getSearchFilterProperties,
 			getSearchOperators,
 			getWritableProperties,
@@ -980,12 +991,58 @@ export class HubspotApi implements INodeType {
 				}
 
 				if (resource === 'marketingEmails') {
+					// ── STATISTICS LIST / HISTOGRAM ──────────────────────────────────
+					if (operation === 'getStatisticsList' || operation === 'getStatisticsHistogram') {
+						const opts = this.getNodeParameter('statisticsOptions', i) as {
+							interval?: string;
+							millisecondsBetweenItems?: number;
+						};
+
+						delayMs = opts.millisecondsBetweenItems ?? 50;
+
+						// A single ID from an expression can arrive as a number.
+						const rawEmailIds = this.getNodeParameter('emailIds', i, '') as
+							| string
+							| string[]
+							| number;
+						const emailIds = toStringList(
+							typeof rawEmailIds === 'number' ? String(rawEmailIds) : rawEmailIds,
+						);
+						const path =
+							operation === 'getStatisticsList' ? '/statistics/list' : '/statistics/histogram';
+
+						// HubSpot requires both timestamps on these endpoints.
+						const startTimestamp = toHubSpotDateTime(this.getNodeParameter('startTimestamp', i, ''));
+						const endTimestamp = toHubSpotDateTime(this.getNodeParameter('endTimestamp', i, ''));
+						if (!startTimestamp || !endTimestamp) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Start Timestamp and End Timestamp are both required',
+								{ itemIndex: i },
+							);
+						}
+
+						const url = buildHubSpotUrl(HUBSPOT_BASE, `${MARKETING_EMAILS_BASE_PATH}${path}`, {
+							emailIds: emailIds.length ? emailIds : undefined,
+							startTimestamp,
+							endTimestamp,
+							interval: operation === 'getStatisticsHistogram' ? opts.interval : undefined,
+						});
+
+						const response = (await hubspotRequest.call(this, {
+							method: 'GET',
+							url,
+							headers: BASE_HEADERS,
+						})) as JsonObject;
+
+						returnData.push({ json: response, pairedItem: { item: i } });
+					}
+
 					// ── LIST ─────────────────────────────────────────────────────────
-					// No pagination: Limit goes straight to HubSpot, which accepts
-					// values far beyond any realistic email count.
 					if (operation === 'list') {
-						const limit = this.getNodeParameter('limit', i) as number;
+						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const opts = this.getNodeParameter('emailsOptions', i) as {
+							after?: string;
 							archived?: boolean;
 							campaign?: string;
 							createdAfter?: string;
@@ -1008,12 +1065,21 @@ export class HubspotApi implements INodeType {
 
 						delayMs = opts.millisecondsBetweenItems ?? 50;
 
+						// Included Properties used to live in Additional Options; saved
+						// workflows that still have it there keep working.
+						const topLevelProperties = toStringList(
+							this.getNodeParameter('includedProperties', i, []) as string[] | string,
+						);
+						const selectedProperties = topLevelProperties.length
+							? topLevelProperties
+							: (opts.includedProperties ?? []);
+
 						// States is filtered here, not by HubSpot. When Included
 						// Properties narrows the response, `state` is requested too so
 						// the filter has something to read, then dropped again below.
 						const states = opts.states?.length ? new Set(opts.states) : undefined;
-						let includedProperties = opts.includedProperties?.length
-							? opts.includedProperties
+						let includedProperties = selectedProperties.length
+							? selectedProperties
 							: undefined;
 						const stripState =
 							states !== undefined &&
@@ -1026,17 +1092,8 @@ export class HubspotApi implements INodeType {
 						// (buildHubSpotUrl skips boolean false).
 						const booleanParam = (value: boolean | undefined) =>
 							value === undefined ? undefined : String(value);
-						// Date-times go out as ISO 8601 in UTC. A value with no offset is
-						// read as UTC (same rule as the search filters); anything that
-						// doesn't parse as a date is passed through as typed.
-						const dateParam = (value: string | undefined) => {
-							if (!value) return undefined;
-							const millis = dateLikeToMillis(String(value));
-							return /^\d+$/.test(millis) ? new Date(Number(millis)).toISOString() : value;
-						};
 
-						const url = buildHubSpotUrl(HUBSPOT_BASE, MARKETING_EMAILS_BASE_PATH, {
-							limit,
+						const query = {
 							archived: booleanParam(opts.archived),
 							includeStats: booleanParam(opts.includeStats),
 							isPublished: booleanParam(opts.isPublished),
@@ -1044,38 +1101,96 @@ export class HubspotApi implements INodeType {
 							variantStats: booleanParam(opts.variantStats),
 							workflowNames: booleanParam(opts.workflowNames),
 							campaign: opts.campaign?.trim() || undefined,
-							createdAfter: dateParam(opts.createdAfter),
-							createdBefore: dateParam(opts.createdBefore),
-							publishedAfter: dateParam(opts.publishedAfter),
-							publishedBefore: dateParam(opts.publishedBefore),
-							updatedAfter: dateParam(opts.updatedAfter),
-							updatedBefore: dateParam(opts.updatedBefore),
+							createdAfter: toHubSpotDateTime(opts.createdAfter),
+							createdBefore: toHubSpotDateTime(opts.createdBefore),
+							publishedAfter: toHubSpotDateTime(opts.publishedAfter),
+							publishedBefore: toHubSpotDateTime(opts.publishedBefore),
+							updatedAfter: toHubSpotDateTime(opts.updatedAfter),
+							updatedBefore: toHubSpotDateTime(opts.updatedBefore),
 							includedProperties,
-							sort: opts.sort,
+							// Always sent: newest first unless the user picks another sort.
+							sort: opts.sort || '-createdAt',
 							type: opts.type,
-						});
+						};
 
-						const response = (await hubspotRequest.call(this, {
-							method: 'GET',
-							url,
-							headers: BASE_HEADERS,
-						})) as JsonObject;
+						// One page, with the States filter applied to its results.
+						const fetchEmailsPage = async (limit: number, after: string | undefined) => {
+							const url = buildHubSpotUrl(HUBSPOT_BASE, MARKETING_EMAILS_BASE_PATH, {
+								...query,
+								limit,
+								after,
+							});
+							const response = (await hubspotRequest.call(this, {
+								method: 'GET',
+								url,
+								headers: BASE_HEADERS,
+							})) as JsonObject;
 
-						if (states !== undefined) {
-							let results = ((response.results as JsonObject[] | undefined) ?? []).filter(
-								(email) => states.has(String(email.state)),
+							if (states !== undefined) {
+								let results = ((response.results as JsonObject[] | undefined) ?? []).filter(
+									(email) => states.has(String(email.state)),
+								);
+								if (stripState) {
+									results = results.map((email) => {
+										const copy = { ...email };
+										delete copy.state;
+										return copy;
+									});
+								}
+								response.results = results;
+							}
+							return response;
+						};
+
+						if (returnAll) {
+							const maxPages = Math.max(
+								1,
+								Math.floor(this.getNodeParameter('maxPages', i) as number),
 							);
-							if (stripState) {
-								results = results.map((email) => {
-									const copy = { ...email };
-									delete copy.state;
-									return copy;
+							const returnAllMode = this.getNodeParameter('returnAllMode', i) as string;
+							let after: string | undefined = opts.after || undefined;
+							let pageCount = 0;
+							const allResults: JsonObject[] = [];
+							let lastPaging: JsonObject | undefined;
+							let total: unknown;
+
+							do {
+								// 300 is HubSpot's max page size for this endpoint.
+								const response = await fetchEmailsPage(300, after);
+								const results = (response.results as JsonObject[] | undefined) ?? [];
+
+								if (returnAllMode === 'eachPage') {
+									returnData.push({ json: response, pairedItem: { item: i } });
+								} else if (returnAllMode === 'eachResult') {
+									for (const result of results) {
+										returnData.push({ json: result, pairedItem: { item: i } });
+									}
+								} else {
+									allResults.push(...results);
+								}
+
+								pageCount++;
+								total = response.total;
+								const paging = response.paging as JsonObject | undefined;
+								lastPaging = paging;
+								after = (paging?.next as JsonObject | undefined)?.after as string | undefined;
+							} while (after && pageCount < maxPages);
+
+							if (returnAllMode === 'allInOne') {
+								returnData.push({
+									json: {
+										total: (total as number | undefined) ?? null,
+										results: allResults,
+										paging: lastPaging ?? null,
+									},
+									pairedItem: { item: i },
 								});
 							}
-							response.results = results;
+						} else {
+							const limit = this.getNodeParameter('limit', i) as number;
+							const response = await fetchEmailsPage(limit, opts.after || undefined);
+							returnData.push({ json: response, pairedItem: { item: i } });
 						}
-
-						returnData.push({ json: response, pairedItem: { item: i } });
 					}
 				}
 

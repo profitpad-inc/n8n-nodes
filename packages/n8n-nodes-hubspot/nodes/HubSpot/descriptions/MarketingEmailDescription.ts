@@ -2,6 +2,20 @@ import { INodePropertyOptions, INodeProperties } from 'n8n-workflow';
 
 const EMAILS_SHOW = { resource: ['marketingEmails'] };
 const EMAILS_LIST_SHOW = { ...EMAILS_SHOW, operation: ['list'] };
+const STATISTICS_SHOW = {
+	...EMAILS_SHOW,
+	operation: ['getStatisticsHistogram', 'getStatisticsList'],
+};
+
+const msOption: INodeProperties = {
+	displayName: 'Milliseconds Between Items',
+	name: 'millisecondsBetweenItems',
+	type: 'number',
+	default: 50,
+	typeOptions: { minValue: 0 },
+	description:
+		'How long to wait between processing each input item, in milliseconds. Useful for avoiding HubSpot rate limits.',
+};
 
 // Property names HubSpot's GET /marketing/emails endpoint accepts in
 // includedProperties. Sort offers the same list.
@@ -34,6 +48,12 @@ const EMAIL_PROPERTY_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Updated By ID', value: 'updatedById' },
 	{ name: 'Web Version', value: 'webversion' },
 ];
+
+// HubSpot sorts ascending on `property` and descending on `-property`.
+const EMAIL_SORT_OPTIONS: INodePropertyOptions[] = EMAIL_PROPERTY_OPTIONS.flatMap((option) => [
+	{ name: `${option.name} ASC`, value: option.value },
+	{ name: `${option.name} DESC`, value: `-${String(option.value)}` },
+]);
 
 const EMAIL_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'AB_EMAIL', value: 'AB_EMAIL' },
@@ -84,6 +104,18 @@ export const marketingEmailDescription: INodeProperties[] = [
 		},
 		options: [
 			{
+				name: 'Get Statistics Histogram',
+				value: 'getStatisticsHistogram',
+				description: 'Retrieve marketing email statistics broken down by time interval',
+				action: 'Get marketing email statistics histogram',
+			},
+			{
+				name: 'Get Statistics List',
+				value: 'getStatisticsList',
+				description: 'Retrieve aggregated statistics for marketing emails',
+				action: 'Get marketing email statistics list',
+			},
+			{
 				name: 'List',
 				value: 'list',
 				description: 'Retrieve marketing emails',
@@ -92,14 +124,156 @@ export const marketingEmailDescription: INodeProperties[] = [
 		],
 		default: 'list',
 	},
+
+	// ── STATISTICS LIST / HISTOGRAM ──────────────────────────────────────────────
+	{
+		displayName: 'Start Timestamp',
+		name: 'startTimestamp',
+		type: 'dateTime',
+		required: true,
+		default: '',
+		description: 'Start of the statistics date range. A date-time with no offset is read as UTC.',
+		displayOptions: {
+			show: STATISTICS_SHOW,
+		},
+	},
+	{
+		displayName: 'End Timestamp',
+		name: 'endTimestamp',
+		type: 'dateTime',
+		required: true,
+		default: '',
+		description: 'End of the statistics date range. A date-time with no offset is read as UTC.',
+		displayOptions: {
+			show: STATISTICS_SHOW,
+		},
+	},
+	{
+		displayName: 'Email Names or IDs',
+		name: 'emailIds',
+		type: 'multiOptions',
+		typeOptions: {
+			loadOptionsMethod: 'getMarketingEmails',
+		},
+		default: [],
+		description:
+			'Marketing emails to get statistics for. Leave empty for all emails. The list shows the 300 most recently created emails. Choose from the list, or specify IDs using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+		displayOptions: {
+			show: STATISTICS_SHOW,
+		},
+	},
+	{
+		displayName: 'Additional Options',
+		name: 'statisticsOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: {
+			show: { ...EMAILS_SHOW, operation: ['getStatisticsHistogram'] },
+		},
+		options: [
+			{
+				displayName: 'Interval',
+				name: 'interval',
+				type: 'options',
+				default: 'DAY',
+				description: 'The time interval each histogram bucket covers',
+				options: [
+					{ name: 'Day', value: 'DAY' },
+					{ name: 'Hour', value: 'HOUR' },
+					{ name: 'Minute', value: 'MINUTE' },
+					{ name: 'Month', value: 'MONTH' },
+					{ name: 'Quarter', value: 'QUARTER' },
+					{ name: 'Quarter Hour', value: 'QUARTER_HOUR' },
+					{ name: 'Second', value: 'SECOND' },
+					{ name: 'Week', value: 'WEEK' },
+					{ name: 'Year', value: 'YEAR' },
+				],
+			},
+			msOption,
+		],
+	},
+	{
+		displayName: 'Additional Options',
+		name: 'statisticsOptions',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: {
+			show: { ...EMAILS_SHOW, operation: ['getStatisticsList'] },
+		},
+		options: [msOption],
+	},
+
+	// ── LIST ─────────────────────────────────────────────────────────────────────
+	{
+		displayName: 'Return All',
+		name: 'returnAll',
+		type: 'boolean',
+		default: false,
+		description: 'Whether to return all results or only up to a given limit',
+		displayOptions: {
+			show: EMAILS_LIST_SHOW,
+		},
+	},
+	{
+		displayName: 'Return All Mode',
+		name: 'returnAllMode',
+		type: 'options',
+		noDataExpression: true,
+		default: 'eachResult',
+		description: 'How to output the fetched results',
+		displayOptions: {
+			show: { ...EMAILS_LIST_SHOW, returnAll: [true] },
+		},
+		options: [
+			{
+				name: 'All Results as 1 Item',
+				value: 'allInOne',
+				description: 'Aggregate all pages and return every result combined in a single output item',
+			},
+			{
+				name: 'Each Page as 1 Item',
+				value: 'eachPage',
+				description: 'Return each API page response as a separate output item',
+			},
+			{
+				name: 'Each Result as 1 Item',
+				value: 'eachResult',
+				description: 'Return each individual result as a separate output item',
+			},
+		],
+	},
+	{
+		displayName: 'Max Pages',
+		name: 'maxPages',
+		type: 'number',
+		typeOptions: { minValue: 1, numberPrecision: 0 },
+		default: 10,
+		description: 'Maximum number of pages to fetch. Each page contains up to 300 results.',
+		displayOptions: {
+			show: { ...EMAILS_LIST_SHOW, returnAll: [true] },
+		},
+	},
 	{
 		displayName: 'Limit',
 		name: 'limit',
 		type: 'number',
-		typeOptions: { minValue: 1, maxValue: 1000000000, numberPrecision: 0 },
+		typeOptions: { minValue: 1, maxValue: 300, numberPrecision: 0 },
 		// eslint-disable-next-line n8n-nodes-base/node-param-default-wrong-for-limit
-		default: 1000,
+		default: 300,
 		description: 'Max number of results to return',
+		displayOptions: {
+			show: { ...EMAILS_LIST_SHOW, returnAll: [false] },
+		},
+	},
+	{
+		displayName: 'Included Properties',
+		name: 'includedProperties',
+		type: 'multiOptions',
+		default: [],
+		description: "Properties to include in the response. Leave empty for HubSpot's default set.",
+		options: EMAIL_PROPERTY_OPTIONS,
 		displayOptions: {
 			show: EMAILS_LIST_SHOW,
 		},
@@ -114,6 +288,14 @@ export const marketingEmailDescription: INodeProperties[] = [
 			show: EMAILS_LIST_SHOW,
 		},
 		options: [
+			{
+				displayName: 'After (Cursor)',
+				name: 'after',
+				type: 'string',
+				default: '',
+				description:
+					"Pagination cursor returned by a previous response, used to fetch the next page. When Return All is enabled, this only seeds the first page fetched; subsequent pages follow HubSpot's own cursor.",
+			},
 			{
 				displayName: 'Archived',
 				name: 'archived',
@@ -173,14 +355,6 @@ export const marketingEmailDescription: INodeProperties[] = [
 				description: 'Whether to include workflow names in the response',
 			},
 			{
-				displayName: 'Included Properties',
-				name: 'includedProperties',
-				type: 'multiOptions',
-				default: [],
-				description: 'Additional properties to include in the response',
-				options: EMAIL_PROPERTY_OPTIONS,
-			},
-			{
 				displayName: 'Is Published',
 				name: 'isPublished',
 				type: 'boolean',
@@ -188,15 +362,7 @@ export const marketingEmailDescription: INodeProperties[] = [
 				description:
 					'Whether to return only published emails (on) or only unpublished emails (off)',
 			},
-			{
-				displayName: 'Milliseconds Between Items',
-				name: 'millisecondsBetweenItems',
-				type: 'number',
-				default: 50,
-				typeOptions: { minValue: 0 },
-				description:
-					'How long to wait between processing each input item, in milliseconds. Useful for avoiding HubSpot rate limits.',
-			},
+			msOption,
 			{
 				displayName: 'Published After',
 				name: 'publishedAfter',
@@ -217,9 +383,10 @@ export const marketingEmailDescription: INodeProperties[] = [
 				displayName: 'Sort',
 				name: 'sort',
 				type: 'options',
-				default: 'createdAt',
-				description: 'The property to sort the results by',
-				options: EMAIL_PROPERTY_OPTIONS,
+				default: '-createdAt',
+				description:
+					'The property and direction to sort by. Newest first (Created At DESC) is sent when this option is not added.',
+				options: EMAIL_SORT_OPTIONS,
 			},
 			{
 				displayName: 'States',

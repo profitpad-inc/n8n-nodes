@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### HubSpot (Marketing Emails)
+
+- Added **Get Statistics List** (`GET /marketing/emails/2026-09/statistics/list`) and **Get
+  Statistics Histogram** (`GET /marketing/emails/2026-09/statistics/histogram`) operations. Both
+  take required **Start Timestamp** / **End Timestamp** (sent as ISO 8601 UTC) and an optional
+  **Email Names or IDs** multi-select (the 300 most recently created emails; IDs also accepted by
+  expression). Histogram adds an **Interval** option (Day, Hour, Minute, Month, Quarter, Quarter
+  Hour, Second, Week, Year).
+- **List** now paginates with the usual **Return All** (300 per page) / **Max Pages** / **Return
+  All Mode** options, plus an **After (Cursor)** Additional Option. With Return All off, **Limit**
+  is now 1 to 300 (default 300, was 1000); HubSpot returns at most 300 per request.
+- **List → Included Properties** is now a main (optional) field instead of an Additional Option;
+  a value saved in Additional Options is still used.
+- **List → Sort** offers each property as **ASC** or **DESC** (`property` / `-property`) and
+  defaults to **Created At DESC** (`-createdAt`), which is now sent even when Sort isn't added.
+
 ## 0.1.62 (2026-10-16)
 
 ### HubSpot (Properties With History limit)

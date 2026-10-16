@@ -1638,6 +1638,36 @@ interface AnalyticsView {
 }
 
 /** "Filter (Analytics View)" dropdown: shown as "Title (id)", passes only the id. */
+export const MARKETING_EMAILS_BASE_PATH = '/marketing/emails/2026-09';
+const MARKETING_EMAILS_LOOKUP_LIMIT = 300;
+
+/**
+ * "Email Names or IDs" multi-select on Marketing Emails' statistics
+ * operations. One request for the 300 most recently created emails, asking
+ * only for `name` so the response stays small.
+ */
+export async function getMarketingEmails(
+	this: ILoadOptionsFunctions,
+): Promise<INodePropertyOptions[]> {
+	const url = buildHubSpotUrl(HUBSPOT_BASE, MARKETING_EMAILS_BASE_PATH, {
+		limit: MARKETING_EMAILS_LOOKUP_LIMIT,
+		sort: '-createdAt',
+		includedProperties: ['name'],
+	});
+	const response = (await hubspotRequest.call(this, {
+		method: 'GET',
+		url,
+		headers: { accept: 'application/json' },
+	})) as { results?: Array<{ id?: string | number; name?: string }> };
+
+	return (response.results ?? [])
+		.filter((email) => email.id !== undefined && email.id !== null)
+		.map((email) => ({
+			name: `${email.name || 'Untitled'} (${email.id})`,
+			value: String(email.id),
+		}));
+}
+
 export async function getAnalyticsViews(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {

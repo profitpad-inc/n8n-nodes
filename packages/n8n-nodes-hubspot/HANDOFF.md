@@ -48,7 +48,7 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 | `USERS_OBJECT_PATH` | `/crm/v3/objects/users` |
 | `OWNERS_BASE_PATH` (helpers) | `/crm/v3/owners` |
 | `MARKETING_EVENTS_BASE_PATH` | `/marketing/v3/marketing-events` |
-| `MARKETING_EMAILS_BASE_PATH` | `/marketing/emails/2026-09` |
+| `MARKETING_EMAILS_BASE_PATH` (helpers) | `/marketing/emails/2026-09` |
 | `EVENTS_BASE_PATH` | `/events/2026-09` |
 | `EVENT_OCCURRENCES_BASE_PATH` | `/events/event-occurrences/2026-09` |
 | `ANALYTICS_REPORTS_BASE_PATH` (helpers) | `/analytics/v2/reports` |
@@ -474,32 +474,71 @@ two forms endpoints (the same ones the Form Trigger uses).
 
 | Operation | Value | Method | URL |
 |---|---|---|---|
+| Get Statistics Histogram | `getStatisticsHistogram` | GET | `/marketing/emails/2026-09/statistics/histogram` |
+| Get Statistics List | `getStatisticsList` | GET | `/marketing/emails/2026-09/statistics/list` |
 | List | `list` | GET | `/marketing/emails/2026-09` |
 
-- Single request, no pagination (by the account owner's call: HubSpot accepts a very large
-  `limit`). **Limit** is top-level, default 1000, max 1,000,000,000. Output is HubSpot's
-  response as one item (`{ total, results, paging? }`).
+### Get Statistics List / Get Statistics Histogram
+- **Start Timestamp** / **End Timestamp** are required (the spec marks them optional, but HubSpot
+  rejects requests without them, per the account owner); an empty value throws a
+  `NodeOperationError` before any request. **Email IDs** is optional.
+- Top-level fields, in order: **Start Timestamp** / **End Timestamp** (`dateTime`, sent as ISO
+  8601 UTC by `toHubSpotDateTime()` at the top of `HubspotApi.node.ts`, the same conversion List
+  uses for its date filters), then **Email Names or IDs** (`emailIds`, optional, last). It is a
+  `multiOptions` backed by `getMarketingEmails` (`helpers.ts`): one `GET
+  /marketing/emails/2026-09?limit=300&sort=-createdAt&includedProperties=name`, shown as
+  `Name (id)`, value the ID. Only the 300 most recently created emails are listed; older ones go
+  in by expression. Not cached. Execute runs the value through `toStringList()`, so an array, a
+  comma-separated string (the field was a plain string before), or a single number all work.
+  Sent as repeated `emailIds` params (HubSpot's spec: `int64`, `explode: true`).
+- Additional Options (`statisticsOptions`, two definitions gated by operation): Histogram has
+  **Interval** (`DAY`, `HOUR`, `MINUTE`, `MONTH`, `QUARTER`, `QUARTER_HOUR`, `SECOND`, `WEEK`,
+  `YEAR`); both have Milliseconds Between Items.
+- Single request each, response pushed as one item (List: `AggregateEmailStatistics`;
+  Histogram: `CollectionResponseWithTotalEmailStatisticInterval`, per the spec).
+- Not exposed yet: the List endpoint's `property` query param (in HubSpot's spec, not requested).
+- Spec source: the `.md` docs pages under
+  `/docs/api-reference/latest/marketing/marketing-emails/statistics/` (`get-statistics`,
+  `get-histogram`) embed the OpenAPI YAML.
+
+### List
+
+- Standard **Return All** / **Limit** / **Max Pages** / **Return All Mode** convention, same as
+  Marketing Events → List. HubSpot caps this endpoint's `limit` at 300 (per the account owner,
+  not in the spec), so Return All fetches 300 per page and follows `paging.next.after`;
+  `allInOne` output leads with `total` (HubSpot's, from the last page): `{ total, results,
+  paging }`. With Return All off, **Limit** (1 to 300, default 300) is one request and the
+  response is one item. **After (Cursor)** in Additional Options
+  seeds the first page either way.
+- **Included Properties** is a top-level, optional multi-select (after Limit), sent as repeated
+  `includedProperties` params. It used to be an Additional Option; execute falls back to
+  `emailsOptions.includedProperties` when the top-level value is empty, so saved workflows keep
+  working. Keep that fallback.
+- Every page goes through one local `fetchEmailsPage(limit, after)` in `execute()`, which applies
+  the **States** filter to that page's `results` (so `eachPage` and `allInOne` both reflect it).
 - Additional Options (`emailsOptions`), all passed straight through as query params:
   - Booleans, sent only when the option is added and stringified so an explicit `false` is sent
     (`buildHubSpotUrl` skips boolean `false`): **Archived**, **Include Email Stats**
     (`includeStats`), **Include Marketing Campaign Names** (`marketingCampaignNames`), **Include
     Variant Stats** (`variantStats`), **Include Workflow Names** (`workflowNames`), **Is
     Published**.
+  - **After (Cursor)** (see pagination above).
   - Date-times (`dateTime` fields): **Created After/Before**, **Published After/Before**,
-    **Updated After/Before**. Sent as ISO 8601 UTC via `dateLikeToMillis()` (no offset means
-    UTC, same rule as the search filters); an unparseable value is sent as typed.
-  - **Campaign** (campaign name, trimmed), **Included Properties** (multi-select, repeated
-    `includedProperties` params), **Sort** (single property from the same list), **Type**
+    **Updated After/Before**. Sent as ISO 8601 UTC via `toHubSpotDateTime()` (built on
+    `dateLikeToMillis()`; no offset means UTC, same rule as the search filters); an unparseable
+    value is sent as typed.
+  - **Campaign** (campaign name, trimmed), **Sort** (each property twice, `Property ASC` = `property`, `Property DESC` = `-property`,
+    the format confirmed by the account owner; default and always sent: `-createdAt`, even when
+    the option is not added), **Type**
     (HubSpot's email type enum), **States** (below), Milliseconds Between Items.
 - **States** (multi-select: `AUTOMATED`, `AUTOMATED_DRAFT`, `DRAFT`, `PUBLISHED`,
   `RSS_TO_EMAIL_DRAFT`) is never sent to HubSpot. `results` is filtered on each email's `state`
   after the fetch, so fewer than Limit can come back; `total` and `paging` are HubSpot's,
   unfiltered. When Included Properties is set without `state`, `state` is added to the request so
   the filter can read it, then removed from each returned email.
-- Unverified against a live account: HubSpot's spec types `sort` as an array of strings with no
-  documented format or descending syntax, and declares `includedProperties` as `explode: true`
+- Unverified against a live account: HubSpot's spec declares `includedProperties` as `explode: true`
   (repeated keys), with no example. The spec also lists params not exposed yet: `createdAt`,
-  `publishedAt`, `updatedAt` (exact-match dates) and `after`.
+  `publishedAt`, `updatedAt` (exact-match dates).
 
 ---
 
@@ -1081,7 +1120,7 @@ search/filter capability, so this branch has its own field set and its own `poll
   them. The shared `returnAllMode` parameter is used by Objects → List, Objects → Search, and
   both Owners list/search branches.
 - **`allInOne` includes the last page's `paging` object**: every `returnAllMode === 'allInOne'`
-  branch (Objects → List/Search, Owners/Users → List/Search, Form Submissions) pushes
+  branch (Objects → List/Search, Owners/Users → List/Search, Form Submissions, Marketing Emails → List) pushes
   `{ results: allResults, paging: lastPaging ?? null }`, not just `{ results: [...] }`. This
   lets a workflow tell whether more pages exist beyond Max Pages (`paging.next.after` still
   set) without switching to `eachPage` mode. Keep this shape in sync across all five branches.
