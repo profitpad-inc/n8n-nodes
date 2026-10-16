@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### HubSpot (Properties With History limit)
+
+- When **Properties With History** is set, requests now ask HubSpot for at most 50 records,
+  the cap HubSpot enforces for history requests ("You can only request at most 50 objects in one
+  request for properties with history"). Applies to Objects → List and Owners → Users List
+  (Return All pages of 50; a Limit above 50 is lowered to 50) and to Objects → Batch Read /
+  Batch Read With Associations (IDs chunked in groups of 50). Without it, the existing 100 per
+  page/chunk is unchanged.
+
+### HubSpot (New resource: Marketing Emails)
+
+- Added a **Marketing Emails** resource with a **List** operation wrapping
+  `GET /marketing/emails/2026-09` in a single request (no pagination). **Limit** defaults to 1000
+  (max 1,000,000,000). Additional Options: **Archived**, **Include Email Stats**, **Include
+  Marketing Campaign Names**, **Include Variant Stats**, **Include Workflow Names**, **Is
+  Published** (booleans, each sent only when added), **Campaign**, **Created After/Before**,
+  **Published After/Before**, **Updated After/Before** (sent as ISO 8601 UTC), **Included
+  Properties**, **Sort**, **Type**, **States**, and Milliseconds Between Items.
+- **States** filters the returned emails by `state` (Automated, Automated Draft, Draft,
+  Published, RSS To Email Draft) after the fetch; it is not sent to HubSpot.
+
+### HubSpot (Search filters)
+
+- **Between** filters in Fields mode now convert date-like Value / High Value inputs to epoch
+  milliseconds: `2026-10-10` (midnight UTC for Value, 23:59:59.999 UTC for High Value), `2026-08-01T00:00:00.000-04:00` (offset honoured),
+  and `2026-08-01T00:00:00.000` (read as UTC). Millisecond values and other text are sent as-is.
+- **Greater Than / Greater Than or Equal / Less Than / Less Than or Equal** filters get the same
+  conversion when the property is a date-only (`date`) property; for Less Than or Equal, a bare
+  date means the end of that day (23:59:59.999 UTC). `datetime` properties are not changed.
+
 ### HubSpot (New resource: Analytics)
 
 - Added an **Analytics** resource with a **Get Report** operation wrapping HubSpot's

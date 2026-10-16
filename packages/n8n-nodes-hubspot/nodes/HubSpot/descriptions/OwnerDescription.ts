@@ -87,7 +87,7 @@ const userFilterGroupsUiProperty: INodeProperties = {
 									type: 'string',
 									default: '',
 									description:
-										'The value to compare against. For <em>In List</em> / <em>Not In List</em>, provide a semicolon-separated list. For <em>Between</em>, this is the lower bound.',
+										'The value to compare against. For <em>In List</em> / <em>Not In List</em>, provide a semicolon-separated list. For <em>Between</em>, this is the lower bound. For <em>Between</em> (any property) and <em>Greater/Less Than (or Equal)</em> on date-only properties, a date such as 2026-08-01 or an ISO date-time is converted to epoch milliseconds (UTC when no offset is given). A plain date means the start of that day, except with <em>Less Than or Equal</em> on a date property, where it means the end of that day (23:59:59.999 UTC).',
 									displayOptions: {
 										hide: { operator: VALUELESS_OPERATORS },
 									},
@@ -97,7 +97,8 @@ const userFilterGroupsUiProperty: INodeProperties = {
 									name: 'highValue',
 									type: 'string',
 									default: '',
-									description: 'The upper bound for the <em>Between</em> operator',
+									description:
+										'The upper bound for the <em>Between</em> operator. A plain date such as 2026-08-31 means the end of that day (23:59:59.999 UTC), so the whole day is included, the same as <em>Less Than or Equal</em> on a date property. An ISO date-time is converted as-is (UTC when no offset is given).',
 									displayOptions: {
 										show: { operator: ['BETWEEN'] },
 									},
@@ -698,8 +699,7 @@ export const ownerDescription: INodeProperties[] = [
 			2,
 		),
 		placeholder: '{\n  "hs_job_title": "CEO"\n}',
-		description:
-			'Properties to update as a JSON object. Keys are HubSpot internal property names.',
+		description: 'Properties to update as a JSON object. Keys are HubSpot internal property names.',
 		displayOptions: {
 			show: {
 				resource: ['owners'],

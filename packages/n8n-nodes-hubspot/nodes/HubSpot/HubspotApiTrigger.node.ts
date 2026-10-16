@@ -15,6 +15,7 @@ import {
 	buildHubSpotUrl,
 	enrichSubmissionsWithAssociations,
 	getAllProperties,
+	getDatePropertyNames,
 	getSearchFilterProperties,
 	getSearchOperators,
 	hubspotRequest,
@@ -604,21 +605,27 @@ export class HubspotApiTrigger implements INodeType {
 		// in Additional Options; for Property Changed the filters live there too
 		// (see the property definitions above), since the main section is taken up
 		// by Trigger Properties.
-		const resolved = isPropertyChangedMode
-			? resolveSearchInput({
-					searchInputMode: propertyChangedFilters.searchInputMode ?? 'ui',
-					filterJson: propertyChangedFilters.filterJson,
-					filterGroupsUi: propertyChangedFilters.filterGroupsUi,
-					sortsJson: additionalOptions.sortsJson,
-					sortsUi: additionalOptions.sortsUi,
-				})
-			: resolveSearchInput({
-					searchInputMode: this.getNodeParameter('searchInputMode') as string,
-					filterJson: this.getNodeParameter('filterJson', '') as string,
-					filterGroupsUi: this.getNodeParameter('filterGroupsUi', {}) as UiFilterGroups,
-					sortsJson: additionalOptions.sortsJson,
-					sortsUi: additionalOptions.sortsUi,
-				});
+		const searchInputMode = isPropertyChangedMode
+			? (propertyChangedFilters.searchInputMode ?? 'ui')
+			: (this.getNodeParameter('searchInputMode') as string);
+		const filterGroupsUi = isPropertyChangedMode
+			? propertyChangedFilters.filterGroupsUi
+			: (this.getNodeParameter('filterGroupsUi', {}) as UiFilterGroups);
+		const resolved = resolveSearchInput({
+			searchInputMode,
+			filterJson: isPropertyChangedMode
+				? propertyChangedFilters.filterJson
+				: (this.getNodeParameter('filterJson', '') as string),
+			filterGroupsUi,
+			sortsJson: additionalOptions.sortsJson,
+			sortsUi: additionalOptions.sortsUi,
+			dateProperties: await getDatePropertyNames.call(
+				this,
+				objectType,
+				searchInputMode,
+				filterGroupsUi,
+			),
+		});
 
 		if (resolved.invalidFilterJson) {
 			throw new NodeApiError(this.getNode(), {

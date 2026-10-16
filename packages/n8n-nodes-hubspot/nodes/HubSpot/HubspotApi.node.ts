@@ -13,6 +13,7 @@ import { analyticsDescription } from './descriptions/AnalyticsDescription';
 import { associationDescription } from './descriptions/AssociationDescription';
 import { customEventDescription } from './descriptions/CustomEventDescription';
 import { formDescription } from './descriptions/FormDescription';
+import { marketingEmailDescription } from './descriptions/MarketingEmailDescription';
 import { marketingEventDescription } from './descriptions/MarketingEventDescription';
 import { objectDescription } from './descriptions/ObjectDescription';
 import { ownerDescription } from './descriptions/OwnerDescription';
@@ -27,6 +28,8 @@ import {
 	enrichSubmissionsWithAssociations,
 	findOwnerByField,
 	getAllProperties,
+	getDatePropertyNames,
+	USERS_OBJECT_TYPE,
 	getAnalyticsBreakdowns,
 	getAnalyticsViews,
 	getAssociationTargetObjectType,
@@ -58,7 +61,13 @@ import {
 	toHubSpotAnalyticsDate,
 	UsersLookup,
 } from './helpers';
-import { resolveSearchInput, toStringList, UiFilterGroups, UiSorts } from './searchFilter';
+import {
+	dateLikeToMillis,
+	resolveSearchInput,
+	toStringList,
+	UiFilterGroups,
+	UiSorts,
+} from './searchFilter';
 
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const OBJECTS_BASE_PATH = '/crm/v3/objects';
@@ -68,6 +77,7 @@ const FORMS_BASE_PATH = '/marketing/v3/forms';
 const FORMS_LIST_MAX_PAGES = 50;
 const FORM_SUBMISSIONS_BASE_PATH = '/form-integrations/v1/submissions/forms';
 const MARKETING_EVENTS_BASE_PATH = '/marketing/v3/marketing-events';
+const MARKETING_EMAILS_BASE_PATH = '/marketing/emails/2026-09';
 const EVENTS_BASE_PATH = '/events/2026-09';
 const EVENT_OCCURRENCES_BASE_PATH = '/events/event-occurrences/2026-09';
 const USERS_OBJECT_PATH = `${OBJECTS_BASE_PATH}/users`;
@@ -91,6 +101,8 @@ function parseJsonParam(value: unknown): JsonObject {
 
 const BATCH_READ_CHUNK_SIZE = 100;
 const ASSOCIATIONS_PAGE_LIMIT = 500;
+// HubSpot rejects more than 50 records per request when propertiesWithHistory is set.
+const PROPERTIES_WITH_HISTORY_MAX_LIMIT = 50;
 
 interface AssociationLink {
 	toObjectId: string;
@@ -202,7 +214,7 @@ export class HubspotApi implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle:
-			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : $parameter["resource"] === "forms" ? ($parameter["operation"] + (($parameter["formGuid"] && $parameter["formGuid"].value) ? (": " + $parameter["formGuid"].value) : "")) : $parameter["resource"] === "marketingEvents" ? ($parameter["operation"] + (($parameter["marketingEventId"] && $parameter["marketingEventId"].value) ? (": " + $parameter["marketingEventId"].value) : "")) : $parameter["resource"] === "analytics" ? ($parameter["operation"] + ": " + ($parameter["analyticsObjectType"] || "") + " / " + ($parameter["timePeriod"] || "")) : $parameter["resource"] === "customEvents" ? ($parameter["operation"] + (($parameter["operation"] === "sendEventOccurrence" && $parameter["eventName"]) ? (": " + $parameter["eventName"]) : "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
+			'={{$parameter["resource"] === "associations" ? ($parameter["operation"] + ": " + ($parameter["fromObjectType"] || "") + " → " + ($parameter["toObjectType"] || "")) : $parameter["resource"] === "forms" ? ($parameter["operation"] + (($parameter["formGuid"] && $parameter["formGuid"].value) ? (": " + $parameter["formGuid"].value) : "")) : $parameter["resource"] === "marketingEvents" ? ($parameter["operation"] + (($parameter["marketingEventId"] && $parameter["marketingEventId"].value) ? (": " + $parameter["marketingEventId"].value) : "")) : $parameter["resource"] === "marketingEmails" ? $parameter["operation"] : $parameter["resource"] === "analytics" ? ($parameter["operation"] + ": " + ($parameter["analyticsObjectType"] || "") + " / " + ($parameter["timePeriod"] || "")) : $parameter["resource"] === "customEvents" ? ($parameter["operation"] + (($parameter["operation"] === "sendEventOccurrence" && $parameter["eventName"]) ? (": " + $parameter["eventName"]) : "")) : ($parameter["operation"] + ": " + ($parameter["objectType"] || ""))}}',
 		description:
 			'Interact with HubSpot CRM objects. Docs: https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis',
 		usableAsTool: true,
@@ -246,6 +258,11 @@ export class HubspotApi implements INodeType {
 						description: 'Retrieve HubSpot forms and their submissions',
 					},
 					{
+						name: 'Marketing Emails',
+						value: 'marketingEmails',
+						description: 'Retrieve HubSpot marketing emails',
+					},
+					{
 						name: 'Marketing Events',
 						value: 'marketingEvents',
 						description: 'Work with HubSpot marketing events and their participation data',
@@ -273,6 +290,7 @@ export class HubspotApi implements INodeType {
 			...associationDescription,
 			...customEventDescription,
 			...formDescription,
+			...marketingEmailDescription,
 			...marketingEventDescription,
 			...objectDescription,
 			...ownerDescription,
@@ -961,6 +979,106 @@ export class HubspotApi implements INodeType {
 					}
 				}
 
+				if (resource === 'marketingEmails') {
+					// ── LIST ─────────────────────────────────────────────────────────
+					// No pagination: Limit goes straight to HubSpot, which accepts
+					// values far beyond any realistic email count.
+					if (operation === 'list') {
+						const limit = this.getNodeParameter('limit', i) as number;
+						const opts = this.getNodeParameter('emailsOptions', i) as {
+							archived?: boolean;
+							campaign?: string;
+							createdAfter?: string;
+							createdBefore?: string;
+							includeStats?: boolean;
+							includedProperties?: string[];
+							isPublished?: boolean;
+							marketingCampaignNames?: boolean;
+							millisecondsBetweenItems?: number;
+							publishedAfter?: string;
+							publishedBefore?: string;
+							sort?: string;
+							states?: string[];
+							type?: string;
+							updatedAfter?: string;
+							updatedBefore?: string;
+							variantStats?: boolean;
+							workflowNames?: boolean;
+						};
+
+						delayMs = opts.millisecondsBetweenItems ?? 50;
+
+						// States is filtered here, not by HubSpot. When Included
+						// Properties narrows the response, `state` is requested too so
+						// the filter has something to read, then dropped again below.
+						const states = opts.states?.length ? new Set(opts.states) : undefined;
+						let includedProperties = opts.includedProperties?.length
+							? opts.includedProperties
+							: undefined;
+						const stripState =
+							states !== undefined &&
+							includedProperties !== undefined &&
+							!includedProperties.includes('state');
+						if (stripState && includedProperties) includedProperties = [...includedProperties, 'state'];
+
+						// Booleans are sent only when the option was added, and as
+						// strings so an explicit false still reaches HubSpot
+						// (buildHubSpotUrl skips boolean false).
+						const booleanParam = (value: boolean | undefined) =>
+							value === undefined ? undefined : String(value);
+						// Date-times go out as ISO 8601 in UTC. A value with no offset is
+						// read as UTC (same rule as the search filters); anything that
+						// doesn't parse as a date is passed through as typed.
+						const dateParam = (value: string | undefined) => {
+							if (!value) return undefined;
+							const millis = dateLikeToMillis(String(value));
+							return /^\d+$/.test(millis) ? new Date(Number(millis)).toISOString() : value;
+						};
+
+						const url = buildHubSpotUrl(HUBSPOT_BASE, MARKETING_EMAILS_BASE_PATH, {
+							limit,
+							archived: booleanParam(opts.archived),
+							includeStats: booleanParam(opts.includeStats),
+							isPublished: booleanParam(opts.isPublished),
+							marketingCampaignNames: booleanParam(opts.marketingCampaignNames),
+							variantStats: booleanParam(opts.variantStats),
+							workflowNames: booleanParam(opts.workflowNames),
+							campaign: opts.campaign?.trim() || undefined,
+							createdAfter: dateParam(opts.createdAfter),
+							createdBefore: dateParam(opts.createdBefore),
+							publishedAfter: dateParam(opts.publishedAfter),
+							publishedBefore: dateParam(opts.publishedBefore),
+							updatedAfter: dateParam(opts.updatedAfter),
+							updatedBefore: dateParam(opts.updatedBefore),
+							includedProperties,
+							sort: opts.sort,
+							type: opts.type,
+						});
+
+						const response = (await hubspotRequest.call(this, {
+							method: 'GET',
+							url,
+							headers: BASE_HEADERS,
+						})) as JsonObject;
+
+						if (states !== undefined) {
+							let results = ((response.results as JsonObject[] | undefined) ?? []).filter(
+								(email) => states.has(String(email.state)),
+							);
+							if (stripState) {
+								results = results.map((email) => {
+									const copy = { ...email };
+									delete copy.state;
+									return copy;
+								});
+							}
+							response.results = results;
+						}
+
+						returnData.push({ json: response, pairedItem: { item: i } });
+					}
+				}
+
 				if (resource === 'marketingEvents') {
 					const marketingEventsPath = MARKETING_EVENTS_BASE_PATH;
 
@@ -1406,7 +1524,9 @@ export class HubspotApi implements INodeType {
 
 							do {
 								const url = buildHubSpotUrl(HUBSPOT_BASE, objectsPath, {
-									limit: 100,
+									limit: propertiesWithHistoryList.length
+										? PROPERTIES_WITH_HISTORY_MAX_LIMIT
+										: 100,
 									after,
 									properties: propertiesList,
 									propertiesWithHistory: propertiesWithHistoryList,
@@ -1448,7 +1568,10 @@ export class HubspotApi implements INodeType {
 								});
 							}
 						} else {
-							const limit = this.getNodeParameter('limit', i) as number;
+							const requestedLimit = this.getNodeParameter('limit', i) as number;
+							const limit = propertiesWithHistoryList.length
+								? Math.min(requestedLimit, PROPERTIES_WITH_HISTORY_MAX_LIMIT)
+								: requestedLimit;
 
 							const url = buildHubSpotUrl(HUBSPOT_BASE, objectsPath, {
 								limit,
@@ -1745,13 +1868,24 @@ export class HubspotApi implements INodeType {
 							? 'json'
 							: (this.getNodeParameter('searchInputMode', i) as string);
 
+						const filterGroupsUi = this.getNodeParameter(
+							'filterGroupsUi',
+							i,
+							{},
+						) as UiFilterGroups;
 						const resolved = resolveSearchInput({
 							searchInputMode,
 							filterJson:
 								legacySearchBody || (this.getNodeParameter('filterJson', i, '') as string),
-							filterGroupsUi: this.getNodeParameter('filterGroupsUi', i, {}) as UiFilterGroups,
+							filterGroupsUi,
 							sortsJson: searchOpts.sortsJson,
 							sortsUi: searchOpts.sortsUi,
+							dateProperties: await getDatePropertyNames.call(
+								this,
+								objectType,
+								searchInputMode,
+								filterGroupsUi,
+							),
 						});
 
 						if (resolved.invalidFilterJson) {
@@ -1892,9 +2026,12 @@ export class HubspotApi implements INodeType {
 
 							const outputMode = this.getNodeParameter('batchReadReturnAllMode', i) as string;
 
+							const chunkSize = propertiesWithHistoryList.length
+								? PROPERTIES_WITH_HISTORY_MAX_LIMIT
+								: 100;
 							const chunks: string[][] = [];
-							for (let c = 0; c < objectIds.length; c += 100) {
-								chunks.push(objectIds.slice(c, c + 100));
+							for (let c = 0; c < objectIds.length; c += chunkSize) {
+								chunks.push(objectIds.slice(c, c + chunkSize));
 							}
 
 							const allResults: JsonObject[] = [];
@@ -1976,8 +2113,11 @@ export class HubspotApi implements INodeType {
 
 						const allResults: JsonObject[] = [];
 
-						for (let c = 0; c < objectIds.length; c += BATCH_READ_CHUNK_SIZE) {
-							const chunk = objectIds.slice(c, c + BATCH_READ_CHUNK_SIZE);
+						const chunkSize = propertiesWithHistoryList.length
+							? PROPERTIES_WITH_HISTORY_MAX_LIMIT
+							: BATCH_READ_CHUNK_SIZE;
+						for (let c = 0; c < objectIds.length; c += chunkSize) {
+							const chunk = objectIds.slice(c, c + chunkSize);
 							const body: JsonObject = {
 								inputs: chunk.map((id) => ({ id })),
 								...(propertiesList.length ? { properties: propertiesList } : {}),
@@ -2538,7 +2678,9 @@ export class HubspotApi implements INodeType {
 
 							do {
 								const url = buildHubSpotUrl(HUBSPOT_BASE, basePath, {
-									limit: 100,
+									limit: propertiesWithHistoryList.length
+										? PROPERTIES_WITH_HISTORY_MAX_LIMIT
+										: 100,
 									after,
 									properties: propertiesList,
 									propertiesWithHistory: propertiesWithHistoryList,
@@ -2575,7 +2717,10 @@ export class HubspotApi implements INodeType {
 								});
 							}
 						} else {
-							const limit = this.getNodeParameter('limit', i) as number;
+							const requestedLimit = this.getNodeParameter('limit', i) as number;
+							const limit = propertiesWithHistoryList.length
+								? Math.min(requestedLimit, PROPERTIES_WITH_HISTORY_MAX_LIMIT)
+								: requestedLimit;
 
 							const url = buildHubSpotUrl(HUBSPOT_BASE, basePath, {
 								limit,
@@ -2623,13 +2768,24 @@ export class HubspotApi implements INodeType {
 							? 'json'
 							: (this.getNodeParameter('searchInputMode', i) as string);
 
+						const filterGroupsUi = this.getNodeParameter(
+							'filterGroupsUi',
+							i,
+							{},
+						) as UiFilterGroups;
 						const resolved = resolveSearchInput({
 							searchInputMode,
 							filterJson:
 								legacySearchBody || (this.getNodeParameter('filterJson', i, '') as string),
-							filterGroupsUi: this.getNodeParameter('filterGroupsUi', i, {}) as UiFilterGroups,
+							filterGroupsUi,
 							sortsJson: opts.sortsJson,
 							sortsUi: opts.sortsUi,
+							dateProperties: await getDatePropertyNames.call(
+								this,
+								USERS_OBJECT_TYPE,
+								searchInputMode,
+								filterGroupsUi,
+							),
 						});
 
 						if (resolved.invalidFilterJson) {

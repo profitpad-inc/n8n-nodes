@@ -11,6 +11,7 @@ import {
 } from 'n8n-workflow';
 
 import { ASSOCIATION_TYPES } from './associationTypes';
+import { UiFilterGroups, uiFiltersNeedDateProperties } from './searchFilter';
 
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 const PROPERTIES_BASE_PATH = '/crm/properties/2026-03';
@@ -310,7 +311,7 @@ const propertiesCache = new Map<
 
 /** Fetch and filter CRM property definitions for a literal object type ID. */
 async function fetchPropertiesForType(
-	this: ILoadOptionsFunctions,
+	this: HubSpotRequestContext,
 	objectType: string,
 ): Promise<HubSpotPropertySummary[]> {
 	if (!objectType) return [];
@@ -362,6 +363,23 @@ async function fetchPropertiesForType(
  * entry, e.g. `&toObjectType`). Returns [] when that parameter can't be
  * resolved (not yet set, or not present on the current node/branch).
  */
+/**
+ * Names of the object type's properties whose HubSpot type is `date` (not
+ * `datetime`), for converting GT/GTE/LT/LTE filter values to epoch millis.
+ * Only fetches (through the shared properties cache) when a Fields-mode
+ * filter actually uses one of those operators.
+ */
+export async function getDatePropertyNames(
+	this: HubSpotRequestContext,
+	objectType: string,
+	searchInputMode: string,
+	filterGroupsUi: UiFilterGroups | undefined,
+): Promise<Set<string>> {
+	if (searchInputMode !== 'ui' || !uiFiltersNeedDateProperties(filterGroupsUi)) return new Set();
+	const properties = await fetchPropertiesForType.call(this, objectType);
+	return new Set(properties.filter((p) => p.type === 'date').map((p) => p.name));
+}
+
 async function fetchPropertiesForParam(
 	this: ILoadOptionsFunctions,
 	objectTypeParam: string,

@@ -32,6 +32,7 @@ released version in `package.json` is `0.1.43`.
 | `nodes/HubSpot/descriptions/OwnerDescription.ts` | Owners resource UI (Users + Owners branches) |
 | `nodes/HubSpot/descriptions/PropertyDescription.ts` | Properties resource UI |
 | `nodes/HubSpot/descriptions/FormDescription.ts` | Forms resource UI |
+| `nodes/HubSpot/descriptions/MarketingEmailDescription.ts` | Marketing Emails resource UI |
 | `nodes/HubSpot/descriptions/MarketingEventDescription.ts` | Marketing Events resource UI |
 
 Base paths, all defined at the top of `HubspotApi.node.ts`:
@@ -45,6 +46,7 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 | `USERS_OBJECT_PATH` | `/crm/v3/objects/users` |
 | `OWNERS_BASE_PATH` (helpers) | `/crm/v3/owners` |
 | `MARKETING_EVENTS_BASE_PATH` | `/marketing/v3/marketing-events` |
+| `MARKETING_EMAILS_BASE_PATH` | `/marketing/emails/2026-09` |
 | `EVENTS_BASE_PATH` | `/events/2026-09` |
 | `EVENT_OCCURRENCES_BASE_PATH` | `/events/event-occurrences/2026-09` |
 | `ANALYTICS_REPORTS_BASE_PATH` (helpers) | `/analytics/v2/reports` |
@@ -85,9 +87,18 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 - Every output item carries `pairedItem: { item: i }`
 
 ### Resources
-Eight resources, selected by the top-level **Resource** dropdown: **Analytics**, **Associations**,
-**Custom Events**, **Forms**, **Marketing Events**, **Objects** (default), **Owners**,
-**Properties**.
+Nine resources, selected by the top-level **Resource** dropdown: **Analytics**, **Associations**,
+**Custom Events**, **Forms**, **Marketing Emails**, **Marketing Events**, **Objects** (default),
+**Owners**, **Properties**.
+
+**Actions panel rule** (read from n8n's frontend source, the `resourceCategories`-style function
+in the editor bundle): for each Resource option, the add-node actions panel takes the **first**
+property named `operation` whose `displayOptions.show.resource` includes that value, and an
+action only sets `resource` + `operation`. Any other selector (an Object field, say) is ignored
+and left at its default. So every resource needs one Operation list holding all of its actions,
+or the extra actions never show in the panel. A "Marketing > Object (Events / Emails)" design was
+tried and dropped for this reason. The panel also only reads `resource`/`operation` properties
+whose `@version` matches the node's default version.
 
 ---
 
@@ -168,6 +179,11 @@ Top-level **Properties** multi-select; Additional Options: `propertiesWithHistor
   `paging.next.after`)
 - Additional options: `properties` (legacy), `propertiesWithHistory`, `associations`, `after`
   cursor, `archived`, `millisecondsBetweenItems`
+- **50-record cap with history**: HubSpot rejects more than 50 records per request when
+  `propertiesWithHistory` is sent. When it is set, Return All pages at 50 instead of 100 and a
+  single-request **Limit** above 50 is lowered to 50 (`PROPERTIES_WITH_HISTORY_MAX_LIMIT` in
+  `HubspotApi.node.ts`). Owners → Users List and both Batch Read operations (chunks of 50 instead
+  of 100) apply the same cap.
 
 #### Create
 - **Input Mode** toggle: **Fields** (a `fixedCollection` of `name`/`value` property pairs) or
@@ -449,6 +465,39 @@ two forms endpoints (the same ones the Form Trigger uses).
   action node's Get Form Submissions and the Trigger's Form Submitted mode (the same
   `searchForms` method backs both) — a **breaking change** for any workflow that already had a
   Form selected before this change; those need the Form re-picked once after upgrading.
+
+---
+
+## Resource: Marketing Emails
+
+| Operation | Value | Method | URL |
+|---|---|---|---|
+| List | `list` | GET | `/marketing/emails/2026-09` |
+
+- Single request, no pagination (by the account owner's call: HubSpot accepts a very large
+  `limit`). **Limit** is top-level, default 1000, max 1,000,000,000. Output is HubSpot's
+  response as one item (`{ total, results, paging? }`).
+- Additional Options (`emailsOptions`), all passed straight through as query params:
+  - Booleans, sent only when the option is added and stringified so an explicit `false` is sent
+    (`buildHubSpotUrl` skips boolean `false`): **Archived**, **Include Email Stats**
+    (`includeStats`), **Include Marketing Campaign Names** (`marketingCampaignNames`), **Include
+    Variant Stats** (`variantStats`), **Include Workflow Names** (`workflowNames`), **Is
+    Published**.
+  - Date-times (`dateTime` fields): **Created After/Before**, **Published After/Before**,
+    **Updated After/Before**. Sent as ISO 8601 UTC via `dateLikeToMillis()` (no offset means
+    UTC, same rule as the search filters); an unparseable value is sent as typed.
+  - **Campaign** (campaign name, trimmed), **Included Properties** (multi-select, repeated
+    `includedProperties` params), **Sort** (single property from the same list), **Type**
+    (HubSpot's email type enum), **States** (below), Milliseconds Between Items.
+- **States** (multi-select: `AUTOMATED`, `AUTOMATED_DRAFT`, `DRAFT`, `PUBLISHED`,
+  `RSS_TO_EMAIL_DRAFT`) is never sent to HubSpot. `results` is filtered on each email's `state`
+  after the fetch, so fewer than Limit can come back; `total` and `paging` are HubSpot's,
+  unfiltered. When Included Properties is set without `state`, `state` is added to the request so
+  the filter can read it, then removed from each returned email.
+- Unverified against a live account: HubSpot's spec types `sort` as an array of strings with no
+  documented format or descending syntax, and declares `includedProperties` as `explode: true`
+  (repeated keys), with no example. The spec also lists params not exposed yet: `createdAt`,
+  `publishedAt`, `updatedAt` (exact-match dates) and `after`.
 
 ---
 
@@ -839,6 +888,17 @@ Used by both Objects → Search and the Trigger so their filter/sort UX stays in
 - `propertiesProperty`, `sortsUiOption`, `sortsJsonOption` — the Properties multi-select and
   Sorts fields
 - `buildFilterFromUi` / `buildFilterGroupsFromUi` / `buildSortsFromUi` — UI → API body
+- `dateLikeToMillis(value)` — for **Between** only, `buildFilterFromUi` runs both bounds through
+  this: `YYYY-MM-DD` becomes midnight UTC (end of day, 23:59:59.999 UTC, for High Value), ISO date-times keep their offset, and a date-time
+  with no offset is read as UTC (not the server's local zone). Numbers and other text pass
+  through unchanged. Custom JSON mode is not touched.
+- GT / GTE / LT / LTE get the same conversion, but only when the property's HubSpot type is
+  `date` (not `datetime`). LTE uses the end-of-day form for a bare date, like High Value. `buildFilterFromUi` takes a `dateProperties` set for this, threaded
+  through `buildFilterGroupsFromUi` and `resolveSearchInput`. Callers (Objects Search, Users
+  Search with `USERS_OBJECT_TYPE`, the Trigger) fill it from `getDatePropertyNames()` in
+  `helpers.ts`, which only hits the cached Properties API when Fields mode is active and a filter
+  uses one of those operators (`uiFiltersNeedDateProperties`). `fetchPropertiesForType` now
+  accepts any request context (execute/poll/loadOptions) so this can share its cache.
 - `resolveSearchInput(params)` — resolves `filterGroups` / `sorts` / extra search-body keys from
   whichever mode is active, and flags bad JSON via `invalidFilterJson` / `invalidSortsJson`
   rather than throwing (callers decide how to surface it)

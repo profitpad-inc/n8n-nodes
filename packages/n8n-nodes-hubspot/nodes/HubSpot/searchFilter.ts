@@ -25,6 +25,24 @@ export interface UiSorts {
 export const VALUELESS_OPERATORS = ['HAS_PROPERTY', 'NOT_HAS_PROPERTY'];
 
 /**
+ * Single-bound comparison operators whose value is converted to epoch millis,
+ * but only for `date` properties (Between converts for any property).
+ */
+export const DATE_COMPARISON_OPERATORS = ['GT', 'GTE', 'LT', 'LTE'];
+
+/**
+ * Whether any Fields-mode filter uses a single-bound comparison operator, i.e.
+ * whether the caller needs to look up which properties are of type `date`.
+ */
+export function uiFiltersNeedDateProperties(ui: UiFilterGroups | undefined): boolean {
+	return (ui?.groups ?? []).some((group) =>
+		(group.filters?.conditions ?? []).some((filter) =>
+			DATE_COMPARISON_OPERATORS.includes(filter.operator ?? ''),
+		),
+	);
+}
+
+/**
  * Trim a UI-supplied value. Expressions can resolve to numbers (or other
  * non-string types) even though the field is declared as a string, so this
  * coerces to a string first rather than assuming `.trim()` is available.
@@ -34,8 +52,39 @@ function trimmed(value: string | number | undefined | null): string {
 	return (typeof value === 'number' ? String(value) : value).trim();
 }
 
-/** Convert a single UI filter row into a HubSpot search filter object. */
-export function buildFilterFromUi(filter: UiFilter): JsonObject | null {
+const DATE_LIKE_PATTERN =
+	/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)?(Z|[+-]\d{2}:?\d{2})?$/i;
+
+/**
+ * Convert a date-like Between bound to epoch milliseconds, which is what
+ * HubSpot expects for date/datetime properties. Accepts `YYYY-MM-DD`
+ * (midnight UTC) and ISO date-times with or without an offset; a date-time
+ * with no offset is read as UTC rather than the server's local time zone.
+ * Anything else (already-millis numbers, plain text) is returned unchanged.
+ * With `endOfDay` (Between's High Value, and LTE), a bare `YYYY-MM-DD`
+ * becomes 23:59:59.999 UTC instead, so an inclusive upper bound covers that
+ * whole day; date-times are left exact.
+ */
+export function dateLikeToMillis(value: string, endOfDay = false): string {
+	const match = DATE_LIKE_PATTERN.exec(value);
+	if (!match) return value;
+	let iso = value.replace(' ', 'T');
+	const dateOnly = !iso.includes('T');
+	if (dateOnly) iso += endOfDay ? 'T23:59:59.999' : 'T00:00:00';
+	if (!match[1]) iso += 'Z';
+	const millis = Date.parse(iso);
+	return Number.isNaN(millis) ? value : String(millis);
+}
+
+/**
+ * Convert a single UI filter row into a HubSpot search filter object.
+ * `dateProperties` names the properties of type `date`, whose GT/GTE/LT/LTE
+ * values get the same date-to-millis conversion as Between bounds.
+ */
+export function buildFilterFromUi(
+	filter: UiFilter,
+	dateProperties: ReadonlySet<string> = new Set(),
+): JsonObject | null {
 	const propertyName = trimmed(filter.propertyName);
 	if (!propertyName) return null;
 
@@ -51,7 +100,10 @@ export function buildFilterFromUi(filter: UiFilter): JsonObject | null {
 		return {
 			propertyName,
 			operator,
-			values: rawValue.split(';').map((s) => s.trim()).filter(Boolean),
+			values: rawValue
+				.split(';')
+				.map((s) => s.trim())
+				.filter(Boolean),
 		};
 	}
 
@@ -59,20 +111,27 @@ export function buildFilterFromUi(filter: UiFilter): JsonObject | null {
 		return {
 			propertyName,
 			operator,
-			value: rawValue,
-			highValue: trimmed(filter.highValue),
+			value: dateLikeToMillis(rawValue),
+			highValue: dateLikeToMillis(trimmed(filter.highValue), true),
 		};
+	}
+
+	if (DATE_COMPARISON_OPERATORS.includes(operator) && dateProperties.has(propertyName)) {
+		return { propertyName, operator, value: dateLikeToMillis(rawValue, operator === 'LTE') };
 	}
 
 	return { propertyName, operator, value: rawValue };
 }
 
 /** Build filterGroups (OR'd) from the Fields-mode UI. Empty groups are dropped. */
-export function buildFilterGroupsFromUi(ui: UiFilterGroups): FilterGroup[] {
+export function buildFilterGroupsFromUi(
+	ui: UiFilterGroups,
+	dateProperties: ReadonlySet<string> = new Set(),
+): FilterGroup[] {
 	return (ui.groups ?? [])
 		.map((group) => ({
 			filters: (group.filters?.conditions ?? [])
-				.map(buildFilterFromUi)
+				.map((filter) => buildFilterFromUi(filter, dateProperties))
 				.filter((f): f is JsonObject => f !== null),
 		}))
 		.filter((group) => group.filters.length > 0);
@@ -97,7 +156,10 @@ export function toStringList(value: string | string[] | undefined): string[] {
 		return value.map((s) => String(s).trim()).filter(Boolean);
 	}
 	if (typeof value === 'string') {
-		return value.split(',').map((s) => s.trim()).filter(Boolean);
+		return value
+			.split(',')
+			.map((s) => s.trim())
+			.filter(Boolean);
 	}
 	return [];
 }
@@ -205,7 +267,7 @@ export function filterGroupsUiProperty(baseShow: Show): INodeProperties {
 										default: 'EQ',
 										// eslint-disable-next-line n8n-nodes-base/node-param-description-wrong-for-dynamic-options
 										description:
-											'How to compare the property against the value. Only operators valid for the selected property\'s type are shown.',
+											"How to compare the property against the value. Only operators valid for the selected property's type are shown.",
 									},
 									{
 										displayName: 'Value',
@@ -213,7 +275,7 @@ export function filterGroupsUiProperty(baseShow: Show): INodeProperties {
 										type: 'string',
 										default: '',
 										description:
-											'The value to compare against. For <em>In List</em> / <em>Not In List</em>, provide a semicolon-separated list. For <em>Between</em>, this is the lower bound.',
+											'The value to compare against. For <em>In List</em> / <em>Not In List</em>, provide a semicolon-separated list. For <em>Between</em>, this is the lower bound. For <em>Between</em> (any property) and <em>Greater/Less Than (or Equal)</em> on date-only properties, a date such as 2026-08-01 or an ISO date-time is converted to epoch milliseconds (UTC when no offset is given). A plain date means the start of that day, except with <em>Less Than or Equal</em> on a date property, where it means the end of that day (23:59:59.999 UTC).',
 										displayOptions: {
 											hide: {
 												operator: VALUELESS_OPERATORS,
@@ -225,7 +287,8 @@ export function filterGroupsUiProperty(baseShow: Show): INodeProperties {
 										name: 'highValue',
 										type: 'string',
 										default: '',
-										description: 'The upper bound for the <em>Between</em> operator',
+										description:
+											'The upper bound for the <em>Between</em> operator. A plain date such as 2026-08-31 means the end of that day (23:59:59.999 UTC), so the whole day is included, the same as <em>Less Than or Equal</em> on a date property. An ISO date-time is converted as-is (UTC when no offset is given).',
 										displayOptions: {
 											show: {
 												operator: ['BETWEEN'],
@@ -391,6 +454,8 @@ export function resolveSearchInput(params: {
 	filterGroupsUi?: UiFilterGroups;
 	sortsJson?: string;
 	sortsUi?: UiSorts;
+	/** Properties of type `date`, from getDatePropertyNames(); Fields mode only. */
+	dateProperties?: ReadonlySet<string>;
 }): ResolvedSearchInput {
 	const result: ResolvedSearchInput = {
 		baseSearchBody: {},
@@ -409,8 +474,7 @@ export function resolveSearchInput(params: {
 				result.invalidFilterJson = true;
 			}
 		}
-		result.filterGroups =
-			(result.baseSearchBody.filterGroups as FilterGroup[] | undefined) ?? [];
+		result.filterGroups = (result.baseSearchBody.filterGroups as FilterGroup[] | undefined) ?? [];
 
 		const trimmedSorts = (params.sortsJson ?? '').trim();
 		if (trimmedSorts && trimmedSorts !== '{}') {
@@ -427,7 +491,10 @@ export function resolveSearchInput(params: {
 			result.sorts = (result.baseSearchBody.sorts as JsonObject[] | undefined) ?? [];
 		}
 	} else {
-		result.filterGroups = buildFilterGroupsFromUi(params.filterGroupsUi ?? {});
+		result.filterGroups = buildFilterGroupsFromUi(
+			params.filterGroupsUi ?? {},
+			params.dateProperties,
+		);
 		result.sorts = buildSortsFromUi(params.sortsUi ?? {});
 	}
 
