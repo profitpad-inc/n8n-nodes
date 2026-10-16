@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.62 (2026-10-16)
+
 ### HubSpot (Properties With History limit)
 
 - When **Properties With History** is set, requests now ask HubSpot for at most 50 records,
@@ -31,6 +33,8 @@
 - **Greater Than / Greater Than or Equal / Less Than / Less Than or Equal** filters get the same
   conversion when the property is a date-only (`date`) property; for Less Than or Equal, a bare
   date means the end of that day (23:59:59.999 UTC). `datetime` properties are not changed.
+
+## 0.1.61 and earlier
 
 ### HubSpot (New resource: Analytics)
 

@@ -10,8 +10,10 @@ A custom n8n community node (`@profitpad-inc/n8n-nodes-hubspot`) for the HubSpot
 via its top-level **Resource** selector)
 **API docs:** https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis
 
-Every change so far is listed under a single **Unreleased** heading in `CHANGELOG.md`; the
-released version in `package.json` is `0.1.43`.
+`CHANGELOG.md` lists changes per release (`## 0.1.62`, then everything up to 0.1.61 under one
+heading); new work goes under **Unreleased**. Releases run through `npm run release`
+(release-it: build, bump, commit `version X`, tag `n8n-nodes-hubspot@X`, push, publish to
+GitHub Packages). The released version in `package.json` is `0.1.62`.
 
 ---
 
