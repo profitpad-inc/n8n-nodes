@@ -328,11 +328,43 @@ name (`clutter`, `outbox`, ...) or a real folder ID both work without code chang
 ### Pagination — `GenericFunctions.ts`
 
 - `microsoftGraphApiRequest()` makes one request via `httpRequestWithAuthentication`
-  with `returnFullResponse: true, ignoreHttpStatusErrors: true` so the status code can be
-  inspected directly instead of only ever seeing a thrown `NodeApiError`. On `429`, it
-  reads the `Retry-After` header (defaults to 5s if missing or non-numeric — matching the
-  reference Python script's `int(response.headers.get('Retry-After', 5))`), sleeps, and
-  retries the same request, up to 5 attempts before giving up with a `NodeApiError`.
+  and lets non-2xx responses throw as `NodeApiError`, rather than passing
+  `ignoreHttpStatusErrors: true` to inspect the status code directly (an earlier version
+  did this — see **Known issue, fixed** below). On a caught `NodeApiError` with
+  `httpCode === '429'`, it sleeps a fixed `DEFAULT_RETRY_AFTER_SECONDS` (5s) and retries
+  the same request, up to 5 attempts before giving up with a `NodeApiError`. It can no
+  longer read Graph's `Retry-After` header (`NodeApiError` doesn't preserve response
+  headers) — the reference Python script's `int(response.headers.get('Retry-After', 5))`
+  precision was traded away deliberately, see below.
+
+#### Known issue, fixed: access token never refreshed after ~1 hour
+
+Earlier versions of `microsoftGraphApiRequest()` called `httpRequestWithAuthentication`
+with `returnFullResponse: true, ignoreHttpStatusErrors: true`, so a non-2xx response was
+returned as data (`{ statusCode, headers, body }`) instead of being thrown. This looked
+like a reasonable way to inspect `statusCode` for the 429 retry loop below, but it broke
+the credential's token refresh: n8n's `CredentialsHelper.preAuthentication` (confirmed by
+reading `packages/cli/src/credentials-helper.ts` and
+`packages/core/.../request-helpers/authentication.ts` in the n8n-io/n8n repo) only calls
+this credential's `preAuthentication()` again for an **already-populated** `accessToken`
+when `httpRequestWithAuthentication` itself catches a **thrown** error whose status is
+401 — that catch block is what passes `credentialsExpired = true`. Suppressing the throw
+via `ignoreHttpStatusErrors` meant that path was never reached: every request after the
+access token's ~1 hour Microsoft-issued lifetime got back Graph's
+`401 { error: { message: "Invalid token lifetime." } }` as an ordinary return value, and
+`microsoftGraphApiRequest` threw its own fresh `NodeApiError` from that stale body without
+ever giving n8n the chance to refresh the token. The node would then fail on every
+execution until the user manually opened the credential, clicked **Edit**, and saved it
+again — re-saving runs the credential through the `isTestingCredentials`/test-connection
+path, which forces `preAuthentication()` unconditionally and mints a fresh token.
+
+Fix: drop `returnFullResponse`/`ignoreHttpStatusErrors` and let the request throw
+normally. A 401 now triggers n8n's built-in refresh-and-retry inside
+`httpRequestWithAuthentication` transparently (the fetched token is re-persisted to the
+credential, same as the very first token exchange); `microsoftGraphApiRequest` only ever
+sees the *already-refreshed-and-retried* result, or a `NodeApiError` if that retry also
+failed (e.g. truly bad client secret). The 429 loop now has to reconstruct its own delay
+instead of reading the live response headers, which is the only functional trade-off.
 - `paginatedGraphRequest()` is the loop: when `returnAll` is off, it's just one call.
   When on, it follows `@odata.nextLink` (which already carries every query parameter from
   the original request, so subsequent calls pass no `qs`), always waiting a **fixed

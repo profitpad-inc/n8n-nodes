@@ -26,11 +26,22 @@ async function delay(ms: number): Promise<void> {
 }
 
 /**
- * Performs a single Microsoft Graph request, transparently retrying on 429 by
- * honouring the `Retry-After` header (falls back to 5s when it's missing).
+ * Performs a single Microsoft Graph request, transparently retrying on 429
+ * (falls back to a fixed 5s delay — Graph's `Retry-After` header isn't
+ * visible here, see below) and letting a 401 fall through as a thrown error.
  * `body` is only relevant for write methods (POST/PATCH/...) — Graph actions
  * like `sendMail` return `202 Accepted` with no response body at all, which
  * is normalized to `{}` rather than returned as-is.
+ *
+ * Deliberately does **not** pass `ignoreHttpStatusErrors: true`: this credential's
+ * access token is `expirable`, and n8n only calls its `preAuthentication()` again
+ * to refresh an expired token when `httpRequestWithAuthentication` itself sees the
+ * request throw on a 401 (see `MicrosoftOutlookApi.credentials.ts` /
+ * `preAuthentication`). Suppressing that throw to read the status code directly
+ * silently disabled the automatic refresh-and-retry — the access token would only
+ * ever get renewed by re-saving the credential by hand. The trade-off is that a
+ * 429's `Retry-After` header is no longer reachable here (`NodeApiError` doesn't
+ * preserve response headers), so the fixed fallback delay is now the only delay.
  */
 export async function microsoftGraphApiRequest(
 	this: IExecuteFunctions,
@@ -41,31 +52,29 @@ export async function microsoftGraphApiRequest(
 	body?: IDataObject,
 ): Promise<IDataObject> {
 	for (let attempt = 0; attempt < MAX_RATE_LIMIT_RETRIES; attempt++) {
-		const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'microsoftOutlookApi', {
-			method,
-			url,
-			qs,
-			...(body !== undefined ? { body } : {}),
-			json: true,
-			returnFullResponse: true,
-			ignoreHttpStatusErrors: true,
-		})) as { statusCode: number; headers: IDataObject; body: IDataObject };
+		try {
+			const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'microsoftOutlookApi', {
+				method,
+				url,
+				qs,
+				...(body !== undefined ? { body } : {}),
+				json: true,
+			})) as IDataObject | undefined;
 
-		if (response.statusCode >= 200 && response.statusCode < 300) {
-			return response.body && typeof response.body === 'object' ? response.body : {};
+			return response && typeof response === 'object' ? response : {};
+		} catch (error) {
+			if (error instanceof NodeApiError && error.httpCode === '429') {
+				await delay(DEFAULT_RETRY_AFTER_SECONDS * 1000);
+				continue;
+			}
+
+			// `error` here is already a `NodeApiError` thrown by `httpRequestWithAuthentication`
+			// (or, for the final 429 case below, one we built ourselves); `NodeApiError`'s
+			// constructor returns an existing `NodeApiError` unchanged (its
+			// `errorResponse instanceof NodeApiError` short-circuit), so this satisfies the
+			// no-bare-rethrow lint rule as a no-op rather than double-wrapping.
+			throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex });
 		}
-
-		if (response.statusCode === 429) {
-			const retryAfterHeader = response.headers['retry-after'] as string | undefined;
-			const retryAfterSeconds = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
-			await delay((Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : DEFAULT_RETRY_AFTER_SECONDS) * 1000);
-			continue;
-		}
-
-		throw new NodeApiError(this.getNode(), response.body as JsonObject, {
-			itemIndex,
-			httpCode: String(response.statusCode),
-		});
 	}
 
 	throw new NodeApiError(
