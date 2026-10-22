@@ -147,7 +147,11 @@ the parameter just needs to supply the full dotted ID.
 Shown as "Warehouse Task" in the Resource dropdown (internal value
 `warehouseTasks`). Each operation is a single request; an array response
 is emitted as one output item per entry, any other response as one item.
-- **Get Printer Forms**: `GET /WarehouseTasks/PrinterForms`, no inputs.
+- **Get Printer Forms**: `GET /WarehouseTasks/PrinterForms`, requires
+  **Location**. Optional **Form Options**: **Form** (a comma-separated
+  string, or an array via expression, sent as repeated
+  `Form=form1&Form=form2` query params) and **Search In Forms Loaded**
+  (true/false, only valid when Form is set; the node errors otherwise).
 - **Get Printer Locations**: `GET /WarehouseTasks/PrinterLocations`, with
   an optional **Branch** filter under Additional Options.
 - **Parse 2D Barcode**: `GET /WarehouseTasks/Parse2DBarcode`, requires

@@ -1719,7 +1719,25 @@ export class EclipseApi implements INodeType {
           };
 
           if (operation === 'getPrinterForms') {
-            await sendRequest('GET', '/WarehouseTasks/PrinterForms');
+            const location = requireValue(toTrimmedString(this.getNodeParameter('printerFormsLocation', i)), 'Location');
+            const formOptions = this.getNodeParameter('printerFormsOptions', i) as {
+              form?: string | string[];
+              searchInFormsLoaded?: boolean;
+            };
+            const forms = Array.isArray(formOptions.form)
+              ? formOptions.form.map((form) => toTrimmedString(form)).filter(Boolean)
+              : parseCommaSeparatedList(formOptions.form ?? '');
+
+            if (formOptions.searchInFormsLoaded !== undefined && forms.length === 0) {
+              throw new NodeOperationError(this.getNode(), 'Search In Forms Loaded requires Form to be set', { itemIndex: i });
+            }
+
+            const query = new URLSearchParams({ Location: location });
+            for (const form of forms) query.append('Form', form);
+            if (formOptions.searchInFormsLoaded !== undefined) {
+              query.set('SearchInFormsLoaded', String(formOptions.searchInFormsLoaded));
+            }
+            await sendRequest('GET', '/WarehouseTasks/PrinterForms', query);
           }
 
           if (operation === 'getPrinterLocations') {

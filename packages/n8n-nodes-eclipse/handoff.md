@@ -99,7 +99,10 @@ rejects plural resource names. All operations share one local `sendRequest`
 helper in `execute()` that uses `ignoreHttpStatusErrors` and throws a
 `NodeApiError` with the response body on non-2xx. An array response is split
 into one item per entry; any other response goes out as a single item.
-Endpoints: `GET /WarehouseTasks/PrinterForms`, `/PrinterLocations` (optional
+Endpoints: `GET /WarehouseTasks/PrinterForms` (required `Location`;
+optional `Form`, repeated per value, from a comma-separated string or an
+array; optional `SearchInFormsLoaded`, rejected in `execute()` when no Form
+is given), `/PrinterLocations` (optional
 `Branch`), `/Parse2DBarcode` (`barcodeString`), `/PutAwayTote` and
 `/UserPutAway` (`branchId` + `userId`), `GET /WarehouseSystemSettings`
 (not under `/WarehouseTasks`), and `POST /WarehouseTasks/PrintTicket/{id}`.

@@ -59,6 +59,52 @@ export const warehouseTasksDescription: INodeProperties[] = [
     default: 'getPrinterForms',
   },
 
+  // ── Get Printer Forms ─────────────────────────────────────────────────
+  {
+    displayName: 'Location',
+    name: 'printerFormsLocation',
+    type: 'string',
+    default: '',
+    required: true,
+    description: 'The printer location to get forms for',
+    displayOptions: {
+      show: {
+        resource: ['warehouseTasks'],
+        operation: ['getPrinterForms'],
+      },
+    },
+  },
+  {
+    displayName: 'Form Options',
+    name: 'printerFormsOptions',
+    type: 'collection',
+    placeholder: 'Add Option',
+    default: {},
+    displayOptions: {
+      show: {
+        resource: ['warehouseTasks'],
+        operation: ['getPrinterForms'],
+      },
+    },
+    options: [
+      {
+        displayName: 'Form',
+        name: 'form',
+        type: 'string',
+        default: '',
+        placeholder: 'form1,form2',
+        description: 'Only return these forms. Accepts a comma-separated list, or an array via expression.',
+      },
+      {
+        displayName: 'Search In Forms Loaded',
+        name: 'searchInFormsLoaded',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to set SearchInFormsLoaded on the request. Requires Form.',
+      },
+    ],
+  },
+
   // ── Get Printer Locations ─────────────────────────────────────────────
   {
     displayName: 'Additional Options',
