@@ -107,6 +107,28 @@ through in the URL path. A few operations (`updateStatus`,
 fields — this split happens automatically in the node, an agent filling in
 the parameter just needs to supply the full dotted ID.
 
+### Resource: Warehouse Task
+Shown as "Warehouse Task" in the Resource dropdown (internal value
+`warehouseTasks`). Each operation is a single request; an array response
+is emitted as one output item per entry, any other response as one item.
+- **Get Printer Forms**: `GET /WarehouseTasks/PrinterForms`, no inputs.
+- **Get Printer Locations**: `GET /WarehouseTasks/PrinterLocations`, with
+  an optional **Branch** filter under Additional Options.
+- **Parse 2D Barcode**: `GET /WarehouseTasks/Parse2DBarcode`, requires
+  **Barcode String**.
+- **Get PutAway Tote**: `GET /WarehouseTasks/PutAwayTote`, requires
+  **Branch ID** and **User ID**.
+- **Get User PutAway Tasks**: `GET /WarehouseTasks/UserPutAway`, requires
+  **Branch ID** and **User ID**.
+- **Get Warehouse System Settings**: `GET /WarehouseSystemSettings`, no
+  inputs.
+- **Print Ticket**: `POST /WarehouseTasks/PrintTicket/{salesOrderId}`.
+  Requires **Sales Order ID** (full dotted form, e.g. `S2681000.0001`),
+  which is sent both in the URL and as `orderId` in the body, and
+  **Printer ID** (sent as `printerID`). Optional Additional Fields
+  **Print Ticket Flag**, **Printer Format** and **Skip Printer Form
+  Validation** are only included in the body when added.
+
 ## Create / Update: two input modes
 
 Contact Create/Update, Customer Create/Update, and Sales Order Create all
