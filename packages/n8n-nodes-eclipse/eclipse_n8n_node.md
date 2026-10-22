@@ -85,6 +85,27 @@ which determine which other fields appear.
   `Each Result as 1 Item` emits one output item per individual product
   result, with no metadata envelope at all.
 
+### Resource: File Read
+- **Get Many**: generic read of any Eclipse file via
+  `GET /FileRead/{fileName}` (e.g. `CUST.CLASS`). Takes **File Name**,
+  **Page Size** (default 1000) and, under Additional Options, **Start
+  Index** (1-based). It is always a single request: there is no Return
+  All, Include Total Items or Fields to Return, because Eclipse's FileRead
+  returns empty pages partway through a file, so paging cannot be trusted.
+- Response shape: `{ metadata, results: [{ fileName, userDefinedData:
+  [{ key, value }] }] }`.
+- The API itself supports no filtering, so the remaining Additional
+  Options are applied by the node to the fetched page only:
+  - **ID**: comma-separated list, matched against each record's `@ID`
+    entry; non-matching records are dropped.
+  - **Keys**: multi-select (populated from the file's own keys) that trims
+    each record's `userDefinedData` to the selected keys. The `ID` key is
+    always kept when a key filter is active.
+  - **Hide Empty Records**: drops records where every selected key (or,
+    with none selected, every key except `ID`/`@ID`) is null or empty.
+  Because filters only see the requested page, a filtered result can
+  contain fewer records than Page Size.
+
 ### Resource: Sales Order
 The largest resource, with many operations:
 - **Get**, **Get Many** (see batching note below), **Create**
@@ -97,6 +118,21 @@ The largest resource, with many operations:
   **Update Ship Date**, **Update Ship Via**, **Update Shipping
   Instructions** — targeted single-field updates on an existing order,
   each its own lightweight PUT rather than a full record update
+
+Notes on specific Sales Order operations:
+- **Update Status**: the Order Status value is matched case-insensitively
+  against Eclipse's PascalCase list, so an upstream value like
+  `shipwhencomplete` is sent as `ShipWhenComplete`. n8n may still show a
+  "value is not supported" warning in the editor for such values; it is
+  cosmetic and does not affect execution. **Ship Date** is required when
+  the status is `ShipWhenSpecified`; this is checked at execution time
+  (not by the editor), so the node errors if it is missing.
+- **Delete Line Items**: **Line Item IDs** accepts a comma-separated list
+  (e.g. `1,2,3`). Eclipse only deletes one line per request, so the node
+  sends one DELETE per ID, in sequence.
+- **Update Line Items Price** / **Update Line Items Quantity**: accept
+  several lines in one call (multiple entries in Fields mode, or an array
+  in JSON mode), each keyed by the line item number, not the product ID.
 
 **Sales Order ID format**: IDs are composite,
 `<orderNumber>.<generationId>` (e.g. `S2680001.0001`). Most fields that
@@ -150,7 +186,8 @@ escaping or `.toJsonString()` is needed in expressions feeding into it.
 ## Get Many: pagination, filtering, and field selection
 
 Every "Get Many" operation (Contact, Customer, Product, Sales Order) shares
-a common shape:
+a common shape (File Read's Get Many is the exception, see its section
+above):
 - **Return All** toggle, or manual **Page Size** + **Start Index**
 - **Fields to Return**: `All Fields`, `Selected Fields` (comma-separated,
   supports dot notation for nested paths, e.g. `prices.unitPrice`), or
@@ -194,15 +231,30 @@ Polls one resource (Contact, Customer, Product, or Sales Order) on a
 schedule and emits new/updated records since the last poll. Key behavior
 an agent should know when configuring or reasoning about this node:
 
-- **Rolling window mode** (default): looks back `pollInterval` minutes
-  only on the very first-ever run. Every run after that uses the exact
-  timestamp of the previous successful poll, so consecutive polls neither
-  gap nor overlap results. A manual/test execution always uses
-  `now - pollInterval` instead, since there's no meaningful "last run" to
-  resume from.
+- **Rolling window mode** (default): on every poll, the start of the
+  window is whichever is earlier of the previous poll's timestamp or
+  `now - Lookback Window (Minutes)`. The Lookback Window therefore acts as
+  an "always look back at least N minutes" guarantee. Consequence: when
+  the poll schedule runs more often than the Lookback Window, the same
+  record can be emitted on several consecutive polls until it ages out of
+  the window, so downstream steps should be idempotent. This is
+  intentional behavior, not a bug. A manual/test execution always uses
+  `now - Lookback Window` instead.
+- **Poll Buffer (Minutes)** (default 0): shifts both the start and the end
+  of the window back by the same number of minutes, to work around Eclipse
+  returning inconsistent results for very recently modified records. For
+  Sales Order, a buffer above 0 also sets
+  `LastModifiedDateAndTimeStampEnd` automatically, unless Date Filter
+  Options' **Last Modified Date End** is filled in manually (a manual
+  value always wins). Prefer this over a manual `$now.minus(...)` End
+  expression: shifting only the end makes Start greater than End once
+  polls run faster than the offset, which Eclipse rejects with a 400.
 - **Custom Date mode** (`Use Custom Date: true`): uses a fixed
   **Updated After** timestamp instead of a rolling window, and does not
-  update any stored state between runs.
+  update any stored state between runs. Poll Buffer is ignored in this
+  mode.
+- The trigger also offers **Return All** / **Page Size** and the same
+  **Fields to Return** options as the action node's Get Many.
 - Returns no output items (n8n's "nothing happened" convention) when a
   poll finds zero results — a downstream node connected to this trigger
   simply won't execute on that tick.
