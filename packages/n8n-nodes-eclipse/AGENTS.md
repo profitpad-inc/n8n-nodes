@@ -9,6 +9,13 @@ something a future session would benefit from knowing (a new gotcha, a
 changed convention, a decision that was made and why), update
 `HANDOFF.md` accordingly.
 
+After **any** change to the node's behavior (new or changed resources,
+operations, parameters, defaults, validation or output shape, in either the
+action node or the trigger), also update
+[`eclipse_n8n_node.md`](eclipse_n8n_node.md) in the same change. It is the
+reference AI agents use to build workflows with this node, so it must always
+match the current code.
+
 ## Overview
 This is a project containing code for an n8n community node. n8n is a workflow
 automation platform where users build workflows with nodes, which are the

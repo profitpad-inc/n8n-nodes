@@ -5,6 +5,15 @@ package is built today, so you don't have to re-derive it from scratch every
 session. The `.agents/*.md` docs are generic n8n node-building rules; this
 file is project-specific context on top of those.
 
+**Always update `eclipse_n8n_node.md` after any change** to the node's
+behavior (resources, operations, parameters, defaults, validation, output
+shape, trigger behavior), in the same commit. That file is the
+user-facing reference for AI agents building workflows with this node,
+separate from this file (which is for sessions editing the code). It has
+drifted before (File Read and Poll Buffer were missing, and the trigger's
+lookback description was stale until 2026-10-22), so check it every time
+rather than assuming it is current.
+
 ## What this is
 
 A single package (`@profitpad-inc/n8n-nodes-eclipse`) inside the
