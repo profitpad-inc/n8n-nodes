@@ -16,6 +16,7 @@ import { customerDescription } from './descriptions/CustomerDescription';
 import { fileReadDescription } from './descriptions/FileReadDescription';
 import { productDescription } from './descriptions/ProductDescription';
 import { salesOrderDescription, salesOrderUpdateStatuses } from './descriptions/SalesOrderDescription';
+import { warehouseTasksDescription } from './descriptions/WarehouseTasksDescription';
 import { applyFieldFilter, createSession, normalizeEnumValue, parseCommaSeparatedList, parseJsonParameter, toTrimmedString } from './helpers';
 
 export class EclipseApi implements INodeType {
@@ -67,6 +68,10 @@ export class EclipseApi implements INodeType {
             name: 'Sales Order',
             value: 'salesOrder',
           },
+          {
+            name: 'Warehouse Task',
+            value: 'warehouseTasks',
+          },
         ],
         default: 'contact',
       },
@@ -75,6 +80,7 @@ export class EclipseApi implements INodeType {
       ...fileReadDescription,
       ...productDescription,
       ...salesOrderDescription,
+      ...warehouseTasksDescription,
     ],
   };
 
@@ -1665,6 +1671,104 @@ export class EclipseApi implements INodeType {
               json: { metadata: allMetadata, results: allResults },
               pairedItem: { item: i },
             });
+          }
+        }
+        if (resource === 'warehouseTasks') {
+          const sendRequest = async (
+            method: 'GET' | 'POST',
+            path: string,
+            query?: URLSearchParams,
+            body?: JsonObject,
+          ) => {
+            const queryString = query && query.toString() ? `?${query.toString()}` : '';
+            const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method,
+              url: `${baseUrl}${path}${queryString}`,
+              headers: body ? { ...headers, 'Content-Type': 'application/json' } : headers,
+              ...(body ? { body, json: true } : {}),
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (response.statusCode < 200 || response.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Warehouse Tasks ${operation} failed with status ${response.statusCode}`,
+                description: typeof response.body === 'object'
+                  ? JSON.stringify(response.body)
+                  : String(response.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            const responseBody = response.body;
+            if (Array.isArray(responseBody)) {
+              for (const entry of responseBody) {
+                returnData.push({ json: entry as JsonObject, pairedItem: { item: i } });
+              }
+            } else if (responseBody && typeof responseBody === 'object') {
+              returnData.push({ json: responseBody as JsonObject, pairedItem: { item: i } });
+            } else {
+              returnData.push({ json: { success: true, response: responseBody ?? null }, pairedItem: { item: i } });
+            }
+          };
+
+          const requireValue = (value: string, label: string): string => {
+            if (!value) {
+              throw new NodeOperationError(this.getNode(), `${label} is required`, { itemIndex: i });
+            }
+            return value;
+          };
+
+          if (operation === 'getPrinterForms') {
+            await sendRequest('GET', '/WarehouseTasks/PrinterForms');
+          }
+
+          if (operation === 'getPrinterLocations') {
+            const additionalOptions = this.getNodeParameter('additionalOptions', i) as { branch?: string | number };
+            const branch = toTrimmedString(additionalOptions.branch);
+            const query = new URLSearchParams();
+            if (branch) query.set('Branch', branch);
+            await sendRequest('GET', '/WarehouseTasks/PrinterLocations', query);
+          }
+
+          if (operation === 'parse2DBarcode') {
+            const barcodeString = requireValue(toTrimmedString(this.getNodeParameter('barcodeString', i)), 'Barcode String');
+            const query = new URLSearchParams({ barcodeString });
+            await sendRequest('GET', '/WarehouseTasks/Parse2DBarcode', query);
+          }
+
+          if (operation === 'getPutAwayTote' || operation === 'getUserPutAway') {
+            const branchId = requireValue(toTrimmedString(this.getNodeParameter('branchId', i)), 'Branch ID');
+            const userId = requireValue(toTrimmedString(this.getNodeParameter('userId', i)), 'User ID');
+            const query = new URLSearchParams({ branchId, userId });
+            await sendRequest(
+              'GET',
+              operation === 'getPutAwayTote' ? '/WarehouseTasks/PutAwayTote' : '/WarehouseTasks/UserPutAway',
+              query,
+            );
+          }
+
+          if (operation === 'getWarehouseSystemSettings') {
+            await sendRequest('GET', '/WarehouseSystemSettings');
+          }
+
+          if (operation === 'printTicket') {
+            const orderId = requireValue(toTrimmedString(this.getNodeParameter('printSalesOrderId', i)), 'Sales Order ID');
+            const printerId = requireValue(toTrimmedString(this.getNodeParameter('printerId', i)), 'Printer ID');
+            const additionalFields = this.getNodeParameter('printAdditionalFields', i) as {
+              printTicketFlag?: boolean;
+              printerFormat?: string | number;
+              skipPrinterFormValidation?: boolean;
+            };
+
+            const body: JsonObject = { orderId, printerID: printerId };
+            if (additionalFields.printTicketFlag !== undefined) body.printTicketFlag = additionalFields.printTicketFlag;
+            const printerFormat = toTrimmedString(additionalFields.printerFormat);
+            if (printerFormat) body.printerFormat = printerFormat;
+            if (additionalFields.skipPrinterFormValidation !== undefined) {
+              body.skipPrinterFormValidation = additionalFields.skipPrinterFormValidation;
+            }
+
+            await sendRequest('POST', `/WarehouseTasks/PrintTicket/${encodeURIComponent(orderId)}`, undefined, body);
           }
         }
       } catch (error) {

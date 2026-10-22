@@ -34,6 +34,9 @@ nodes/Eclipse/
                                 Update Line Items Quantity, Update PO Number,
                                 Update Ship Date, Update Ship Via,
                                 Update Shipping Instructions, Update Status
+    WarehouseTasksDescription.ts Warehouse Task: Get Printer Forms, Get Printer Locations,
+                                Get PutAway Tote, Get User PutAway Tasks,
+                                Get Warehouse System Settings, Parse 2D Barcode, Print Ticket
 ```
 
 This is a **programmatic-style** node (`execute()` is one big function with
@@ -87,6 +90,24 @@ every selected key (or, with none selected, every key except `ID`/`@ID`) is
 null or `""`; it runs before key trimming. The Keys field disables two n8n lint
 rules that force a "Names or IDs" label. Paging stops on the unfiltered
 page length, not the filtered one. Not yet tested against a live Eclipse.
+
+## Warehouse Task resource (`descriptions/WarehouseTasksDescription.ts`)
+
+Resource value is `warehouseTasks`, but the display label is singular
+("Warehouse Task") because n8n lint (`node-param-resource-with-plural-option`)
+rejects plural resource names. All operations share one local `sendRequest`
+helper in `execute()` that uses `ignoreHttpStatusErrors` and throws a
+`NodeApiError` with the response body on non-2xx. An array response is split
+into one item per entry; any other response goes out as a single item.
+Endpoints: `GET /WarehouseTasks/PrinterForms`, `/PrinterLocations` (optional
+`Branch`), `/Parse2DBarcode` (`barcodeString`), `/PutAwayTote` and
+`/UserPutAway` (`branchId` + `userId`), `GET /WarehouseSystemSettings`
+(not under `/WarehouseTasks`), and `POST /WarehouseTasks/PrintTicket/{id}`.
+Print Ticket sends the full sales order ID (no split) in both the URL and the
+body's `orderId`, plus `printerID`. `printTicketFlag`, `printerFormat` and
+`skipPrinterFormValidation` are sent only when added under Additional Fields.
+Added 2026-10-22, not yet tested against a live Eclipse, so the response
+shapes are unconfirmed.
 
 ## Sales Order ID format quirk
 
