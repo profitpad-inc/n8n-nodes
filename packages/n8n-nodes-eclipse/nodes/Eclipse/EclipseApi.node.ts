@@ -1210,6 +1210,47 @@ export class EclipseApi implements INodeType {
             returnData.push({ json: response as JsonObject, pairedItem: { item: i } });
           }
 
+          // ── ADD ORDER CHANGE LOG COMMENT ─────────────────────────────────
+          if (operation === 'addOrderChangeLogComment') {
+            const orderId = toTrimmedString(this.getNodeParameter('changeLogCommentOrderId', i));
+            const comment = toTrimmedString(this.getNodeParameter('changeLogComment', i));
+            const rawGenerationIds = this.getNodeParameter('changeLogCommentGenerationIds', i, '') as string | string[];
+            const generationIds = Array.isArray(rawGenerationIds)
+              ? rawGenerationIds.map((id) => toTrimmedString(id)).filter(Boolean)
+              : parseCommaSeparatedList(rawGenerationIds);
+
+            if (!orderId) {
+              throw new NodeOperationError(this.getNode(), 'Sales Order ID is required', { itemIndex: i });
+            }
+            if (!comment) {
+              throw new NodeOperationError(this.getNode(), 'Comment is required', { itemIndex: i });
+            }
+
+            const commentBody: JsonObject = { comment };
+            if (generationIds.length > 0) commentBody.generationIds = generationIds;
+
+            const commentResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'POST',
+              url: `${baseUrl}/SalesOrders/${orderId}/OrderChangeLog/Comment`,
+              headers,
+              body: commentBody,
+              json: true,
+              returnFullResponse: true,
+              ignoreHttpStatusErrors: true,
+            });
+
+            if (commentResponse.statusCode < 200 || commentResponse.statusCode >= 300) {
+              throw new NodeApiError(this.getNode(), {
+                message: `Add order change log comment failed with status ${commentResponse.statusCode}`,
+                description: typeof commentResponse.body === 'object'
+                  ? JSON.stringify(commentResponse.body)
+                  : String(commentResponse.body),
+              } as JsonObject, { itemIndex: i });
+            }
+
+            returnData.push({ json: commentResponse.body as JsonObject ?? {}, pairedItem: { item: i } });
+          }
+
           // ── UPDATE STATUS ────────────────────────────────────────────────
           if (operation === 'updateStatus') {
             const rawStatusId = (this.getNodeParameter('statusOrderId', i) as string).trim();

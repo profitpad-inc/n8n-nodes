@@ -36,6 +36,12 @@ export const salesOrderDescription: INodeProperties[] = [
     },
     options: [
       {
+        name: 'Add Order Change Log Comment',
+        value: 'addOrderChangeLogComment',
+        description: 'Add a comment to the change log of a sales order',
+        action: 'Add sales order change log comment',
+      },
+      {
         name: 'Create',
         value: 'create',
         description: 'Create a new sales order',
@@ -856,6 +862,37 @@ export const salesOrderDescription: INodeProperties[] = [
     placeholder: '1',
     description: 'Filter the change log to a specific generation. Leave blank to return all generations.',
     displayOptions: { show: { resource: ['salesOrder'], operation: ['getOrderChangeLog'] } },
+  },
+
+  // ── Add Order Change Log Comment fields ───────────────────────────────
+  {
+    displayName: 'Sales Order ID',
+    name: 'changeLogCommentOrderId',
+    type: 'string',
+    default: '',
+    required: true,
+    placeholder: 'S2690635',
+    description: 'The ID of the sales order, without the generation suffix',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['addOrderChangeLogComment'] } },
+  },
+  {
+    displayName: 'Comment',
+    name: 'changeLogComment',
+    type: 'string',
+    default: '',
+    required: true,
+    typeOptions: { rows: 4 },
+    description: 'The comment to append to the order change log',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['addOrderChangeLogComment'] } },
+  },
+  {
+    displayName: 'Generation IDs',
+    name: 'changeLogCommentGenerationIds',
+    type: 'string',
+    default: '',
+    placeholder: '1,2',
+    description: 'Comma-separated list (or an array via expression) of generation IDs the comment applies to. Leave blank to omit.',
+    displayOptions: { show: { resource: ['salesOrder'], operation: ['addOrderChangeLogComment'] } },
   },
 
   // ── Update Status fields ──────────────────────────────────────────────

@@ -113,7 +113,7 @@ The largest resource, with many operations:
 - **Create Line Items**, **Update Line Items Price**, **Update Line Items
   Quantity**, **Delete Line Items** — sub-resource operations on a sales
   order's line items
-- **Get Order Change Log**
+- **Get Order Change Log**, **Add Order Change Log Comment**
 - **Update Status**, **Update Internal Notes**, **Update PO Number**,
   **Update Ship Date**, **Update Ship Via**, **Update Shipping
   Instructions** — targeted single-field updates on an existing order,
@@ -127,6 +127,13 @@ Notes on specific Sales Order operations:
   cosmetic and does not affect execution. **Ship Date** is required when
   the status is `ShipWhenSpecified`; this is checked at execution time
   (not by the editor), so the node errors if it is missing.
+- **Add Order Change Log Comment**: `POST
+  /SalesOrders/{id}/OrderChangeLog/Comment`. **Sales Order ID** is the order
+  number without the generation suffix (same as Get Order Change Log).
+  **Comment** is required. **Generation IDs** is optional and accepts a
+  comma-separated list (e.g. `1,2`) or an array via expression; it is sent
+  as the `generationIds` array and omitted from the body when blank.
+  Outputs the response body as one item.
 - **Delete Line Items**: **Line Item IDs** accepts a comma-separated list
   (e.g. `1,2,3`). Eclipse only deletes one line per request, so the node
   sends one DELETE per ID, in sequence.

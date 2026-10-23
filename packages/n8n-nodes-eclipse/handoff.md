@@ -39,6 +39,7 @@ nodes/Eclipse/
     ProductDescription.ts      Product: Get, Get Many, Product Inventory Pricing Inquiry
     SalesOrderDescription.ts   Sales Order: Create, Create Line Items, Create Shipment,
                                 Delete Line Items, Get, Get Many, Get Order Change Log,
+                                Add Order Change Log Comment,
                                 Update Internal Notes, Update Line Items Price,
                                 Update Line Items Quantity, Update PO Number,
                                 Update Ship Date, Update Ship Via,
@@ -142,6 +143,17 @@ through in the URL path, same as `updateShippingInstructions` /
 `updatePONumber` / `updateShipVia` / `updateShipDate`. Only split it when the
 API actually wants `orderId` and `generationId` as separate body/query
 fields (as `updateStatus` and `updateInternalNotes` do).
+
+## Add Order Change Log Comment (added 2026-10-23)
+
+`POST /SalesOrders/{id}/OrderChangeLog/Comment` with body
+`{ comment, generationIds? }`. The ID field mirrors Get Order Change Log
+(order number without generation suffix). The swagger only calls the path
+param "ID of the OrderChangeLog", so whether Eclipse also accepts the full
+dotted ID is unconfirmed. `generationIds` accepts a comma-separated string or
+an array (same handling as Get Printer Forms' Form) and is left out of the
+body when empty. Errors surface via `ignoreHttpStatusErrors` + `NodeApiError`.
+Not yet tested against a live Eclipse, so the response shape is unconfirmed.
 
 ## Sales Order line item sub-endpoints
 
