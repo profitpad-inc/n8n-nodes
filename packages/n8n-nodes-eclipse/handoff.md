@@ -148,7 +148,8 @@ fields (as `updateStatus` and `updateInternalNotes` do).
 
 `POST /SalesOrders/{id}/OrderChangeLog/Comment` with body
 `{ comment, generationIds: [generation] }`. Takes the **full dotted ID**
-(`S2690635.0001`), passed straight through in the URL; the suffix is
+(`S2690635.0001`) and splits it: the bare order number goes in the URL
+(not the dotted ID, unlike most Sales Order operations), and the suffix is
 stripped of padding and sent as the single `generationIds` entry. Originally
 shipped with an optional comma-separated/array Generation IDs field and a
 bare order ID, but a live call (2026-10-23) with no `generationIds` returned

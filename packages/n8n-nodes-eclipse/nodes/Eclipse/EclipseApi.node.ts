@@ -1216,6 +1216,7 @@ export class EclipseApi implements INodeType {
             const comment = toTrimmedString(this.getNodeParameter('changeLogComment', i));
 
             const commentDotIndex = orderId.indexOf('.');
+            const baseOrderId = commentDotIndex !== -1 ? orderId.slice(0, commentDotIndex) : orderId;
             const generationSuffix = commentDotIndex !== -1 ? orderId.slice(commentDotIndex + 1) : '';
 
             if (!/^\d+$/.test(generationSuffix)) {
@@ -1235,7 +1236,7 @@ export class EclipseApi implements INodeType {
 
             const commentResponse = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
               method: 'POST',
-              url: `${baseUrl}/SalesOrders/${orderId}/OrderChangeLog/Comment`,
+              url: `${baseUrl}/SalesOrders/${baseOrderId}/OrderChangeLog/Comment`,
               headers,
               body: commentBody,
               json: true,

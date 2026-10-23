@@ -129,9 +129,10 @@ Notes on specific Sales Order operations:
   (not by the editor), so the node errors if it is missing.
 - **Add Order Change Log Comment**: `POST
   /SalesOrders/{id}/OrderChangeLog/Comment`. **Sales Order ID** must be the
-  full dotted ID including the generation (e.g. `S2690635.0001`); it is sent
-  as-is in the URL, and the generation number (unpadded, e.g. `"1"`) is sent
-  as the only entry in `generationIds`. The node errors before calling
+  full dotted ID including the generation (e.g. `S2690635.0001`). The node
+  splits it: the order number alone (`S2690635`) goes in the URL, and the
+  generation number (unpadded, e.g. `"1"`) is sent as the only entry in
+  `generationIds`. The node errors before calling
   Eclipse if the ID has no generation suffix, since Eclipse returns a 500
   when `generationIds` is empty. **Comment** is required. One generation per
   call. Outputs the response body as one item.
