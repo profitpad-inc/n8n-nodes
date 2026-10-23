@@ -128,12 +128,13 @@ Notes on specific Sales Order operations:
   the status is `ShipWhenSpecified`; this is checked at execution time
   (not by the editor), so the node errors if it is missing.
 - **Add Order Change Log Comment**: `POST
-  /SalesOrders/{id}/OrderChangeLog/Comment`. **Sales Order ID** is the order
-  number without the generation suffix (same as Get Order Change Log).
-  **Comment** is required. **Generation IDs** is optional and accepts a
-  comma-separated list (e.g. `1,2`) or an array via expression; it is sent
-  as the `generationIds` array and omitted from the body when blank.
-  Outputs the response body as one item.
+  /SalesOrders/{id}/OrderChangeLog/Comment`. **Sales Order ID** must be the
+  full dotted ID including the generation (e.g. `S2690635.0001`); it is sent
+  as-is in the URL, and the generation number (unpadded, e.g. `"1"`) is sent
+  as the only entry in `generationIds`. The node errors before calling
+  Eclipse if the ID has no generation suffix, since Eclipse returns a 500
+  when `generationIds` is empty. **Comment** is required. One generation per
+  call. Outputs the response body as one item.
 - **Delete Line Items**: **Line Item IDs** accepts a comma-separated list
   (e.g. `1,2,3`). Eclipse only deletes one line per request, so the node
   sends one DELETE per ID, in sequence.

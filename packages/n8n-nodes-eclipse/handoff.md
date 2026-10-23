@@ -147,13 +147,16 @@ fields (as `updateStatus` and `updateInternalNotes` do).
 ## Add Order Change Log Comment (added 2026-10-23)
 
 `POST /SalesOrders/{id}/OrderChangeLog/Comment` with body
-`{ comment, generationIds? }`. The ID field mirrors Get Order Change Log
-(order number without generation suffix). The swagger only calls the path
-param "ID of the OrderChangeLog", so whether Eclipse also accepts the full
-dotted ID is unconfirmed. `generationIds` accepts a comma-separated string or
-an array (same handling as Get Printer Forms' Form) and is left out of the
-body when empty. Errors surface via `ignoreHttpStatusErrors` + `NodeApiError`.
-Not yet tested against a live Eclipse, so the response shape is unconfirmed.
+`{ comment, generationIds: [generation] }`. Takes the **full dotted ID**
+(`S2690635.0001`), passed straight through in the URL; the suffix is
+stripped of padding and sent as the single `generationIds` entry. Originally
+shipped with an optional comma-separated/array Generation IDs field and a
+bare order ID, but a live call (2026-10-23) with no `generationIds` returned
+500 "Index was out of range", so the generation is effectively required
+despite the swagger. Reworked at the user's request to one generation per
+call, taken from the ID; `execute()` rejects an ID without a numeric suffix.
+Whether Eclipse wants `"1"` or `"0001"` in `generationIds` is not confirmed
+(the node sends `"1"`, matching the user's test script).
 
 ## Sales Order line item sub-endpoints
 
