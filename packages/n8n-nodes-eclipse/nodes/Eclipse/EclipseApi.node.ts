@@ -11,6 +11,8 @@ import {
   NodeOperationError,
 } from 'n8n-workflow';
 
+import { addressValidationDescription, addressValidationQueryParams } from './descriptions/AddressValidationDescription';
+import { arInquiryDescription } from './descriptions/ARInquiryDescription';
 import { contactDescription } from './descriptions/ContactDescription';
 import { customerDescription } from './descriptions/CustomerDescription';
 import { fileReadDescription } from './descriptions/FileReadDescription';
@@ -49,6 +51,10 @@ export class EclipseApi implements INodeType {
         noDataExpression: true,
         options: [
           {
+            name: 'Address Validation',
+            value: 'addressValidation',
+          },
+          {
             name: 'Contact',
             value: 'contact',
           },
@@ -75,8 +81,10 @@ export class EclipseApi implements INodeType {
         ],
         default: 'contact',
       },
+      ...addressValidationDescription,
       ...contactDescription,
       ...customerDescription,
+      ...arInquiryDescription,
       ...fileReadDescription,
       ...productDescription,
       ...salesOrderDescription,
@@ -451,6 +459,92 @@ export class EclipseApi implements INodeType {
 
             returnData.push({ json: { success: true, id: contactId }, pairedItem: { item: i } });
           }
+        }
+
+        if (resource === 'addressValidation') {
+          const query = new URLSearchParams();
+          for (const [paramName, queryName] of addressValidationQueryParams) {
+            const value = toTrimmedString(this.getNodeParameter(paramName, i, ''));
+            if (value) query.set(queryName, value);
+          }
+          const queryString = query.toString();
+
+          const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+            method: 'GET',
+            url: `${baseUrl}/Address${queryString ? `?${queryString}` : ''}`,
+            headers,
+            returnFullResponse: true,
+            ignoreHttpStatusErrors: true,
+          });
+
+          // A 400 means the address failed validation, so return its errors instead of erroring.
+          if (response.statusCode === 400) {
+            let body = response.body;
+            if (typeof body === 'string') {
+              try {
+                body = JSON.parse(body);
+              } catch {
+                // leave as raw text
+              }
+            }
+            const errors = (body as { errors?: unknown } | undefined)?.errors ?? body ?? null;
+            returnData.push({ json: { errors } as JsonObject, pairedItem: { item: i } });
+          } else if (response.statusCode < 200 || response.statusCode >= 300) {
+            throw new NodeApiError(this.getNode(), {
+              message: `Address validation failed with status ${response.statusCode}`,
+              description: typeof response.body === 'object'
+                ? JSON.stringify(response.body)
+                : String(response.body),
+            } as JsonObject, { itemIndex: i });
+          } else {
+            returnData.push({ json: response.body as JsonObject, pairedItem: { item: i } });
+          }
+        }
+
+        if (resource === 'customer' && operation === 'arInquiry') {
+          const customerId = toTrimmedString(this.getNodeParameter('arInquiryCustomerId', i));
+          if (!customerId) {
+            throw new NodeOperationError(this.getNode(), 'Customer ID is required', { itemIndex: i });
+          }
+          const currency = toTrimmedString(this.getNodeParameter('arInquiryCurrency', i));
+          if (!currency) {
+            throw new NodeOperationError(this.getNode(), 'Currency is required', { itemIndex: i });
+          }
+          const pageSize = this.getNodeParameter('arInquiryPageSize', i) as number;
+          const options = this.getNodeParameter('arInquiryOptions', i) as {
+            asOfDate?: string;
+            openOrdersView?: boolean;
+            arInquiryDetails?: boolean;
+            billToOnly?: boolean;
+            branches?: string | string[];
+            months?: number;
+            startIndex?: number;
+          };
+
+          const query = new URLSearchParams({
+            CustomerId: customerId,
+            Currency: currency,
+            pageSize: String(pageSize),
+            includeTotalItems: 'true',
+          });
+          const asOfDate = toTrimmedString(options.asOfDate);
+          if (asOfDate) query.set('AsOfDate', asOfDate);
+          if (options.openOrdersView !== undefined) query.set('OpenOrdersView', String(options.openOrdersView));
+          if (options.arInquiryDetails !== undefined) query.set('ARInquiryDetails', String(options.arInquiryDetails));
+          if (options.billToOnly !== undefined) query.set('BillToOnly', String(options.billToOnly));
+          if (options.months !== undefined) query.set('Months', String(options.months));
+          if (options.startIndex !== undefined) query.set('startIndex', String(options.startIndex));
+          const branches = Array.isArray(options.branches)
+            ? options.branches.map((branch) => toTrimmedString(branch)).filter(Boolean)
+            : parseCommaSeparatedList(toTrimmedString(options.branches));
+          for (const branch of branches) query.append('Br', branch);
+
+          const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+            method: 'GET',
+            url: `${baseUrl}/ARInquiry?${query.toString()}`,
+            headers,
+          });
+          returnData.push({ json: response as JsonObject, pairedItem: { item: i } });
         }
 
         if (resource === 'fileRead') {

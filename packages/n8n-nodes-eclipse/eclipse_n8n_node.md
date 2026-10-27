@@ -37,6 +37,18 @@ credential once.
 The action node's parameters are always **Resource** then **Operation**,
 which determine which other fields appear.
 
+### Resource: Address Validation
+- **Validate**: `GET /Address`. Fields **Street Line One**, **Street Line
+  Two**, **Street Line Three**, **City**, **State**, **Postal Code** and
+  **Country**, all optional; only non-empty ones are sent (as the
+  PascalCase query params `StreetLineOne`, `City`, etc.). A successful
+  response is returned as a single item, unchanged. A **400** (address
+  failed validation) does not error: the node outputs the response's
+  `errors` block as `{ errors: [{ code, message }] }`, e.g.
+  `{"errors":[{"code":400,"message":"Invalid City/State/Country for
+  PostalCode \"44146\". Should be City: \"BEDFORD, ...\", State: \"OH\",
+  Country: \"\"."}]}`. Any other non-2xx status still errors.
+
 ### Resource: Contact
 - **Get** — retrieve a single contact by ID
 - **Get Many** — list contacts, with filtering and pagination
@@ -50,6 +62,19 @@ which determine which other fields appear.
 ### Resource: Customer
 - **Get**, **Get Many**, **Create**, **Update** (same GET-then-merge
   pattern as Contact), **Delete**
+- **AR Inquiry**: `GET /ARInquiry` (requires the Eclipse Accounting API license).
+  Required: **Customer ID** (`CustomerId`), **Currency** (`Currency`, e.g.
+  `USD`; must be set up in the Eclipse control records under "Valid
+  Foreign Currencies") and **Page Size** (`pageSize`, default 100).
+  `includeTotalItems=true` is always sent. Optional under Additional
+  Options, sent only when added: **As Of Date** (`AsOfDate`, e.g.
+  `2026-01-01`), **Open Orders View** (`OpenOrdersView`, boolean), **AR
+  Inquiry Details** (`ARInquiryDetails`, boolean), **Bill To Only**
+  (`BillToOnly`, boolean), **Branches** (`Br`, comma-separated or an array,
+  sent as one repeated `Br` param per branch; empty means all branches),
+  **Months** (`Months`, 6 or 12) and **Start Index** (`startIndex`). Single
+  request, no paging loop; the response is returned as a single item,
+  unchanged.
 - Create/Update support a "Clear Fields" multi-select to explicitly null
   out or empty specific fields (needed because omitting a field just
   leaves the existing value unchanged, since the body is built from the

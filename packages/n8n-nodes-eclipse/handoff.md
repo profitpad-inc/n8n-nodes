@@ -34,6 +34,8 @@ nodes/Eclipse/
   EclipseApiTrigger.node.ts    Polling trigger node
   helpers.ts                   createSession, withRetry, applyFieldFilter
   descriptions/
+    AddressValidationDescription.ts Address Validation: Validate
+    ARInquiryDescription.ts    Customer → AR Inquiry fields (operation lives in CustomerDescription)
     ContactDescription.ts      Contact: Get, Get Many
     CustomerDescription.ts     Customer: Create, Get, Get Many, Update
     ProductDescription.ts      Product: Get, Get Many, Product Inventory Pricing Inquiry
@@ -100,6 +102,35 @@ every selected key (or, with none selected, every key except `ID`/`@ID`) is
 null or `""`; it runs before key trimming. The Keys field disables two n8n lint
 rules that force a "Names or IDs" label. Paging stops on the unfiltered
 page length, not the filtered one. Not yet tested against a live Eclipse.
+
+## Address Validation resource and Customer → AR Inquiry (added 2026-10-27)
+
+Address Validation is a single-operation resource (`addressValidation` →
+Validate), following the File Read pattern of a one-option Operation
+dropdown so `subtitle` and `usableAsTool` actions still work. AR Inquiry
+started as its own resource but was moved (same day, at the user's request)
+to an operation on Customer (`customer` → `arInquiry`). Its fields still live
+in `ARInquiryDescription.ts`, spread right after `customerDescription` so they
+render below the Operation dropdown. Parameter names are prefixed
+(`address*`, `arInquiry*`) to avoid colliding with other operations'
+`pageSize`/`additionalOptions`.
+- Address Validation: `GET /Address`, all seven fields optional and sent only
+  when non-empty. `addressValidationQueryParams` (exported from the
+  description file) maps node param names to Eclipse query names. Uses
+  `ignoreHttpStatusErrors`: a 400 is a validation failure, not an error, and
+  is returned as `{ errors }`, the body's whole `errors` array (shape
+  `{"errors":[{"code":400,"message":"Invalid City/State/Country for
+  PostalCode ..."}]}`, confirmed by the user 2026-10-27). Other non-2xx still
+  throw a `NodeApiError`.
+- AR Inquiry: `GET /ARInquiry` with required `CustomerId`, `Currency`,
+  `pageSize`, plus `includeTotalItems=true` always. `AsOfDate`,
+  `OpenOrdersView`, `ARInquiryDetails`, `BillToOnly`, `Months` (6 or 12),
+  `startIndex` and `Br` (repeated per branch, from a comma-separated string
+  or array) are sent only when added under Additional Options. No paging
+  loop.
+Neither has been tested against a live Eclipse, so response shapes and the
+`pageSize`/`includeTotalItems` casing on `/ARInquiry` are unconfirmed (the
+swagger shows `startIndex` in camelCase, so camelCase was assumed).
 
 ## Warehouse Task resource (`descriptions/WarehouseTasksDescription.ts`)
 

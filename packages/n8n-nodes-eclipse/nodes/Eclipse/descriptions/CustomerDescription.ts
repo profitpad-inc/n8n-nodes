@@ -14,6 +14,12 @@ export const customerDescription: INodeProperties[] = [
     },
     options: [
       {
+        name: 'AR Inquiry',
+        value: 'arInquiry',
+        description: 'Read the AR inquiry for a customer',
+        action: 'Get a customer AR inquiry',
+      },
+      {
         name: 'Create',
         value: 'create',
         description: 'Create a new customer',
