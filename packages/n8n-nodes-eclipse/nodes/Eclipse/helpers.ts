@@ -116,6 +116,41 @@ export async function getSession(
   return await token;
 }
 
+// Login failure error that also exposes the HTTP status as its own
+// `httpCode` field. n8n serializes errors through toJSON() (execution data,
+// error workflow input), and the base toJSON() only keeps message,
+// description, context etc., so httpCode has to be added there explicitly.
+// The name stays "NodeOperationError" so existing error handling that
+// checks it isn't affected.
+class EclipseLoginError extends NodeOperationError {
+  httpCode: string | null;
+
+  constructor(
+    node: ReturnType<IExecuteFunctions['getNode']>,
+    message: string,
+    httpCode: string | null,
+    description: string | undefined,
+  ) {
+    super(node, message, { description });
+    this.name = 'NodeOperationError';
+    this.httpCode = httpCode;
+  }
+
+  // Same fields as ExecutionBaseError.toJSON(), plus httpCode.
+  toJSON() {
+    return {
+      message: this.message,
+      lineNumber: this.lineNumber,
+      timestamp: this.timestamp,
+      name: this.name,
+      description: this.description,
+      context: this.context,
+      cause: this.cause,
+      httpCode: this.httpCode,
+    };
+  }
+}
+
 // httpRequest errors carry the full request config, including the
 // { username, password } body, and n8n stores them as-is in execution data
 // and passes them to error workflows. Rebuild the error from only the status
@@ -135,9 +170,12 @@ function sanitizeSessionError(
     : `Eclipse login (POST /Sessions) failed: ${err?.code ?? err?.message ?? 'unknown error'}`;
   const data = err?.response?.data;
   const body = data === undefined ? '' : typeof data === 'string' ? data : JSON.stringify(data);
-  return new NodeOperationError(context.getNode(), message, {
-    description: body ? `Eclipse response: ${body.slice(0, 1000)}` : undefined,
-  });
+  return new EclipseLoginError(
+    context.getNode(),
+    message,
+    status ? String(status) : null,
+    body ? `Eclipse response: ${body.slice(0, 1000)}` : undefined,
+  );
 }
 
 // n8n's "options" fields show a UI warning when an expression resolves to a

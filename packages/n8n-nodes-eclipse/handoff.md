@@ -127,8 +127,35 @@ from the HTTP status and Eclipse's response body, with no reference to the
 original error, so the request config never reaches execution data. Message
 format: `Eclipse login (POST /Sessions) failed with status code 500`. Don't
 pass the original error as `cause` or into `NodeApiError`, since both would
-bring the config back. Data GETs still throw raw axios errors, which include
+bring the config back. The error is an `EclipseLoginError` subclass (its
+`name` is still `NodeOperationError`) with an `httpCode` string (`"500"`,
+or `null` for network errors). n8n serializes errors through `toJSON()`,
+and `ExecutionBaseError.toJSON()` only emits message, lineNumber,
+timestamp, name, description, context and cause, so the subclass overrides
+`toJSON()` to add `httpCode`. That's also why `NodeApiError.httpCode` never
+shows up in error workflow input. Data GETs still throw raw axios errors, which include
 the short-lived `sessionToken` header but not the password.
+
+### Credential in the HTTP Request node (added 2026-11-01)
+
+`EclipseApi.credentials.ts` uses n8n's pre-auth pattern so the credential
+works in the HTTP Request node: a hidden `sessionToken` property with
+`typeOptions.expirable`, a `preAuthentication()` that logs in (via
+`withRetry`) and returns `{ sessionToken }`, and a custom `authenticate`
+that adds the `sessionToken` header. n8n calls `preAuthentication` when the
+stored token is empty or when a request using it gets a 401, then saves
+the new token on the credential. Verified against Fairbank: a bad or
+missing token returns 401 "Invalid session token.", so the refresh fires.
+`authenticate` leaves an existing `sessionToken` header alone, because the
+Eclipse nodes still mint and send their own token (in-memory cache for the
+trigger, fresh login per run for the action node), and n8n's refresh would
+otherwise overwrite the trigger's freshly refreshed token with the
+credential's. Side effect: since the nodes call
+`httpRequestWithAuthentication`, n8n also runs `preAuthentication` for
+them once while the stored token is empty, which is one extra login. Login
+errors from `preAuthentication` are rethrown as a plain `Error` with only
+the status, since no node is available there and the raw error carries the
+password. Not yet tested inside a running n8n, only with stubbed helpers.
 
 ## File Read resource (`descriptions/FileReadDescription.ts`)
 

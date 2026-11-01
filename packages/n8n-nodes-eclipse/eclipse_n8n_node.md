@@ -45,8 +45,22 @@ all attempts fail (about 12 seconds of retrying).
 
 When login fails, the error message is `Eclipse login (POST /Sessions)
 failed with status code <code>` (or the network error code), with Eclipse's
-response body in the error description. The error never includes the
-username or password.
+response body in the error description and the status as its own
+`httpCode` field (a string like `"500"`, or `null` for network errors). In
+an error workflow that's `$json.trigger.error.httpCode`. The error never
+includes the username or password.
+
+### Using the credential in the HTTP Request node
+
+The `eclipseApi` credential also works in n8n's HTTP Request node, for
+Eclipse endpoints this node doesn't cover: set Authentication to
+**Predefined Credential Type** and pick **Epicor Eclipse**. Enter the full
+URL (e.g. `https://your-instance.epicoreclipse.com/Contacts`), since the
+credential doesn't set a base URL. The credential logs in for you and adds
+the `sessionToken` header. It keeps the token on the credential and only
+logs in again when it's missing or a request gets a 401 (Eclipse answers an
+invalid or expired token with 401 "Invalid session token."). Don't add your
+own `sessionToken` header, because a header you set is left as-is.
 
 ## Resource / Operation model (action node)
 
