@@ -82,8 +82,11 @@ Base paths, all defined at the top of `HubspotApi.node.ts`:
 - `BASE_HEADERS` (`content-type` / `accept: application/json`) on every request
 - Bodies are always `JSON.stringify`-ed; `parseJsonParam()` accepts either a JSON string or an
   already-parsed object from an expression
-- One `try`/`catch` wraps each input item: `continueOnFail()` pushes `{ error: message }`,
-  otherwise the error is re-thrown as `NodeApiError` with `itemIndex`
+- One `try`/`catch` wraps each input item: `continueOnFail()` pushes `{ error: message }`, plus
+  `description` (HubSpot's own message, which n8n puts there from the response body's `message`)
+  and `httpCode` when the error has them, since `message` alone is n8n's generic text for the
+  status ("Bad request - please check your parameters"); otherwise the error is re-thrown as
+  `NodeApiError` with `itemIndex`
 - Most operations expose **Milliseconds Between Items** (default 50ms) via their Additional
   Options; the delay is applied after each item except the last (`delayMs` variable)
 - Every output item carries `pairedItem: { item: i }`

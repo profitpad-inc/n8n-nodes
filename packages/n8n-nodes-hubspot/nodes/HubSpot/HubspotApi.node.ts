@@ -3198,10 +3198,17 @@ export class HubspotApi implements INodeType {
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {
-					returnData.push({
-						json: { error: (error as Error).message },
-						pairedItem: { item: i },
-					});
+					// A NodeApiError's message is n8n's generic text for the status code
+					// ("Bad request - please check your parameters"); HubSpot's own
+					// explanation is in `description`, so keep it and the status too.
+					const { message, description, httpCode } = error as Error & {
+						description?: string | null;
+						httpCode?: string | null;
+					};
+					const json: JsonObject = { error: message };
+					if (description) json.description = description;
+					if (httpCode) json.httpCode = httpCode;
+					returnData.push({ json, pairedItem: { item: i } });
 					continue;
 				}
 				throw new NodeApiError(this.getNode(), error as JsonObject, { itemIndex: i });

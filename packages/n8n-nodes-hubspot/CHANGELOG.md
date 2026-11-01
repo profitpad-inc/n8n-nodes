@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### HubSpot (all operations)
+
+- With **Continue On Fail** on, the error item now also carries `description` (HubSpot's own
+  error message) and `httpCode` when present, next to `error`. Before, only `error` was kept,
+  which for a 400 is n8n's generic "Bad request - please check your parameters".
+
 ### HubSpot (Marketing Emails)
 
 - Added **Get Statistics List** (`GET /marketing/emails/2026-09/statistics/list`) and **Get
