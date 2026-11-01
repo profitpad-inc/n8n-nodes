@@ -70,12 +70,65 @@ Because the token is minted per-execution rather than being a static
 credential value, it **cannot** go through n8n's normal
 `httpRequestWithAuthentication` credential-injection flow for the session
 call itself. `helpers.ts#createSession()` calls the plain
-`this.helpers.httpRequest()` directly for `POST /Sessions`, retries up to 3
-times, then every other API call in the node uses
+`this.helpers.httpRequest()` directly for `POST /Sessions` (wrapped in
+`withRetry`), then every other API call in the node uses
 `httpRequestWithAuthentication` with the session token manually merged into
 `headers`. The credential's `test` request (in
 `EclipseApi.credentials.ts`) hits the same `/Sessions` endpoint to validate
 username/password.
+
+### Retries (`helpers.ts#withRetry`, reworked 2026-11-01)
+
+A user kept getting "Request failed with status code 500" error emails from
+the trigger (Fairbank, `E Contacts → HS`), while a manual call moments
+later worked. Before this change, `createSession` and the trigger's
+`withRetry` both retried 3 times with **no delay** (despite a comment
+claiming 500 ms), so a transient Eclipse hiccup failed all three attempts
+within milliseconds. Also, the trigger reused the same session token on
+every retry, whereas a manual run always mints a fresh one.
+
+Now `withRetry` waits 1s / 3s / 8s between up to 4 attempts, retries only
+5xx, 429, and network errors (4xx is thrown at once, e.g. the inverted
+date-window 400 under Poll Buffer), and takes an optional `onRetry`
+callback. `createSession` uses `withRetry`, and the trigger passes a
+`refreshSession` callback that mints a new token into the shared `headers`
+object before each GET retry. The action node's API calls are still not
+wrapped in `withRetry`.
+
+Findings from Fairbank executions (2026-11-01, via the Fairbank n8n MCP):
+the failing request was always `POST /Sessions`, not the data GET.
+`E Contacts → HS` exec 254591 got a 500 there, and `E Customers → HS` got a
+504 (gateway timeout) there a minute earlier. The error workflow
+(`Fairbank Error Notif → Email Chris`, 46Nq6SF5h75qB1RN) then called Eclipse
+successfully, but one of those calls took 87s (exec 254586) and the next
+took 2.8s (254592). So Eclipse's login endpoint is intermittently very slow
+or overloaded, which is also why runs often take a long time. Every trigger
+on that instance logs in on every poll (every minute) and never logs out
+(there's no session reuse or `DELETE /Sessions` anywhere in the code).
+Fixed the same day with session reuse: `helpers.ts#getSession` caches the
+token in a module-level Map keyed by `baseUrl|username` (the password is
+stored alongside, so a changed credential logs in again). It caches the
+in-flight promise, so triggers polling at the same moment share one login,
+drops failed logins from the cache, and replaces tokens older than
+`SESSION_MAX_AGE_MS` (30 min). That 30 min is a guess, because Eclipse's
+session lifetime isn't known. The trigger uses `getSession`, and its
+`refreshSession` retry callback forces a new login. `withRetry` also
+retries a 401 when an `onRetry` is given, in case Eclipse answers an expired
+token with 401 instead of 500. The cache is per n8n process (each queue-mode
+worker has its own), and restarting n8n clears it. The action node and
+`getFileKeys` still call `createSession` directly (fresh login each run),
+because their requests aren't wrapped in `withRetry`, so a stale cached
+token would fail with no retry. Also, the deployed version's axios error carries the
+full request config, including the `/Sessions` body with the plaintext
+username and password, into execution data and the error workflow's trigger
+input. Fixed the same day: `createSession` now catches the final error and
+throws a fresh `NodeOperationError` (via `sanitizeSessionError`) built only
+from the HTTP status and Eclipse's response body, with no reference to the
+original error, so the request config never reaches execution data. Message
+format: `Eclipse login (POST /Sessions) failed with status code 500`. Don't
+pass the original error as `cause` or into `NodeApiError`, since both would
+bring the config back. Data GETs still throw raw axios errors, which include
+the short-lived `sessionToken` header but not the password.
 
 ## File Read resource (`descriptions/FileReadDescription.ts`)
 

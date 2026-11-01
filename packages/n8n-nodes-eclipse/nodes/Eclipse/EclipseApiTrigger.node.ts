@@ -7,7 +7,7 @@ import {
   NodeConnectionTypes,
 } from 'n8n-workflow';
 
-import { applyFieldFilter, createSession, withRetry } from './helpers';
+import { applyFieldFilter, getSession, withRetry } from './helpers';
 
 export class EclipseApiTrigger implements INodeType {
   description: INodeTypeDescription = {
@@ -392,9 +392,16 @@ export class EclipseApiTrigger implements INodeType {
     const username = credentials.username as string;
     const password = credentials.password as string;
 
+    // Reuses a cached session token across polls (see getSession), so most
+    // polls skip the login call entirely.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sessionToken = await createSession(this as any, baseUrl, username, password);
-    const headers = { Accept: 'application/json', sessionToken };
+    const headers = { Accept: 'application/json', sessionToken: await getSession(this as any, baseUrl, username, password) };
+    // A failed GET may be caused by an expired session (Eclipse can answer
+    // those with a 500 rather than a 401), so each retry logs in again.
+    const refreshSession = async (): Promise<void> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      headers.sessionToken = await getSession(this as any, baseUrl, username, password, true);
+    };
 
     const resource = this.getNodeParameter('resource') as string;
     const useCustomDate = this.getNodeParameter('useCustomDate') as boolean;
@@ -550,6 +557,8 @@ export class EclipseApiTrigger implements INodeType {
             url: buildUrl(currentStart),
             headers,
           }),
+          undefined,
+          refreshSession,
         );
         const results: JsonObject[] = response.results ?? [];
         totalResults += results.length;
@@ -566,6 +575,8 @@ export class EclipseApiTrigger implements INodeType {
           url: buildUrl(defaultStartIndex),
           headers,
         }),
+        undefined,
+        refreshSession,
       );
       const results: JsonObject[] = response.results ?? [];
       totalResults += results.length;

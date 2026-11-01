@@ -32,6 +32,22 @@ every subsequent request. This happens automatically — an agent building a
 workflow never sets the session token manually, it only fills in the
 credential once.
 
+The trigger reuses its session token across polls (cached in memory for up
+to 30 minutes, shared by every trigger using the same Eclipse login) and
+only logs in again when the token is missing, older than that, or a
+request using it fails. The action node still logs in on every execution.
+
+`POST /Sessions` and the trigger's poll requests are retried up to 4 times,
+waiting 1s, 3s, then 8s between attempts, but only for 5xx, 429, or
+network errors (4xx errors fail immediately). Before each retry of a poll
+request, the trigger mints a fresh session token. A poll only errors after
+all attempts fail (about 12 seconds of retrying).
+
+When login fails, the error message is `Eclipse login (POST /Sessions)
+failed with status code <code>` (or the network error code), with Eclipse's
+response body in the error description. The error never includes the
+username or password.
+
 ## Resource / Operation model (action node)
 
 The action node's parameters are always **Resource** then **Operation**,
