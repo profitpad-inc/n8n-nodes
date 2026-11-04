@@ -79,6 +79,32 @@ which determine which other fields appear.
   PostalCode \"44146\". Should be City: \"BEDFORD, ...\", State: \"OH\",
   Country: \"\"."}]}`. Any other non-2xx status still errors.
 
+### Resource: Branch
+- **Get Many**: `GET /Branches`. Same shape as the other Get Many
+  operations (Return All, Return All Mode, Page Size default 10, Fields to
+  Return, `includeTotalItems=true` always sent). Additional Options:
+  **ID** (`id`, comma-separated or an array, sent as one repeated `id`
+  param per ID), **Keyword** (`keyword`) and **Start Index**
+  (`startIndex`, 1-based).
+- **Get Audit Logs**: `GET /Branches/AuditLogs`, the most recent changes to
+  branch records. Fields: **Return All** (`auditLogReturnAll`), **Return
+  All Mode** (`auditLogReturnAllMode`, same three modes as Get Many) and
+  **Page Size** (`auditLogPageSize`, default 25, Eclipse's own default).
+  Additional Options (`auditLogOptions`), each sent only when added:
+  **Branch ID** (`ID`), **Last Updated Date Time** (`LastUpdatedDateTime`),
+  **Last Updated Date** (`LastUpdatedDate`), **Last Updated Time**
+  (`LastUpdatedTime`), all three "changes after" filters in
+  `YYYY-MM-DDTHH:MM:SSZ` format; **Action** (`Action`: `C` Create, `U`
+  Update, `D` Delete; omit for all), **User** (`User`, Eclipse user who
+  made the change), **Sort By** (`sortBy`: `DATETIME`, `DATE`, `TIME`,
+  `UPDATETYPE`, `USER`; Eclipse default `DATETIME`), **Sort Order**
+  (`sortOrder`: `ASC` or `DESC`; Eclipse default `ASC`) and **Start
+  Index** (`startIndex`, ignored with Return All). No Fields to Return
+  option and no `includeTotalItems`.
+- Both operations output the response envelope with its `results` array.
+  The response shape has not been confirmed against a live Eclipse, so a
+  bare-array response is also accepted and wrapped as `{ results: [...] }`.
+
 ### Resource: Contact
 - **Get** — retrieve a single contact by ID
 - **Get Many** — list contacts, with filtering and pagination
@@ -253,7 +279,7 @@ escaping or `.toJsonString()` is needed in expressions feeding into it.
 
 ## Get Many: pagination, filtering, and field selection
 
-Every "Get Many" operation (Contact, Customer, Product, Sales Order) shares
+Every "Get Many" operation (Branch, Contact, Customer, Product, Sales Order) shares
 a common shape (File Read's Get Many is the exception, see its section
 above):
 - **Return All** toggle, or manual **Page Size** + **Start Index**

@@ -1,4 +1,5 @@
 import {
+  IDataObject,
   IExecuteFunctions,
   ILoadOptionsFunctions,
   INodeExecutionData,
@@ -13,6 +14,7 @@ import {
 
 import { addressValidationDescription, addressValidationQueryParams } from './descriptions/AddressValidationDescription';
 import { arInquiryDescription } from './descriptions/ARInquiryDescription';
+import { branchAuditLogQueryParams, branchDescription } from './descriptions/BranchDescription';
 import { contactDescription } from './descriptions/ContactDescription';
 import { customerDescription } from './descriptions/CustomerDescription';
 import { fileReadDescription } from './descriptions/FileReadDescription';
@@ -55,6 +57,10 @@ export class EclipseApi implements INodeType {
             value: 'addressValidation',
           },
           {
+            name: 'Branch',
+            value: 'branch',
+          },
+          {
             name: 'Contact',
             value: 'contact',
           },
@@ -82,6 +88,7 @@ export class EclipseApi implements INodeType {
         default: 'contact',
       },
       ...addressValidationDescription,
+      ...branchDescription,
       ...contactDescription,
       ...customerDescription,
       ...arInquiryDescription,
@@ -1813,6 +1820,86 @@ export class EclipseApi implements INodeType {
             });
           }
         }
+        if (resource === 'branch') {
+          const isAuditLogs = operation === 'getAuditLogs';
+          const path = isAuditLogs ? '/Branches/AuditLogs' : '/Branches';
+          const returnAll = this.getNodeParameter(isAuditLogs ? 'auditLogReturnAll' : 'returnAll', i) as boolean;
+          const pageSize = this.getNodeParameter(isAuditLogs ? 'auditLogPageSize' : 'pageSize', i) as number;
+          const fieldsFilterMode = isAuditLogs ? 'all' : (this.getNodeParameter('fieldsFilterMode', i) as string).trim();
+          const fieldsToInclude = fieldsFilterMode === 'selected' ? (this.getNodeParameter('fieldsToInclude', i) as string) : '';
+          const fieldsToExclude = fieldsFilterMode === 'except' ? (this.getNodeParameter('fieldsToExclude', i) as string) : '';
+
+          const options = this.getNodeParameter(isAuditLogs ? 'auditLogOptions' : 'additionalOptions', i) as IDataObject;
+          const filters = new URLSearchParams();
+          if (isAuditLogs) {
+            for (const [optionName, queryName] of Object.entries(branchAuditLogQueryParams)) {
+              const value = toTrimmedString(options[optionName]);
+              if (value) filters.set(queryName, value);
+            }
+          } else {
+            const ids = Array.isArray(options.id)
+              ? options.id.map((id) => toTrimmedString(id)).filter(Boolean)
+              : parseCommaSeparatedList(toTrimmedString(options.id));
+            for (const id of ids) filters.append('id', id);
+            const keyword = toTrimmedString(options.keyword);
+            if (keyword) filters.set('keyword', keyword);
+          }
+
+          const fetchPage = async (startIndex: number) => {
+            const params = new URLSearchParams(filters);
+            params.set('pageSize', String(pageSize));
+            params.set('startIndex', String(startIndex));
+            if (!isAuditLogs) params.set('includeTotalItems', 'true');
+            const response = await this.helpers.httpRequestWithAuthentication.call(this, 'eclipseApi', {
+              method: 'GET',
+              url: `${baseUrl}${path}?${params.toString()}`,
+              headers,
+            });
+            // The response shape isn't confirmed for these endpoints, so accept
+            // either the usual { metadata, results } envelope or a bare array.
+            const body: JsonObject = Array.isArray(response) ? { results: response } : (response ?? {});
+            const results = (Array.isArray(body.results) ? body.results : []) as JsonObject[];
+            return { body, results };
+          };
+
+          if (returnAll) {
+            const returnAllMode = this.getNodeParameter(isAuditLogs ? 'auditLogReturnAllMode' : 'returnAllMode', i) as string;
+            const allResults: JsonObject[] = [];
+            const allMetadata: (JsonObject | null)[] = [];
+            let currentStart = 1;
+
+            while (true) {
+              const { body, results } = await fetchPage(currentStart);
+              const filteredResults = applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude);
+
+              if (returnAllMode === 'eachPage') {
+                returnData.push({ json: { ...body, results: filteredResults }, pairedItem: { item: i } });
+              } else if (returnAllMode === 'eachResult') {
+                for (const result of filteredResults) {
+                  returnData.push({ json: result, pairedItem: { item: i } });
+                }
+              } else {
+                allResults.push(...filteredResults);
+                allMetadata.push((body.metadata as JsonObject | undefined) ?? null);
+              }
+
+              if (results.length < pageSize) break;
+              currentStart += pageSize;
+            }
+
+            if (returnAllMode === 'allInOne') {
+              returnData.push({ json: { metadata: allMetadata, results: allResults }, pairedItem: { item: i } });
+            }
+          } else {
+            const startIndex = (options.startIndex as number | undefined) ?? 1;
+            const { body, results } = await fetchPage(startIndex);
+            returnData.push({
+              json: { ...body, results: applyFieldFilter(results, fieldsFilterMode, fieldsToInclude, fieldsToExclude) },
+              pairedItem: { item: i },
+            });
+          }
+        }
+
         if (resource === 'warehouseTasks') {
           const sendRequest = async (
             method: 'GET' | 'POST',

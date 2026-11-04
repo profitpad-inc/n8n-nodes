@@ -35,6 +35,7 @@ nodes/Eclipse/
   helpers.ts                   createSession, withRetry, applyFieldFilter
   descriptions/
     AddressValidationDescription.ts Address Validation: Validate
+    BranchDescription.ts       Branch: Get Audit Logs, Get Many
     ARInquiryDescription.ts    Customer → AR Inquiry fields (operation lives in CustomerDescription)
     ContactDescription.ts      Contact: Get, Get Many
     CustomerDescription.ts     Customer: Create, Get, Get Many, Update
@@ -211,6 +212,25 @@ render below the Operation dropdown. Parameter names are prefixed
 Neither has been tested against a live Eclipse, so response shapes and the
 `pageSize`/`includeTotalItems` casing on `/ARInquiry` are unconfirmed (the
 swagger shows `startIndex` in camelCase, so camelCase was assumed).
+
+## Branch resource (`descriptions/BranchDescription.ts`, added 2026-11-04)
+
+Two operations, sharing one `execute()` block: Get Many (`GET /Branches`)
+and Get Audit Logs (`GET /Branches/AuditLogs`). Get Many follows the usual
+Get Many pattern and reuses the shared param names (`returnAll`,
+`returnAllMode`, `pageSize`, `fieldsFilterMode`, `additionalOptions`).
+Get Audit Logs uses prefixed names (`auditLogReturnAll`,
+`auditLogReturnAllMode`, `auditLogPageSize`, `auditLogOptions`) because its
+default page size (25) and options differ. `branchAuditLogQueryParams`
+(exported from the description file) maps option names to the swagger's
+query names, which mix PascalCase (`ID`, `LastUpdatedDateTime`, `Action`,
+`User`) and camelCase (`sortBy`, `sortOrder`, `startIndex`, `pageSize`).
+Audit Logs has no `includeTotalItems` in the swagger, so it isn't sent, and
+it has no Fields to Return (`applyFieldFilter` force-includes `id`, which
+audit records may not have). Date options are passed through as the n8n
+dateTime string, same as Contact's `updatedAfter`. Not yet tested against a
+live Eclipse: the response envelope is assumed to be `{ metadata, results }`,
+with a bare array also accepted and wrapped as `{ results }`.
 
 ## Warehouse Task resource (`descriptions/WarehouseTasksDescription.ts`)
 
